@@ -281,18 +281,41 @@ void mmc_remove_host_debugfs(struct mmc_host *host)
 static int mmc_dbg_card_status_get(void *data, u64 *val)
 {
 	struct mmc_card	*card = data;
+	struct mmc_host *host = card->host;
 	u32		status;
 	int		ret;
+	int		err = 0;
 
 	mmc_get_card(card);
+
+	if (mmc_card_cmdq(card)) {
+		err = mmc_cmdq_halt_on_empty_queue(card->host);
+		if (err) {
+			pr_err("%s: halt failed while doing %s err (%d)\n",
+					mmc_hostname(card->host), __func__,
+					err);
+			mmc_put_card(card);
+			goto out_free_halt;
+		}
+		host->cmdq_ops->disable(host, true);
+	}
 
 	ret = mmc_send_status(data, &status);
 	if (!ret)
 		*val = status;
 
+	if (mmc_card_cmdq(card)) {
+		if (mmc_cmdq_halt(card->host, false))
+			pr_err("%s: %s: cmdq unhalt failed\n",
+					mmc_hostname(card->host), __func__);
+		host->cmdq_ops->enable(host);
+	}
+
 	mmc_put_card(card);
 
-	return ret;
+
+out_free_halt:
+	return err;
 }
 DEFINE_SIMPLE_ATTRIBUTE(mmc_dbg_card_status_fops, mmc_dbg_card_status_get,
 		NULL, "%08llx\n");
@@ -302,6 +325,7 @@ DEFINE_SIMPLE_ATTRIBUTE(mmc_dbg_card_status_fops, mmc_dbg_card_status_get,
 static int mmc_ext_csd_open(struct inode *inode, struct file *filp)
 {
 	struct mmc_card *card = inode->i_private;
+	struct mmc_host *host = card->host;
 	char *buf;
 	ssize_t n = 0;
 	u8 *ext_csd;
@@ -312,8 +336,21 @@ static int mmc_ext_csd_open(struct inode *inode, struct file *filp)
 		return -ENOMEM;
 
 	mmc_get_card(card);
+
+	if (mmc_card_cmdq(card)) {
+		err = mmc_cmdq_halt_on_empty_queue(card->host);
+		if (err) {
+			pr_err("%s: halt failed while doing %s err (%d)\n",
+					mmc_hostname(card->host), __func__,
+					err);
+			mmc_put_card(card);
+			goto out_free_halt;
+		}
+		host->cmdq_ops->disable(host, true);
+	}
+
 	err = mmc_get_ext_csd(card, &ext_csd);
-	mmc_put_card(card);
+
 	if (err)
 		goto out_free;
 
@@ -323,10 +360,28 @@ static int mmc_ext_csd_open(struct inode *inode, struct file *filp)
 	BUG_ON(n != EXT_CSD_STR_LEN);
 
 	filp->private_data = buf;
+
+	if (mmc_card_cmdq(card)) {
+		if (mmc_cmdq_halt(card->host, false))
+			pr_err("%s: %s: cmdq unhalt failed\n",
+					mmc_hostname(card->host), __func__);
+		host->cmdq_ops->enable(host);
+	}
+
+	mmc_put_card(card);
 	kfree(ext_csd);
 	return 0;
 
 out_free:
+	if (mmc_card_cmdq(card)) {
+		if (mmc_cmdq_halt(card->host, false))
+			pr_err("%s: %s: cmdq unhalt failed\n",
+					mmc_hostname(card->host), __func__);
+		mmc_card_set_cmdq(card);
+		host->cmdq_ops->enable(host);
+	}
+	mmc_put_card(card);
+out_free_halt:
 	kfree(buf);
 	return err;
 }

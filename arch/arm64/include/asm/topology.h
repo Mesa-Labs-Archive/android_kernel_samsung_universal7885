@@ -9,6 +9,7 @@ struct cpu_topology {
 	int cluster_id;
 	cpumask_t thread_sibling;
 	cpumask_t core_sibling;
+	cpumask_t idle_sibling;
 };
 
 extern struct cpu_topology cpu_topology[NR_CPUS];
@@ -17,8 +18,10 @@ extern struct cpu_topology cpu_topology[NR_CPUS];
 #define topology_core_id(cpu)		(cpu_topology[cpu].core_id)
 #define topology_core_cpumask(cpu)	(&cpu_topology[cpu].core_sibling)
 #define topology_sibling_cpumask(cpu)	(&cpu_topology[cpu].thread_sibling)
+#define topology_idle_cpumask(cpu)	(&cpu_topology[cpu].idle_sibling)
 
 void init_cpu_topology(void);
+int get_current_cpunum(void);
 void store_cpu_topology(unsigned int cpuid);
 const struct cpumask *cpu_coregroup_mask(int cpu);
 

@@ -171,6 +171,20 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 	mapping_set_gfp_mask(mapping, GFP_HIGHUSER_MOVABLE);
 	mapping->private_data = NULL;
 	mapping->writeback_index = 0;
+#ifdef CONFIG_EXT4_PRIVATE_ENCRYPTION
+	mapping->iv = NULL;
+	memset(mapping->key, 0, MAX_KEY_SIZE);
+	mapping->key_length = 0;
+	mapping->private_enc_mode = 0;
+	mapping->private_algo_mode = 0;
+	mapping->sensitive_data_index = 0;
+#ifdef CONFIG_CRYPTO_FIPS
+	mapping->cc_enable = 0;
+#endif
+#endif
+#ifdef CONFIG_SDP
+	mapping->userid = 0;
+#endif
 	inode->i_private = NULL;
 	inode->i_mapping = mapping;
 	INIT_HLIST_HEAD(&inode->i_dentry);	/* buggered by rcu freeing */

@@ -18,6 +18,8 @@
 #include <linux/platform_device.h>
 #include <linux/usb/phy.h>
 #include <linux/slab.h>
+#include <linux/phy/phy.h>
+#include <linux/usb/phy.h>
 #include <linux/usb/xhci_pdriver.h>
 #include <linux/acpi.h>
 
@@ -59,7 +61,16 @@ static int xhci_plat_setup(struct usb_hcd *hcd)
 			return ret;
 	}
 
-	return xhci_gen_setup(hcd, xhci_plat_quirks);
+	ret = xhci_gen_setup(hcd, xhci_plat_quirks);
+
+	/*
+	 * DWC3 WORKAROUND: xhci reset clears PHY CR port settings,
+	 * so USB3.0 PHY should be tuned again.
+	 */
+	if (hcd->phy)
+		phy_tune(hcd->phy, OTG_STATE_A_HOST);
+
+	return ret;
 }
 
 static int xhci_plat_start(struct usb_hcd *hcd)
@@ -75,6 +86,7 @@ static int xhci_plat_start(struct usb_hcd *hcd)
 
 static int xhci_plat_probe(struct platform_device *pdev)
 {
+	struct device		*parent = pdev->dev.parent;
 	struct device_node	*node = pdev->dev.of_node;
 	struct usb_xhci_pdata	*pdata = dev_get_platdata(&pdev->dev);
 	const struct hc_driver	*driver;
@@ -123,6 +135,16 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	hcd->rsrc_start = res->start;
 	hcd->rsrc_len = resource_size(res);
 
+	/* Get USB3.0 PHY to tune the PHY */
+	if (parent) {
+		hcd->phy = devm_phy_get(parent, "usb3-phy");
+		if (IS_ERR_OR_NULL(hcd->phy)) {
+			hcd->phy = NULL;
+			dev_err(&pdev->dev,
+				"%s: failed to get phy\n", __func__);
+		}
+	}
+
 	/*
 	 * Not all platforms have a clk so it is not an error if the
 	 * clock does not exists.
@@ -158,6 +180,9 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	if ((node && of_property_read_bool(node, "usb3-lpm-capable")) ||
 			(pdata && pdata->usb3_lpm_capable))
 		xhci->quirks |= XHCI_LPM_SUPPORT;
+#ifdef CONFIG_USB_HOST_L1_SUPPORT
+	xhci->quirks |= XHCI_LPM_L1_SUPPORT;
+#endif
 
 	if (HCC_MAX_PSA(xhci->hcc_params) >= 4)
 		xhci->shared_hcd->can_do_streams = 1;
@@ -206,12 +231,38 @@ put_hcd:
 
 static int xhci_plat_remove(struct platform_device *dev)
 {
+	struct device	*parent = dev->dev.parent;
 	struct usb_hcd	*hcd = platform_get_drvdata(dev);
 	struct xhci_hcd	*xhci = hcd_to_xhci(hcd);
 	struct clk *clk = xhci->clk;
+	int timeout = 0;
+
+	/*
+	 * Sometimes deadlock occurred in this function.
+	 * So, below waiting for completion of hub_event was added.
+	 */
+	while (xhci->shared_hcd->is_in_hub_event || hcd->is_in_hub_event) {
+		msleep(10);
+		timeout += 10;
+		if (timeout >= XHCI_HUB_EVENT_TIMEOUT) {
+			xhci_err(xhci,
+				"ERROR: hub_event completion timeout\n");
+			break;
+		}
+	}
+	xhci_dbg(xhci, "%s: waited %dmsec", __func__, timeout);
 
 	usb_remove_hcd(xhci->shared_hcd);
 	usb_phy_shutdown(hcd->usb_phy);
+
+	/*
+	 * In usb_remove_hcd, phy_exit is called if phy is not NULL.
+	 * However, in the case that PHY was turn on or off as runtime PM,
+	 * PHY sould not exit at this time. So, to prevent the PHY exit,
+	 * PHY pointer have to be NULL.
+	 */
+	if (parent && hcd->phy)
+		hcd->phy = NULL;
 
 	usb_remove_hcd(hcd);
 	usb_put_hcd(xhci->shared_hcd);

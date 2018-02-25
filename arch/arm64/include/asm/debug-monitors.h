@@ -129,6 +129,12 @@ void user_fastforward_single_step(struct task_struct *task);
 void kernel_enable_single_step(struct pt_regs *regs);
 void kernel_disable_single_step(void);
 int kernel_active_single_step(void);
+#ifdef CONFIG_SEC_MMIOTRACE
+void check_and_clear_os_lock(void);
+#endif
+#ifdef CONFIG_SEC_KWATCHER
+void restore_debug_monitors(void);
+#endif
 
 #ifdef CONFIG_HAVE_HW_BREAKPOINT
 int reinstall_suspended_bps(struct pt_regs *regs);

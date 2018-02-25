@@ -14,6 +14,8 @@
 #include "cpudeadline.h"
 #include "cpuacct.h"
 
+#define MOVETASK_ONEPATH
+
 struct rq;
 struct cpuidle_state;
 
@@ -378,6 +380,11 @@ struct cfs_rq {
 	unsigned long tg_load_avg_contrib;
 #endif
 	atomic_long_t removed_load_avg, removed_util_avg;
+
+#ifdef CONFIG_SCHED_HMP
+	unsigned long sysload_avg_ratio;
+#endif
+
 #ifndef CONFIG_64BIT
 	u64 load_last_update_time_copy;
 #endif
@@ -625,6 +632,11 @@ struct rq {
 	int active_balance;
 	int push_cpu;
 	struct cpu_stop_work active_balance_work;
+#ifdef CONFIG_SCHED_HMP
+	struct task_struct *migrate_task;
+	u64 hmp_last_up_migration;
+	u64 hmp_last_down_migration;
+#endif
 	/* cpu of this runqueue: */
 	int cpu;
 	int online;
@@ -896,6 +908,11 @@ static inline unsigned int group_first_cpu(struct sched_group *group)
 
 extern int group_balance_cpu(struct sched_group *sg);
 
+#ifdef CONFIG_SCHED_HMP
+static LIST_HEAD(hmp_domains);
+DECLARE_PER_CPU(struct hmp_domain *, hmp_cpu_domain);
+#define hmp_cpu_domain(cpu)	(per_cpu(hmp_cpu_domain, (cpu)))
+#endif /* CONFIG_SCHED_HMP */
 #else
 
 static inline void sched_ttwu_pending(void) { }
@@ -1250,7 +1267,7 @@ extern const struct sched_class idle_sched_class;
 
 extern void update_group_capacity(struct sched_domain *sd, int cpu);
 
-extern void trigger_load_balance(struct rq *rq);
+extern void trigger_load_balance(struct rq *rq, int cpu);
 
 extern void idle_enter_fair(struct rq *this_rq);
 extern void idle_exit_fair(struct rq *this_rq);
@@ -1309,6 +1326,7 @@ extern void init_dl_task_timer(struct sched_dl_entity *dl_se);
 unsigned long to_ratio(u64 period, u64 runtime);
 
 extern void init_entity_runnable_average(struct sched_entity *se);
+extern void post_init_entity_util_avg(struct sched_entity *se);
 
 static inline void add_nr_running(struct rq *rq, unsigned count)
 {
@@ -1397,10 +1415,18 @@ static inline int hrtick_enabled(struct rq *rq)
 extern void sched_avg_update(struct rq *rq);
 
 #ifndef arch_scale_freq_capacity
+
+#ifdef CONFIG_HMP_FREQUENCY_INVARIANT_SCALE
+unsigned long exynos_scale_freq_capacity(struct sched_domain *sd, int cpu);
+#endif
 static __always_inline
 unsigned long arch_scale_freq_capacity(struct sched_domain *sd, int cpu)
 {
+#ifdef CONFIG_HMP_FREQUENCY_INVARIANT_SCALE
+	return exynos_scale_freq_capacity(sd, cpu);
+#else
 	return SCHED_CAPACITY_SCALE;
+#endif
 }
 #endif
 

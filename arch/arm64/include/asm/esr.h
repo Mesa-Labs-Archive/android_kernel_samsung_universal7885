@@ -72,6 +72,9 @@
 /* Unallocated EC: 0x3D - 0x3F */
 #define ESR_ELx_EC_MAX		(0x3F)
 
+#define ESR_EL1_ISS_DFSC_MASK	(0x3F)
+#define ESR_EL1_ISS_DFSC_TLB_CONFLICT	(0x30)
+
 #define ESR_ELx_EC_SHIFT	(26)
 #define ESR_ELx_EC_MASK		(UL(0x3F) << ESR_ELx_EC_SHIFT)
 

@@ -1,0 +1,13 @@
+# drivers/staging/sec_abc/Kconfig
+#
+# Copyright (c) 2010-2011 Samsung Electronics Co., Ltd.
+#		http://www.samsung.com/
+#
+# Licensed under GPLv2
+
+comment "Samsung ABC Options"
+config SEC_ABC
+	bool "Samsung TN ABC Feature"
+	default n
+	help
+	  Samsung TN ABC Feature
