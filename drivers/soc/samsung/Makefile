@@ -56,3 +56,6 @@ obj-$(CONFIG_EXYNOS_HDCP2)	+= exynos-hdcp/
 
 #incell
 obj-$(CONFIG_SEC_INCELL) += sec_incell.o
+
+# state notifier
+obj-$(CONFIG_STATE_NOTIFIER)	+= state_notifier.o

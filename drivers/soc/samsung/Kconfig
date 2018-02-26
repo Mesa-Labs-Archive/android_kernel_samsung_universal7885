@@ -170,6 +170,10 @@ config EXYNOS_DVFS_MANAGER
 	  Enable DVFS Manager for Exynos SoC.
 	  This module controls constraint between each DVFS domains.
 
+config STATE_NOTIFIER
+	bool "State Notifier"
+	default n
+
 endif #SOC_SAMSUNG
 
 config SEC_INCELL
