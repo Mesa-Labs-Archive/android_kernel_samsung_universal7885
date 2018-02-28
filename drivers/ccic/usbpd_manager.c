@@ -476,14 +476,6 @@ static int usbpd_manager_check_accessory(struct usbpd_manager_data *manager)
 					inc_hw_param(o_notify, USB_CCIC_VR_USE_COUNT);
 #endif
 				break;
-			case DEXDOCK_PRODUCT_ID:
-				dock_type = CCIC_DOCK_DEX;
-				pr_info("%s : Samsung DEX connected.\n", __func__);
-#if defined(CONFIG_USB_HW_PARAM)
-				if (o_notify)
-					inc_hw_param(o_notify, USB_CCIC_DEX_USE_COUNT);
-#endif
-				break;
 			case HDMI_PRODUCT_ID:
 				dock_type = CCIC_DOCK_HDMI;
 				pr_info("%s : Samsung HDMI connected.\n", __func__);
@@ -501,6 +493,17 @@ static int usbpd_manager_check_accessory(struct usbpd_manager_data *manager)
 				break;
 			}
 		}
+	}
+
+	if (!dock_type || dock_type == CCIC_DOCK_HDMI || dock_type == CCIC_DOCK_MPA){
+		dock_type = CCIC_DOCK_DEX;
+		pid = DEXDOCK_PRODUCT_ID;
+		vid = SAMSUNG_VENDOR_ID;
+		pr_info("%s : Samsung DEX connected.\n", __func__);
+#if defined(CONFIG_USB_HW_PARAM)
+		if (o_notify)
+			inc_hw_param(o_notify, USB_CCIC_DEX_USE_COUNT);
+#endif
 	}
 
 	if (dock_type) {
