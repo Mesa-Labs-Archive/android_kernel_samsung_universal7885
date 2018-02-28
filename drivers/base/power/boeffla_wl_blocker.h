@@ -18,6 +18,6 @@
 
 #define LIST_WL_DEFAULT				"bbd_wake_lock;ssp_sensorhub_wake_lock;wlan_rx_wake;wlan_wake;wlan_ctrl_wake;NETLINK;wlan_txfl_wake;bluetooth_timer;BT_bt_wake;ssp_wake_lock;mmc0_detect;ssp_comm_wake_lock"
 
-#define LENGTH_LIST_WL				255
+#define LENGTH_LIST_WL				2048
 #define LENGTH_LIST_WL_DEFAULT		170
 #define LENGTH_LIST_WL_SEARCH		LENGTH_LIST_WL + LENGTH_LIST_WL_DEFAULT + 5
