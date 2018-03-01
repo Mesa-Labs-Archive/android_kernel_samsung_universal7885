@@ -3,3 +3,4 @@ dtb-$(CONFIG_MODEL_JACKPOT2LTE) += exynos7885-jackpot2lte_eur_open_00.dtb exynos
 
 always		:= $(dtb-y)
 subdir-y	:= $(dts-dirs)
+clean-files	:= *.dtb
