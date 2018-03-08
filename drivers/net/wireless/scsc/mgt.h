@@ -436,6 +436,7 @@ void slsi_vif_cleanup(struct slsi_dev *sdev, struct net_device *dev, bool hw_ava
 void slsi_scan_cleanup(struct slsi_dev *sdev, struct net_device *dev);
 void slsi_dump_stats(struct net_device *dev);
 int slsi_send_hanged_vendor_event(struct slsi_dev *sdev, u16 scsc_panic_code);
+void slsi_update_supported_channels_regd_flags(struct slsi_dev *sdev);
 #ifdef CONFIG_SCSC_WLAN_HANG_TEST
 int slsi_test_send_hanged_vendor_event(struct net_device *dev);
 #endif

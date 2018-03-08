@@ -152,9 +152,9 @@ exit:
 		ret = wait_for_completion_timeout(msg->done,
 		                                  msecs_to_jiffies(timeout));
 
-		if (data->clean_pending_list_flag) {
+		if (msg->clean_pending_list_flag) {
 			status = -2;
-			data->clean_pending_list_flag = 0;
+			msg->clean_pending_list_flag = 0;
 			ssp_errf("communication fail so recovery_mcu func call status %d", status);
 			return status;
 		}
@@ -287,19 +287,19 @@ void clean_pending_list(struct ssp_data *data)
 {
 	struct ssp_msg *msg, *n;
 
-	ssp_dbgf(" IN");
+	ssp_infof(" IN");
 
 	mutex_lock(&data->pending_mutex);
 	list_for_each_entry_safe(msg, n, &data->pending_list, list) {
 
 		list_del(&msg->list);
 		if (msg->done != NULL && !completion_done(msg->done)) {
-			data->clean_pending_list_flag = 1;
+			msg->clean_pending_list_flag = 1;
 			complete(msg->done);
 		}
 	}
 	mutex_unlock(&data->pending_mutex);
-	ssp_dbgf(" OUT");
+	ssp_infof(" OUT");
 
 }
 
@@ -337,7 +337,7 @@ int ssp_send_command(struct ssp_data *data, u8 cmd, u8 type, u8 subcmd,
 		status = ERROR;
 	}
 
-	ssp_errf("After do_transfer timeout %d", timeout);
+	ssp_errf("After do_transfer timeout %d, status %d", timeout, status);
 
 	//mutex_lock(&data->cmd_mutex);
 	if (((msg->cmd == CMD_GETVALUE) && (receive_buf != NULL) &&

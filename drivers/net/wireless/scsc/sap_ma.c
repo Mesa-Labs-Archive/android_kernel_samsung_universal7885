@@ -104,10 +104,9 @@ static int slsi_rx_amsdu_deaggregate(struct net_device *dev, struct sk_buff *skb
 	while (skb != subframe) {
 		msdu_len = (skb->data[ETH_ALEN * 2] << 8) | skb->data[(ETH_ALEN * 2) + 1];
 
-		if ((msdu_len > (ETH_DATA_LEN + LLC_SNAP_HDR_LEN)) || (msdu_len > skb->len) ||
-		    (msdu_len < (ETH_ZLEN - (ETH_HLEN - LLC_SNAP_HDR_LEN))) ||
-		    (skb->len < (ETH_ZLEN + LLC_SNAP_HDR_LEN))) {
-			SLSI_NET_ERR(dev, "Wrong MSDU length %d, skb length = %d\n", msdu_len, skb->len);
+		/* check if the length of sub-frame is valid */
+		if (msdu_len > skb->len) {
+			SLSI_NET_ERR(dev, "invalid MSDU length %d, SKB length = %d\n", msdu_len, skb->len);
 			slsi_kfree_skb(skb);
 			return -EINVAL;
 		}
@@ -280,22 +279,6 @@ static int slsi_rx_data_process_skb(struct slsi_dev *sdev, struct net_device *de
 
 	skb->dev = dev;
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
-
-	/* Test for an overlength frame */
-	if (skb->len > (dev->mtu + ETH_HLEN)) {
-		/* A bogus length ethfrm has been encap'd. */
-		/* Is someone trying an oflow attack? */
-		SLSI_NET_WARN(dev, "oversize frame (%d > %d)\n", skb->len, dev->mtu + ETH_HLEN);
-
-		/* Drop the packet and return */
-		ndev_vif->stats.rx_dropped++;
-		ndev_vif->stats.rx_length_errors++;
-		if (peer)
-			peer->sinfo.rx_dropped_misc++;
-
-		slsi_kfree_skb(skb);
-		return -EINVAL;
-	}
 
 	/* In STA mode, the AP relays back our multicast traffic.
 	 * Receiving these frames and passing it up confuses some

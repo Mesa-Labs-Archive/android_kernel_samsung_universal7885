@@ -1741,7 +1741,7 @@ static int slsi_set_bssid_blacklist(struct wiphy *wiphy, struct wireless_dev *wd
 		}
 	}
 
-	if (!acl_data) {
+	if (acl_data) {
 		acl_data->acl_policy = FAPI_ACLPOLICY_BLACKLIST;
 		ret = slsi_mlme_set_acl(sdev, net_dev, 0, acl_data);
 		if (ret)

@@ -110,6 +110,8 @@ struct cod3035x_priv {
 	struct workqueue_struct *adc_mute_wq;
 	struct work_struct adc_mute_work;
 	int adc_pin;
+	unsigned int lvol;
+	unsigned int rvol;
 };
 
 /*

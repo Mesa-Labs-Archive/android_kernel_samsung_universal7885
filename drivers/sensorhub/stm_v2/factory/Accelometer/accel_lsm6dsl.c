@@ -288,6 +288,18 @@ ssize_t set_accel_lsm6dsl_reactive_alert(struct ssp_data *data, const char *buf)
 			goto exit;
 		}
 
+		if (buffer == NULL) {
+			ssp_errf("buffer is null");
+			ret = ERROR;
+			goto exit;
+		}
+
+		if (buffer_length < 1) {
+			ssp_errf("length err %d", buffer_length);
+			ret = ERROR;
+			goto exit;
+		}
+
 		data->is_accel_alert = *buffer;
 
 		ssp_infof("factory test success!");
@@ -355,9 +367,7 @@ ssize_t get_accel_lsm6dsl_selftest(struct ssp_data *data, char *buf)
 	              result, diff_axis[0], diff_axis[1], diff_axis[2],
 	              shift_ratio_N[0], shift_ratio_N[1], shift_ratio_N[2]);
 
-	if (buffer != NULL) {
-		kfree(buffer);
-	}
+	kfree(buffer);
 
 	return ret;
 

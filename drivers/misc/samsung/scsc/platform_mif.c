@@ -41,6 +41,7 @@
 #ifdef CONFIG_ARCH_EXYNOS
 #include <linux/soc/samsung/exynos-soc.h>
 #endif
+#include "mifintrbit.h"
 
 #if !defined(CONFIG_SOC_EXYNOS7872) && !defined(CONFIG_SOC_EXYNOS7570) && !defined(CONFIG_SOC_EXYNOS7885)
 #error Target processor CONFIG_SOC_EXYNOS7570 or CONFIG_SOC_EXYNOS7872 or CONFIG_SOC_EXYNOS7885 not selected
@@ -128,7 +129,7 @@ struct platform_mif {
 	unsigned long mem_start;
 	size_t        mem_size;
 	void __iomem  *mem;
-    
+
 	/* Shared memory - ABOX */
 	unsigned long btaboxmem_start;
 	size_t        btaboxmem_size;
@@ -147,11 +148,14 @@ struct platform_mif {
 	void *suspendresume_data;
 };
 
-
 #define platform_mif_from_mif_abs(MIF_ABS_PTR) container_of(MIF_ABS_PTR, struct platform_mif, interface)
 
 #ifdef CONFIG_SCSC_CLK20MHZ
 static void __platform_mif_usbpll_claim(struct platform_mif *platform, bool wlbt);
+#endif
+
+#if defined(CONFIG_SOC_EXYNOS7872) || defined(CONFIG_SOC_EXYNOS7885)
+static void __platform_mif_fh_irq_bit_unmask(struct scsc_mif_abs *interface, int bit_num);
 #endif
 
 inline void platform_mif_reg_write(struct platform_mif *platform, u16 offset, u32 value)
@@ -556,12 +560,13 @@ static int platform_mif_reset(struct scsc_mif_abs *interface, bool reset)
 			/* >>12 represents 4K aligment (see address)*/
 			val = platform->mem_size >> 12;
 			regmap_write(platform->pmureg, WIFI2AP_MEM_CONFIG0, val);
-            
+
 			/* BAAW1 for BT-ABOX shared memory */
 			val = (platform->btaboxmem_start & 0xFFFFFC000) >> 12;
 			regmap_write(platform->pmureg, WIFI2AP_MEM_CONFIG3, val);
 			val = platform->btaboxmem_size >> 12;
 			regmap_write(platform->pmureg, WIFI2AP_MEM_CONFIG2, val);
+
 
 #if (defined(CONFIG_SOC_EXYNOS7872) || defined(CONFIG_SOC_EXYNOS7885)) && defined(CONFIG_ACPM_DVFS)
 			/* Immediately prior to reset release, set up ACPM
@@ -575,10 +580,10 @@ static int platform_mif_reset(struct scsc_mif_abs *interface, bool reset)
 			ret = platform_mif_pmu_reset(interface, 2);
 
 			/* WLBT should be stopped/powered-down at this point */
- 			regmap_write(platform->pmureg, WIFI2AP_MEM_CONFIG0, 0x00000);
-+			regmap_write(platform->pmureg, WIFI2AP_MEM_CONFIG1, 0x00000);
-+			regmap_write(platform->pmureg, WIFI2AP_MEM_CONFIG2, 0x00000);
-+			regmap_write(platform->pmureg, WIFI2AP_MEM_CONFIG3, 0x00000);
+			regmap_write(platform->pmureg, WIFI2AP_MEM_CONFIG0, 0x00000);
+			regmap_write(platform->pmureg, WIFI2AP_MEM_CONFIG1, 0x00000);
+			regmap_write(platform->pmureg, WIFI2AP_MEM_CONFIG2, 0x00000);
+			regmap_write(platform->pmureg, WIFI2AP_MEM_CONFIG3, 0x00000);
 		}
 	} else
 		SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev, "Not resetting ARM Cores - enable_platform_mif_arm_reset: %d\n",
@@ -786,6 +791,15 @@ static void platform_mif_irq_bit_set(struct scsc_mif_abs *interface, int bit_num
 		return;
 	}
 
+#if defined(CONFIG_SOC_EXYNOS7872) || defined(CONFIG_SOC_EXYNOS7885)
+	/* Belt and braces. In the case of invoking monitor mode,
+	 * ensure that the from-ap interrupt is unmasked. FW
+	 * should already do this.
+	 */
+	if (target == SCSC_MIF_ABS_TARGET_R4 && bit_num == MIFINTRBIT_RESERVED_PANIC_R4)
+		__platform_mif_fh_irq_bit_unmask(interface, bit_num);
+#endif
+
 #ifdef CONFIG_SOC_EXYNOS7570
 	platform_mif_reg_write(platform, MAILBOX_WLBT_REG(reg), (1 << bit_num));
 #elif defined(CONFIG_SOC_EXYNOS7872) || defined(CONFIG_SOC_EXYNOS7885)
@@ -845,6 +859,37 @@ static void platform_mif_irq_bit_unmask(struct scsc_mif_abs *interface, int bit_
 	spin_unlock_irqrestore(&platform->mif_spinlock, flags);
 	SCSC_TAG_DEBUG_DEV(PLAT_MIF, platform->dev, "UNMASK Setting INTMR0: 0x%x bit %d\n", val & ~((1 << bit_num) << 16), bit_num);
 }
+
+/* Unmask the from-host interrrupt bit.
+ * Note that typically FW should unmask this, this is for special purposes only.
+ */
+#if defined(CONFIG_SOC_EXYNOS7872) || defined(CONFIG_SOC_EXYNOS7885)
+static void __platform_mif_fh_irq_bit_unmask(struct scsc_mif_abs *interface, int bit_num)
+{
+	struct platform_mif *platform = platform_mif_from_mif_abs(interface);
+	u32 val;
+	unsigned long flags;
+
+	if (bit_num >= 16) {
+		SCSC_TAG_ERR_DEV(PLAT_MIF, platform->dev, "Incorrect INT number: %d\n", bit_num);
+		return;
+	}
+
+	spin_lock_irqsave(&platform->mif_spinlock, flags);
+	val = platform_mif_reg_read(platform, MAILBOX_WLBT_REG(INTMR1));
+	/* WRITE : 0 = Unmask Interrupt (no << 16  on MR1) */
+	platform_mif_reg_write(platform, MAILBOX_WLBT_REG(INTMR1), val & ~(1 << bit_num));
+	spin_unlock_irqrestore(&platform->mif_spinlock, flags);
+	SCSC_TAG_DEBUG_DEV(PLAT_MIF, platform->dev,
+		"UNMASK Setting INTMR1: 0x%x bit %d\n", val & ~(1 << bit_num), bit_num);
+
+	/* Warn if this bit was previously masked, FW should have unmasked it */
+	if (val & (1 << bit_num)) {
+		SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev,
+			"INTMR1: 0x%x bit %d found masked!\n", val, bit_num);
+	}
+}
+#endif
 
 /* Return the contents of the mask register */
 static u32 __platform_mif_irq_bit_mask_read(struct platform_mif *platform)

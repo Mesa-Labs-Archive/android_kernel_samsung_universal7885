@@ -43,11 +43,11 @@ config SCSC_MMAP
 
 config SCSC_DBG_SAMPLER
 	tristate "Samsung SCSC Debug Sampler Service"
-	depends on SCSC_CORE && DEBUG_FS
+	depends on SCSC_CORE
 
 config SCSC_DEBUG
 	tristate "Samsung SCSC Logging"
-	depends on SCSC_CORE
+	depends on SCSC_CORE && DEBUG_FS
 	default n
 
 config SCSC_DEBUG_COMPATIBILITY
@@ -80,3 +80,4 @@ config SCSC_BUILD_TYPE
        string "Type of Kernel Build"
        ---help---
          Type of Kernel Build: User, User Debug, Engineering
+

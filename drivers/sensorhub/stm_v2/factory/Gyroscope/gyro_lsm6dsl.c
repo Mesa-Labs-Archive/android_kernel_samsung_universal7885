@@ -183,6 +183,18 @@ ssize_t get_gyro_lsm6dsl_temperature(struct ssp_data *data, char *buf)
 		goto exit;
 	}
 
+	if (buffer == NULL) {
+		ssp_errf("buffer is null");
+		ret = ERROR;
+		goto exit;
+	}
+
+	if (buffer_length < 2) {
+		ssp_errf("length err %d", buffer_length);
+		ret = ERROR;
+		goto exit;
+	}
+
 	reg[0] = buffer[1];
 	reg[1] = buffer[0];
 	temperature = (short)(((reg[0]) << 8) | reg[1]);
@@ -296,6 +308,17 @@ ssize_t get_gyro_lsm6dsl_selftest(struct ssp_data *data, char *buf)
 		goto exit;
 	}
 
+	if (temp_buf == NULL) {
+		ssp_errf("buffer is null");
+		ret = FAIL;
+		goto exit;
+	}
+
+	if (temp_buf_length < 36) {
+		ssp_errf("buffer length error %d", temp_buf_length);
+		ret = FAIL;
+		goto exit;
+	}
 
 	pr_err("[SSP]%d %d %d %d %d %d %d %d %d %d %d %d\n", temp_buf[0],
 	       temp_buf[1], temp_buf[2], temp_buf[3], temp_buf[4],
@@ -580,6 +603,12 @@ ssize_t set_gyro_lsm6dsl_selftest_dps(struct ssp_data *data, const char *buf)
 
 	if (ret != SUCCESS) {
 		ssp_errf("ssp_send_command Fail %d", ret);
+		goto exit;
+	}
+
+	if (buffer == NULL) {
+		ssp_errf("buffer is null");
+		ret = FAIL;
 		goto exit;
 	}
 

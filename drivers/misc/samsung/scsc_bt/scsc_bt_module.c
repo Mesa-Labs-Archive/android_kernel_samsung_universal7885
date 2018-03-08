@@ -736,6 +736,7 @@ int slsi_sm_bt_service_start(void)
 	 * otherwise there is no audio routing
 	 */
 	if (audio_driver != NULL) {
+
 		bt_service.abox_ref = (scsc_mifram_ref)SCSC_BAAW1_OFFSET;
 
 		/* get the physical address & size of the region allocated in DTB */
@@ -760,15 +761,12 @@ int slsi_sm_bt_service_start(void)
 		bt_audio.abox_virtual->bt_to_abox_streaming_if_1_offset = SCSC_BT_AUDIO_ABOX_IF_0_SIZE;
 
 		/* Resolve the physical address of the structure */
-		bt_audio.abox_physical = (struct scsc_bt_audio_abox *)scsc_mx_service_mif_addr_to_phys(
-									bt_service.service,
-									bt_service.abox_ref);
-
-
 		bt_audio.abox_physical = (struct scsc_bt_audio_abox *)btaboxdata->btaboxmem_start;
- 		bt_audio.dev = bt_service.dev;
+
+		bt_audio.dev = bt_service.dev;
+
 		SCSC_TAG_INFO(BT_COMMON, "abox_virtual: 0x%p abox_physical: 0x%p\n",
-		bt_audio.abox_virtual, bt_audio.abox_physical);
+			bt_audio.abox_virtual, bt_audio.abox_physical);
 	}
 
 	/* Map the configuration pointer */
@@ -1034,7 +1032,6 @@ static int slsi_sm_bt_service_stop(void)
 		else
 			return -EIO;
 	}
-
 	return 0;
 }
 
