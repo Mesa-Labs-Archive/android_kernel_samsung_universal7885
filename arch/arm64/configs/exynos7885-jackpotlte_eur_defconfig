@@ -1,6 +1,6 @@
 #
 # Automatically generated file; DO NOT EDIT.
-# Linux/arm64 4.4.13 Kernel Configuration
+# Linux/arm64 4.4.120 Kernel Configuration
 #
 CONFIG_ARM64=y
 CONFIG_64BIT=y
@@ -341,7 +341,7 @@ CONFIG_ARCH_EXYNOS=y
 # CONFIG_SOC_EXYNOS7872 is not set
 # CONFIG_SOC_EMULATOR7872 is not set
 CONFIG_SOC_EXYNOS7885=y
-# CONFIG_SOC_EXYNOS7885_ANDROID_VERION_O is not set
+# CONFIG_SOC_EXYNOS7885_ANDROID_VERSION_O is not set
 CONFIG_MODEL_JACKPOTLTE=y
 # CONFIG_MODEL_JACKPOT2LTE is not set
 # CONFIG_SOC_EXYNOS7884 is not set
