@@ -311,10 +311,10 @@ static void write_m_test_fw_version_file(struct mxman *mxman)
 	fp = filp_open(filepath, O_WRONLY|O_CREAT, 0644);
 
 	if (IS_ERR(fp)) {
-		SCSC_TAG_INFO(MXMAN, "version file wasn't found\n");
+		SCSC_TAG_INFO(MXMAN, "version file wasn't opened\n");
 		return;
 	} else if (fp == NULL) {
-		SCSC_TAG_INFO(MXMAN, "%s doesn't exist.\n", filepath);
+		SCSC_TAG_INFO(MXMAN, "%s doesn't open.\n", filepath);
 		return;
 	}
 #ifdef CONFIG_SCSC_BUILD_TYPE
@@ -328,11 +328,33 @@ static void write_m_test_fw_version_file(struct mxman *mxman)
 #endif
 
 	kernel_write(fp, buf, strlen(buf), 0);
+	filp_close(fp, NULL);
 
-	if (fp)
-		filp_close(fp, NULL);
+	SCSC_TAG_DEBUG(MXMAN, "Succeed to write firmware/host information to .wifiver.info\n");
+}
 
-	SCSC_TAG_INFO(MXMAN, "Succeed to write firmware/host information to .wifiver.info\n");
+static void write_m_test_chip_version_file(struct mxman *mxman)
+{
+	struct file *fp = NULL;
+	char *filepath = "/data/misc/conn/.cid.info";
+	char buf[256];
+
+	fp = filp_open(filepath, O_WRONLY|O_CREAT, 0644);
+
+	if (IS_ERR(fp)) {
+		SCSC_TAG_INFO(MXMAN, "cid file wasn't opened\n");
+		return;
+	} else if (fp == NULL) {
+		SCSC_TAG_INFO(MXMAN, "%s doesn't open.\n", filepath);
+		return;
+	}
+
+	snprintf(buf, sizeof(buf), SCSC_RELEASE_SOLUTION"\n");
+	kernel_write(fp, buf, strlen(buf), 0);
+
+	filp_close(fp, NULL);
+
+	SCSC_TAG_DEBUG(MXMAN, "Wrote chip information to .cid.info\n");
 }
 
 static char *chip_version(u32 rf_hw_ver)
@@ -384,8 +406,11 @@ static void mxman_print_versions(struct mxman *mxman)
 	SCSC_TAG_INFO(MXMAN, "WLBT Driver Build Type: %s\n", CONFIG_SCSC_BUILD_TYPE);
 #endif
 
-	/* write /data/.wifiver.info */
+	/* write .wifiver.info */
 	write_m_test_fw_version_file(mxman);
+
+	/* write .cid.info */
+	write_m_test_chip_version_file(mxman);
 }
 
 /** Receive handler for messages from the FW along the maxwell management transport */

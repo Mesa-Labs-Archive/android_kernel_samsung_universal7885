@@ -141,6 +141,12 @@ ssize_t get_barometer_lps22h_eeprom_check(struct ssp_data *data, char *buf)
 		goto exit;
 	}
 
+	if (buffer == NULL) {
+		ssp_errf("buffer is null");
+		ret = ERROR;
+		goto exit;
+	}
+
 	ssp_infof("%u", *buffer);
 	ret = snprintf(buf, PAGE_SIZE, "%d", *buffer);
 

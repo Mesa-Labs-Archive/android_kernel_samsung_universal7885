@@ -634,9 +634,18 @@ static int vts_start_recognization(struct device *dev, int start)
 			voice_grammar.bin @offset 0x32800
 			file before starting recognition */
 			result = request_firmware(&firmware1, "voice_net.bin", dev);
+
 			if (result != 0) {
 				dev_err(dev, "Failed to request '%s'\n", "voice_net.bin");
 				return result;
+			}
+
+			if (firmware1->size > SOUND_MODEL_NET_SIZE_MAX) {
+				dev_err(dev, "Failed %s Requested size[0x%x] > supported[0x%x]\n",
+						"voice_net.bin", firmware1->size,
+						SOUND_MODEL_NET_SIZE_MAX);
+				release_firmware(firmware1);
+				return -EINVAL;
 			}
 
 			memcpy(data->sram_base + 0x2A800, firmware1->data, firmware1->size);
@@ -648,6 +657,15 @@ static int vts_start_recognization(struct device *dev, int start)
 				dev_err(dev, "Failed to request '%s'\n", "voice_grammar.bin");
 				release_firmware(firmware1);
 				return result;
+			}
+
+			if (firmware2->size > SOUND_MODEL_GRAMMAR_SIZE_MAX) {
+				dev_err(dev, "Failed %s Requested size[0x%x] > supported[0x%x]\n",
+						"voice_grammar.bin", firmware1->size,
+						SOUND_MODEL_GRAMMAR_SIZE_MAX);
+				release_firmware(firmware1);
+				release_firmware(firmware2);
+				return -EINVAL;
 			}
 
 			memcpy(data->sram_base + 0x32800, firmware2->data, firmware2->size);

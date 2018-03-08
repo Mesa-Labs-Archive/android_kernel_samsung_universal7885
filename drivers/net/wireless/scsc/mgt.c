@@ -358,6 +358,7 @@ int slsi_start(struct slsi_dev *sdev)
 		SLSI_DBG2(sdev, SLSI_INIT_DEINIT, "Succeed to write softap information to .softap.info\n");
 	}
 #endif
+	slsi_update_supported_channels_regd_flags(sdev);
 	SLSI_DBG2(sdev, SLSI_INIT_DEINIT, "---Driver started successfully---\n");
 	sdev->device_state = SLSI_DEVICE_STATE_STARTED;
 	SLSI_MUTEX_UNLOCK(sdev->start_stop_mutex);
@@ -754,8 +755,14 @@ static int slsi_mib_initial_get(struct slsi_dev *sdev)
 {
 	struct slsi_mib_data mibreq = { 0, NULL };
 	struct slsi_mib_data mibrsp = { 0, NULL };
+	int *band = sdev->supported_5g_channels;
 	int rx_len = 0;
 	int r;
+	int i = 0;
+	int j = 0;
+	int chan_start = 0;
+	int chan_count = 0;
+	int index = 0;
 	static const struct slsi_mib_get_entry get_values[] = { { SLSI_PSID_UNIFI_CHIP_VERSION,            { 0, 0 } },
 							       { SLSI_PSID_UNIFI_SUPPORTED_CHANNELS,      { 0, 0 } },
 							       { SLSI_PSID_UNIFI_HT_ACTIVATED, {0, 0} },
@@ -804,9 +811,9 @@ static int slsi_mib_initial_get(struct slsi_dev *sdev)
 		if (values[1].type != SLSI_MIB_TYPE_NONE) {    /* SUPPORTED_CHANNELS */
 			WARN_ON(values[1].type != SLSI_MIB_TYPE_OCTET);
 			if (values[1].type == SLSI_MIB_TYPE_OCTET) {
-				int i;
-
 				sdev->band_5g_supported = 0;
+				memset(sdev->supported_2g_channels, 0, sizeof(sdev->supported_2g_channels));
+				memset(sdev->supported_5g_channels, 0, sizeof(sdev->supported_5g_channels));
 				for (i = 0; i < values[1].u.octetValue.dataLength / 2; i++) {
 					/* If any 5GHz channel is supported, update band_5g_supported */
 					if ((values[1].u.octetValue.data[i * 2] > 14) &&
@@ -814,6 +821,29 @@ static int slsi_mib_initial_get(struct slsi_dev *sdev)
 						sdev->band_5g_supported = 1;
 						break;
 					}
+				}
+				for (i = 0; i < values[1].u.octetValue.dataLength; i += 2) {
+					chan_start = values[1].u.octetValue.data[i];
+					chan_count = values[1].u.octetValue.data[i + 1];
+					band = sdev->supported_5g_channels;
+					if (chan_start < 15) {
+						index = chan_start - 1;
+						band = sdev->supported_2g_channels;
+					} else if (chan_start >= 36 && chan_start <= 48) {
+						index = (chan_start - 36) / 4;
+					} else if (chan_start >= 52 && chan_start <= 64) {
+						index = ((chan_start - 52) / 4) + 4;
+					} else if (chan_start >= 100 && chan_start <= 140) {
+						index = ((chan_start - 100) / 4) + 8;
+					} else if (chan_start >= 149 && chan_start <= 165) {
+						index = ((chan_start - 149) / 4) + 20;
+					} else {
+						continue;
+					}
+
+					for (j = 0; j < chan_count; j++)
+						band[index + j] = 1;
+					sdev->enabled_channel_count += chan_count;
 				}
 			}
 		}
@@ -1734,6 +1764,7 @@ void slsi_band_cfg_update(struct slsi_dev *sdev, int band)
 		break;
 	}
 	wiphy_apply_custom_regulatory(sdev->wiphy, sdev->device_config.domain_info.regdomain);
+	slsi_update_supported_channels_regd_flags(sdev);
 }
 
 int slsi_band_update(struct slsi_dev *sdev, int band)
@@ -3502,6 +3533,7 @@ int slsi_set_country_update_regd(struct slsi_dev *sdev, const char *alpha2_code,
 	if (slsi_read_regulatory_rules(sdev, &sdev->device_config.domain_info, alpha2) == 0) {
 		slsi_reset_channel_flags(sdev);
 		wiphy_apply_custom_regulatory(sdev->wiphy, sdev->device_config.domain_info.regdomain);
+		slsi_update_supported_channels_regd_flags(sdev);
 	}
 
 exit:
@@ -3804,4 +3836,27 @@ void slsi_scan_ind_timeout_handle(struct work_struct *work)
 		}
 	}
 	SLSI_MUTEX_UNLOCK(ndev_vif->scan_mutex);
+}
+
+void slsi_update_supported_channels_regd_flags(struct slsi_dev *sdev)
+{
+	int i = 0;
+	struct wiphy *wiphy = sdev->wiphy;
+	struct ieee80211_channel *chan;
+
+	if (sdev->enabled_channel_count == 39)
+		return;
+
+	for (i = 0; i <  ARRAY_SIZE(sdev->supported_2g_channels); i++) {
+		if (sdev->supported_2g_channels[i] == 0) {
+			chan = &wiphy->bands[0]->channels[i];
+			chan->flags |= IEEE80211_CHAN_DISABLED;
+		}
+	}
+	for (i = 0; i <  ARRAY_SIZE(sdev->supported_5g_channels); i++) {
+		if (sdev->supported_5g_channels[i] == 0) {
+			chan = &wiphy->bands[1]->channels[i];
+			chan->flags |= IEEE80211_CHAN_DISABLED;
+		}
+	}
 }

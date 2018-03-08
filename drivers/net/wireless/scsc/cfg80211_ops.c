@@ -696,6 +696,7 @@ int slsi_connect(struct wiphy *wiphy, struct net_device *dev,
 {
 	struct slsi_dev     *sdev = SDEV_FROM_WIPHY(wiphy);
 	struct netdev_vif   *ndev_vif = netdev_priv(dev);
+	struct netdev_vif   *ndev_p2p_vif;
 	u8                  device_address[ETH_ALEN] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 	int                 r = 0;
 	u16                 capability = WLAN_CAPABILITY_ESS;
@@ -741,6 +742,19 @@ int slsi_connect(struct wiphy *wiphy, struct net_device *dev,
 
 	if (WARN_ON(sme->ssid_len > IEEE80211_MAX_SSID_LEN))
 		goto exit_with_error;
+
+	if ((SLSI_IS_VIF_INDEX_WLAN(ndev_vif)) && (sdev->p2p_state == P2P_GROUP_FORMED_CLI)) {
+		p2p_dev = slsi_get_netdev(sdev, SLSI_NET_INDEX_P2PX);
+		if (p2p_dev) {
+			ndev_p2p_vif  = netdev_priv(p2p_dev);
+			if (ndev_p2p_vif->sta.sta_bss) {
+				if (SLSI_ETHER_EQUAL(ndev_p2p_vif->sta.sta_bss->bssid, sme->bssid)) {
+					SLSI_NET_ERR(dev, "Connect Request Rejected\n");
+					goto exit_with_error;
+				}
+			}
+		}
+	}
 
 	if ((ndev_vif->vif_type == FAPI_VIFTYPE_STATION) && (ndev_vif->sta.vif_status == SLSI_VIF_STATUS_CONNECTED)) {
 		/*reassociation*/
@@ -2800,6 +2814,7 @@ static struct ieee80211_channel slsi_5ghz_channels[] = {
 	CHAN5G(5660, 132),
 	CHAN5G(5680, 136),
 	CHAN5G(5700, 140),
+	CHAN5G(5720, 144),
 	/* UNII 3 */
 	CHAN5G(5745, 149),
 	CHAN5G(5765, 153),

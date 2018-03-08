@@ -237,6 +237,7 @@ struct ssp_msg {
 	u16 length;
 	char *buffer;
 	u8 res;         /* success : 1 fail : 0 */
+	bool clean_pending_list_flag;
 	struct completion *done;
 	struct list_head list;
 } __attribute__((__packed__));
@@ -380,8 +381,6 @@ struct ssp_data {
 	struct  proximity_sensor_operations *proximity_ops;
 	struct  light_sensor_operations *light_ops;
 	struct  barometer_sensor_operations *barometer_ops;
-
-	bool clean_pending_list_flag;
 };
 
 struct ssp_big {

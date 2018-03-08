@@ -802,6 +802,7 @@ void slsi_rx_roamed_ind(struct slsi_dev *sdev, struct net_device *dev, struct sk
 		slsi_rx_scan_pass_to_cfg80211(sdev, dev, ndev_vif->sta.mlme_scan_ind_skb);
 		ndev_vif->sta.mlme_scan_ind_skb = NULL;
 	}
+
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0))
 	if (ndev_vif->sta.sta_bss->capability & WLAN_CAPABILITY_PRIVACY)
 		bss_privacy = IEEE80211_PRIVACY_ON;
@@ -831,7 +832,6 @@ void slsi_rx_roamed_ind(struct slsi_dev *sdev, struct net_device *dev, struct sk
 		int assoc_rsp_ie_len = 0;
 
 		slsi_peer_reset_stats(sdev, dev, peer);
-
 		slsi_peer_update_assoc_req(sdev, dev, peer, ndev_vif->sta.roam_mlme_procedure_started_ind);
 		slsi_peer_update_assoc_rsp(sdev, dev, peer, skb);
 
@@ -1876,18 +1876,6 @@ void slsi_rx_received_frame_ind(struct slsi_dev *sdev, struct net_device *dev, s
 
 		skb->dev = dev;
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
-
-		/* test for an overlength frame */
-		if (skb->len > (dev->mtu + ETH_HLEN)) {
-			/* A bogus length ethfrm has been encap'd. */
-			/* Is someone trying an oflow attack? */
-			SLSI_WARN(sdev, "oversize frame (%d > %d)\n", skb->len, dev->mtu + ETH_HLEN);
-
-			/* Drop the packet and return */
-			ndev_vif->stats.rx_dropped++;
-			ndev_vif->stats.rx_length_errors++;
-			goto exit;
-		}
 
 		ndev_vif->stats.rx_packets++;
 		ndev_vif->stats.rx_bytes += skb->len;

@@ -138,7 +138,7 @@ config SCSC_WLAN_HANG_TEST
 	default y
 	---help---
 	   This option facilitates triggering of HANG Event
-	   to reset WLAN
+	   to reset WLAN.
 
 config SCSC_WLAN_NAT_KEEPALIVE_DISABLE
 	bool "Disable NAT KeepAlive"

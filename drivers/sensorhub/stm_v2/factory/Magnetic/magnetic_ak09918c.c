@@ -159,12 +159,12 @@ ssize_t get_magnetic_ak09918c_dac(struct ssp_data *data, char *buf)
 			return ret;
 		}
 
-		if(buffer == NULL) {
+		if (buffer == NULL) {
 			ssp_errf("buffer is null");
 			return ret;
 		}
 
-		if(buffer_length < 22) {
+		if (buffer_length < 22) {
 			ssp_errf("buffer length error %d", buffer_length);
 			if (buffer != NULL) {
 				kfree(buffer);
@@ -426,6 +426,16 @@ Retry_selftest:
 
 	if (ret != SUCCESS) {
 		ssp_errf("ssp_send_command Fail %d", ret);
+		goto exit;
+	}
+
+	if (buf_selftest == NULL) {
+		ssp_errf("buffer is null");
+		goto exit;
+	}
+
+	if (buf_selftest_length < 22) {
+		ssp_errf("buffer length error %d", buf_selftest_length);
 		goto exit;
 	}
 

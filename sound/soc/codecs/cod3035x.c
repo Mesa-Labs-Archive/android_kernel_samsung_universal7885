@@ -1056,6 +1056,47 @@ static int cod3035x_mute_mic(struct snd_soc_codec *codec, bool on)
 	return 0;
 }
 
+static void cod3035x_save_dac_value(struct snd_soc_codec *codec)
+{
+	unsigned char lvol = 0x0, rvol = 0x0;
+	struct cod3035x_priv *cod3035x = snd_soc_codec_get_drvdata(codec);
+
+	dev_dbg(codec->dev, "%s called \n", __func__);
+	lvol = snd_soc_read(codec, COD3035X_51_DVOLL);
+	rvol = snd_soc_read(codec, COD3035X_52_DVOLR);
+
+	if (lvol == 0xff && rvol == 0xff) {
+		/* checking the DAC is already muted */
+		dev_dbg(codec->dev, "DAC is already muted.\n");
+	}
+	else {
+		/* save the dac gains */
+		cod3035x->lvol = lvol;
+		cod3035x->rvol = rvol;
+	}
+}
+
+static void cod3035x_dac_mute(struct snd_soc_codec *codec, bool on)
+{
+	struct cod3035x_priv *cod3035x = snd_soc_codec_get_drvdata(codec);
+
+	dev_dbg(codec->dev, "%s called, %s\n", __func__,
+			on ? "Mute" : "Unmute");
+
+	if (on) {
+		cod3035x_save_dac_value(codec);
+		snd_soc_write(codec, COD3035X_51_DVOLL, 0xff);
+		snd_soc_write(codec, COD3035X_52_DVOLR, 0xff);
+		dev_dbg(codec->dev, "Mute: lvol = 0xff, rvol = 0xff.\n");
+	}
+	else {
+		snd_soc_write(codec, COD3035X_51_DVOLL, cod3035x->lvol);
+		snd_soc_write(codec, COD3035X_52_DVOLR, cod3035x->rvol);
+		dev_dbg(codec->dev, "Unmute: lvol = 0x%x, rvol = 0x%x.\n",
+				cod3035x->lvol, cod3035x->rvol);
+	}
+}
+
 /* process the button events based on the need */
 void cod3035x_process_button_ev(struct snd_soc_codec *codec, int code, int on)
 {
@@ -1691,6 +1732,7 @@ static int hpdrv_ev(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
+		cod3035x_dac_mute(codec, true);
 		cod3035x_hp_playback_init(codec);
 		break;
 
@@ -1709,6 +1751,7 @@ static int hpdrv_ev(struct snd_soc_dapm_widget *w,
 
 		msleep(135);
 
+		cod3035x_dac_mute(codec, false);
 		snd_soc_write(codec, COD3035X_BA_AUTO_HP11, 0x05);
 
 		snd_soc_update_bits(codec, COD3035X_3E_OVP_2,
@@ -1718,10 +1761,17 @@ static int hpdrv_ev(struct snd_soc_dapm_widget *w,
 		if (avc_val & AVC_BYPS_MASK)
 			snd_soc_write(codec, COD3035X_BE_ODSEL2, 0x60);
 
+		snd_soc_update_bits(codec, COD3035X_78_CTRL_CP,
+				CTMF_CP_CLK_MASK, CTMF_CP_CLK_195KHZ << CTMF_CP_CLK_SHIFT);
 		break;
 
 	case SND_SOC_DAPM_PRE_PMD:
+		cod3035x_dac_mute(codec, true);
+		msleep(100);
 		snd_soc_write(codec, COD3035X_BA_AUTO_HP11, 0x02);
+
+		snd_soc_update_bits(codec, COD3035X_78_CTRL_CP,
+				CTMF_CP_CLK_MASK, CTMF_CP_CLK_780KHZ << CTMF_CP_CLK_SHIFT);
 
 		/* 0x18 <-- 0x00: ~0x02, HP Path Auto Power Off */
 		if (ep_on) {
@@ -2443,6 +2493,7 @@ static int cod3035x_dai_hw_params(struct snd_pcm_substream *substream,
 			snd_soc_update_bits(codec, COD3035X_D6_CTRL_IREF5,
 					CTMF_DCT_CAP_MASK, CTMF_DTC_CAP_167KHZ << CTMF_DCT_CAP_SHIFT);
 			snd_soc_write(codec, COD3035X_B8_AUTO_HP9, 0x55);
+			snd_soc_write(codec, COD3035X_BB_AUTO_HP12, 0x66);
 
 		} else if (cod3035x->aifrate == COD3035X_SAMPLE_RATE_192KHZ) {
 			dev_dbg(codec->dev, "%s called. NOT UHQA Mode\n", __func__);
@@ -2461,6 +2512,7 @@ static int cod3035x_dai_hw_params(struct snd_pcm_substream *substream,
 			snd_soc_update_bits(codec, COD3035X_D6_CTRL_IREF5,
 					CTMF_DCT_CAP_MASK, CTMF_DTC_CAP_87KHZ << CTMF_DCT_CAP_SHIFT);
 			snd_soc_write(codec, COD3035X_B8_AUTO_HP9, 0x11);
+			snd_soc_write(codec, COD3035X_BB_AUTO_HP12, 0x33);
 		}
 
 		cod3035x->aifrate = cur_aifrate;
@@ -3233,6 +3285,7 @@ static void cod3035x_codec_initialize(void *context)
 	snd_soc_write(codec, COD3035X_5A_AVC7, 0x44);
 	snd_soc_write(codec, COD3035X_F5_PRESET_AVC, 0x1A);
 	snd_soc_write(codec, COD3035X_F6_PRESET_AVC, 0xC6);
+	snd_soc_write(codec, COD3035X_1B_SDM_STR, 0x01);
 
 	snd_soc_write(codec, COD3035X_80_PDB_ACC1, 0x02);
 	msleep(100);

@@ -892,6 +892,9 @@ struct slsi_dev {
 	int                        recovery_status;
 	struct slsi_ssid_map       ssid_map[SLSI_SCAN_SSID_MAP_MAX];
 	bool                       band_5g_supported;
+	int                        supported_2g_channels[14];
+	int                        supported_5g_channels[25];
+	int                        enabled_channel_count;
 	bool                       fw_ht_enabled;
 	u8                         fw_ht_cap[4]; /* HT capabilities is 21 bytes but host is never intersted in last 17 bytes*/
 	bool                       fw_vht_enabled;

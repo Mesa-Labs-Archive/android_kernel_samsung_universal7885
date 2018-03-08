@@ -138,6 +138,10 @@
 
 #define SOUND_MODEL_SIZE_MAX (SZ_32K)
 #define SOUND_MODEL_COUNT (3)
+
+/* net & grammar binary sizes defined in firmware */
+#define SOUND_MODEL_NET_SIZE_MAX (0x8000)
+#define SOUND_MODEL_GRAMMAR_SIZE_MAX (0x300)
 enum ipc_state {
 	IDLE,
 	SEND_MSG,
