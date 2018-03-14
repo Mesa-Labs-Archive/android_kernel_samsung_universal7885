@@ -1,0 +1,136 @@
+/*
+ * SAMSUNG UNIVERSAL7885 board device tree source
+ *
+ * Copyright (c) 2013 Samsung Electronics Co., Ltd.
+ *		http://www.samsung.com
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+*/
+
+/dts-v1/;
+#include "exynos7883-j3topelte_common.dtsi"
+#include "exynos7883-j3topelte_usa_gpio_00.dtsi"
+//#include "exynos7883-j3topelte_svcled.dtsi"
+
+/ {
+	model = "Samsung J3TOPELTE VZW rev00 board based on EXYNOS7883";
+	model_info-chip = <7885>;
+	model_info-platform = "android";
+	model_info-subtype = "samsung";
+	model_info-hw_rev = <0>;
+	model_info-hw_rev_end = <0>;
+	compatible = "samsung, J3TOPELTE VZW rev00", "samsung,Universal7883";
+
+	i2c_2: i2c@13850000 {
+		status = "okay";
+		samsung,i2c-max-bus-freq = <400000>;
+		isl98611@29 {
+			compatible = "i2c,isl98611";
+			reg = <0x29>;
+		};
+	};
+
+	i2c_4:i2c@13870000 {
+		touchscreen@4b {
+			synaptics,project_name = "J3pop","J337";
+			synaptics,firmware_name = "tsp_synaptics/td4100_j3poplte.fw";
+			synaptics,firmware_name_bl = "tsp_synaptics/td4100_j3poplte_recovery.fw";
+		};
+	};
+
+	i2c@20 {
+		gpios = <&gpc1 6 0
+				&gpc1 7 0>;
+		touchkey@20 {
+			coreriver,scl-gpio = <&gpc1 7 0>;
+			coreriver,sda-gpio = <&gpc1 6 0>;
+			coreriver,fw_name = "coreriver/tc350k_j3top.fw";
+		};
+	};
+
+	pinctrl@139B0000 {
+		cfg_i2c: cfg-i2c {
+			samsung,pins = "gpc1-7", "gpc1-6";
+			samsung,pin-function = <2>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+		cfg_gpio: cfg-gpio {
+			samsung,pins = "gpc1-7", "gpc1-6";
+			samsung,pin-function = <0>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+	};
+
+	decon_board_list: decon_board_list {
+		dsim_set_panel_power_early {
+			type = "gpio,high", "delay,usleep";
+			gpios = <&gpg2 6 0x1>;
+			delay = <10000 11000>;
+		};
+		dsim_set_panel_power_enable {
+			type = "gpio,high", "delay,usleep", "gpio,high", "delay,usleep", "gpio,high", "delay,usleep";
+			gpios = <&gpg2 7 0x1>, <&gpg1 5 0x1>, <&gpg1 6 0x1>; // DDI -> BL_EN -> ENP -> ENN
+			delay = <1000 2000>, <1000 2000>, <10000 11000>;
+		};
+		dsim_set_panel_power_disable {
+			type = "delay,usleep", "gpio,low", "delay,usleep", "gpio,low", "delay,usleep", "gpio,low", "delay,usleep", "gpio,low", "delay,usleep", "gpio,low";
+			gpios = <&gpg1 6 0x1>, <&gpg1 5 0x1>, <&gpg1 7 0x1>, <&gpg2 7 0x1>, <&gpg2 6 0x1>; // ENN -> ENP -> RESET -> BL_EN -> DDI
+			delay = <5000 6000>, <5000 6000>, <15000 16000>, <5000 6000>, <10000 11000>;
+		};
+		dsim_reset_panel {
+			type = "gpio,high", "delay,usleep", "gpio,low", "delay,usleep", "gpio,high",  "delay,msleep";
+			gpios = <&gpg1 7 0x1>, <&gpg1 7 0x1>, <&gpg1 7 0x1>;
+			delay = <1000 1100>, <1000 1100>, <130>;
+		};
+	};
+
+	dsim_0: dsim@0x14870000 {
+		lcd_info = <&td4100_old>;
+	};
+
+	hsi2c_9: hsi2c@13990000 {
+		status = "okay";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		clock-frequency = <400000>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&sensor_en &hs_i2c9_bus>;
+
+		yas539@2e {
+			compatible = "yas_magnetometer";
+			reg = <0x2e>;
+			yas,orientation = <6>;
+			yas,softiron = <10000 0 0 0 10000 0 0 0 10000>;
+			yas,softiron_sign = <2 0 0 0 2 0 0 0 2>;
+		};
+	};
+	
+	spi_0: spi@13900000 {
+		status = "okay";
+		pinctrl-names = "default";
+		pinctrl-0 = <&spi0_bus_acc>;
+
+		lsm6dsl@0 {
+			compatible = "st,lsm6dsl";
+			reg = <0>;
+			spi-max-frequency = <13000000>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&acc_int>;
+			interrupt-parent = <&gpa0>;
+			interrupts = <3 0 0>;
+			st,irq_gpio = <&gpa0 3 0>;
+			st,orientation = <1 0 1 0 1 1 1 1 0>;
+			controller-data {
+				samsung,spi-feedback-delay = <0>;
+				samsung,spi-chip-select-mode = <0>;
+			};
+		};
+	};
+};
+

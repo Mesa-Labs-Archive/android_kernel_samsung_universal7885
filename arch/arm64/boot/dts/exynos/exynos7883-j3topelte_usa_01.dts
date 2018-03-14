@@ -1,0 +1,100 @@
+/*
+ * SAMSUNG UNIVERSAL7885 board device tree source
+ *
+ * Copyright (c) 2013 Samsung Electronics Co., Ltd.
+ *		http://www.samsung.com
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+*/
+
+/dts-v1/;
+#include "exynos7883-j3topelte_common.dtsi"
+#include "exynos7883-j3topelte_usa_gpio_01.dtsi"
+//#include "exynos7883-j3topelte_svcled.dtsi"
+
+/ {
+	model = "Samsung J3TOPELTE VZW rev01 board based on EXYNOS7883";
+	model_info-chip = <7885>;
+	model_info-platform = "android";
+	model_info-subtype = "samsung";
+	model_info-hw_rev = <1>;
+	model_info-hw_rev_end = <255>;
+	compatible = "samsung, J3TOPELTE VZW rev01", "samsung,Universal7883";
+
+	i2c_4:i2c@13870000 {
+		touchscreen@4b {
+			synaptics,project_name = "J3y","J337";
+			synaptics,firmware_name = "tsp_synaptics/td4100_j3y17.fw";
+			synaptics,firmware_name_bl = "tsp_synaptics/td4100_j3y17.fw";
+		};
+	};
+
+	i2c@20 {
+		gpios = <&gpp7 0 0
+				&gpp7 1 0>;
+		touchkey@20 {
+			coreriver,scl-gpio = <&gpp7 1 0>;
+			coreriver,sda-gpio = <&gpp7 0 0>;
+			coreriver,fw_name = "coreriver/tc350k_j3top.fw";
+		};
+	};
+
+	pinctrl@139B0000 {
+		cfg_i2c: cfg-i2c {
+			samsung,pins = "gpp7-1", "gpp7-0";
+			samsung,pin-function = <2>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+		cfg_gpio: cfg-gpio {
+			samsung,pins = "gpp7-1", "gpp7-0";
+			samsung,pin-function = <0>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+	};
+
+	hsi2c_9: hsi2c@13990000 {
+		status = "okay";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		clock-frequency = <400000>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&sensor_en &hs_i2c9_bus>;
+
+		yas539@2e {
+			compatible = "yas_magnetometer";
+			reg = <0x2e>;
+			yas,orientation = <7>;
+			yas,softiron = <10000 0 0 0 10000 0 0 0 10000>;
+			yas,softiron_sign = <2 0 0 0 2 0 0 0 2>;
+		};
+	};
+	
+	spi_0: spi@13900000 {
+		status = "okay";
+		pinctrl-names = "default";
+		pinctrl-0 = <&spi0_bus_acc>;
+
+		lsm6dsl@0 {
+			compatible = "st,lsm6dsl";
+			reg = <0>;
+			spi-max-frequency = <13000000>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&acc_int>;
+			interrupt-parent = <&gpa0>;
+			interrupts = <3 0 0>;
+			st,irq_gpio = <&gpa0 3 0>;
+			st,orientation = <1 2 1 2 1 1 1 1 0>;
+			controller-data {
+				samsung,spi-feedback-delay = <0>;
+				samsung,spi-chip-select-mode = <0>;
+			};
+		};
+	};
+};
+
