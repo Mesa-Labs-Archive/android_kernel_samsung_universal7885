@@ -2814,13 +2814,66 @@ static int slsi_lls_get_stats(struct wiphy *wiphy, struct wireless_dev *wdev, co
 static int slsi_gscan_set_oui(struct wiphy *wiphy,
 			      struct wireless_dev *wdev, const void *data, int len)
 {
-	SLSI_UNUSED_PARAMETER_NOT_DEBUG(wiphy);
-	SLSI_UNUSED_PARAMETER_NOT_DEBUG(wdev);
-	SLSI_UNUSED_PARAMETER_NOT_DEBUG(data);
-	SLSI_UNUSED_PARAMETER_NOT_DEBUG(len);
+	struct slsi_dev          *sdev = SDEV_FROM_WIPHY(wiphy);
+	struct net_device *dev = wdev->netdev;
+	struct netdev_vif *ndev_vif;
+	struct slsi_mib_data mib_data = { 0, NULL };
+	int                      ret = 0;
+	int                      temp;
+	int                      type;
+	const struct nlattr      *attr;
+	u8 scan_oui[6];
+
+	memset(&scan_oui, 0, 6);
+
 	SLSI_DBG1_NODEV(SLSI_GSCAN, "SUBCMD_SET_GSCAN_OUI\n");
 
-	return -ENOTSUPP;
+	if (!dev) {
+		SLSI_ERR(sdev, "dev is NULL!!\n");
+		return -EINVAL;
+	}
+
+	ndev_vif = netdev_priv(dev);
+	SLSI_MUTEX_LOCK(ndev_vif->scan_mutex);
+	sdev->scan_oui_active = 0;
+
+	nla_for_each_attr(attr, data, len, temp) {
+		type = nla_type(attr);
+		switch (type) {
+		case SLSI_NL_ATTRIBUTE_PNO_RANDOM_MAC_OUI:
+		{
+			memcpy(&scan_oui, nla_data(attr), 3);
+			break;
+		}
+		default:
+			ret = -EINVAL;
+			SLSI_ERR(sdev, "Invalid type : %d\n", type);
+			break;
+		}
+	}
+
+	ret = slsi_mib_encode_bool(&mib_data, SLSI_PSID_UNIFI_MAC_ADDRESS_RANDOMISATION, 1, 0);
+	if (ret != SLSI_MIB_STATUS_SUCCESS) {
+		SLSI_ERR(sdev, "GSCAN set_out Fail: no mem for MIB\n");
+		ret = -ENOMEM;
+		goto exit;
+	}
+
+	ret = slsi_mlme_set(sdev, NULL, mib_data.data, mib_data.dataLength);
+
+	kfree(mib_data.data);
+
+	if (ret) {
+		SLSI_ERR(sdev, "Err setting unifiMacAddrRandomistaion MIB. error = %d\n", ret);
+		goto exit;
+	}
+
+	memcpy(sdev->scan_oui, scan_oui, 6);
+	sdev->scan_oui_active = 1;
+
+exit:
+	SLSI_MUTEX_UNLOCK(ndev_vif->scan_mutex);
+	return ret;
 }
 
 static int slsi_get_feature_set(struct wiphy *wiphy,
@@ -2880,6 +2933,62 @@ static int slsi_set_country_code(struct wiphy *wiphy, struct wireless_dev *wdev,
 	ret = slsi_set_country_update_regd(sdev, country_code, SLSI_COUNTRY_CODE_LEN);
 	if (ret < 0)
 		SLSI_ERR(sdev, "Set country failed ret:%d\n", ret);
+	return ret;
+}
+
+static int slsi_configure_nd_offload(struct wiphy *wiphy, struct wireless_dev *wdev, const void *data, int len)
+{
+	struct slsi_dev          *sdev = SDEV_FROM_WIPHY(wiphy);
+	struct net_device *dev = wdev->netdev;
+	struct netdev_vif *ndev_vif;
+	int                      ret = 0;
+	int                      temp;
+	int                      type;
+	const struct nlattr      *attr;
+	u8 nd_offload_enabled = 0;
+
+	SLSI_DBG3(sdev, SLSI_GSCAN, "Received nd_offload command\n");
+
+	if (!dev) {
+		SLSI_ERR(sdev, "dev is NULL!!\n");
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	ndev_vif = netdev_priv(dev);
+	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
+
+	if (!ndev_vif->activated || (ndev_vif->vif_type != FAPI_VIFTYPE_STATION) ||
+	    (ndev_vif->sta.vif_status != SLSI_VIF_STATUS_CONNECTED)) {
+		SLSI_DBG3(sdev, SLSI_GSCAN, "vif error\n");
+		ret = -EPERM;
+		goto exit;
+	}
+
+	nla_for_each_attr(attr, data, len, temp) {
+		type = nla_type(attr);
+		switch (type) {
+		case SLSI_NL_ATTRIBUTE_ND_OFFLOAD_VALUE:
+		{
+			nd_offload_enabled = nla_get_u8(attr);
+			break;
+		}
+		default:
+			SLSI_ERR(sdev, "Invalid type : %d\n", type);
+			ret = -EINVAL;
+			goto exit;
+		}
+	}
+
+	ndev_vif->sta.nd_offload_enabled = nd_offload_enabled;
+	ret = slsi_mlme_set_ipv6_address(sdev, dev);
+	if (ret < 0) {
+		SLSI_ERR(sdev, "Configure nd_offload failed ret:%d nd_offload_enabled: %d\n", ret, nd_offload_enabled);
+		ret = -EINVAL;
+		goto exit;
+	}
+exit:
+	SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
 	return ret;
 }
 
@@ -3085,6 +3194,14 @@ static const struct wiphy_vendor_command     slsi_vendor_cmd[] = {
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = slsi_set_country_code
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = SLSI_NL80211_VENDOR_SUBCMD_CONFIGURE_ND_OFFLOAD
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = slsi_configure_nd_offload
 	}
 };
 

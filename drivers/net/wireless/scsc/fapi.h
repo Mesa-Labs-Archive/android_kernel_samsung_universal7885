@@ -3017,6 +3017,7 @@ static inline struct sk_buff *fapi_alloc_f(size_t sig_size, size_t data_size, u1
 #define fapi_get_datalen(mp_skb) (slsi_skb_cb_get(mp_skb)->data_length - slsi_skb_cb_get(mp_skb)->sig_length)
 #define fapi_get_data(mp_skb) (mp_skb->data + fapi_get_siglen(mp_skb))
 #define fapi_get_vif(mp_skb) le16_to_cpu(((struct fapi_vif_signal_header *)(mp_skb)->data)->vif)
+#define fapi_set_vif(mp_skb, mp_value) (((struct fapi_vif_signal_header *)(mp_skb)->data)->vif = cpu_to_le16(mp_value))
 
 /* Helper to get the struct ieee80211_mgmt from the data */
 #define fapi_get_mgmt(mp_skb) ((struct ieee80211_mgmt *)fapi_get_data(mp_skb))

@@ -1761,24 +1761,30 @@ static int dwc3_gadget_run_stop(struct dwc3 *dwc, int is_on, int suspend)
 		}
 		timeout--;
 		if (!timeout) {
-			reg = dwc3_readl(dwc->regs, DWC3_DCTL);
-			reg |= DWC3_DCTL_CSFTRST;
-			dwc3_writel(dwc->regs, DWC3_DCTL, reg);
-			dev_err(dwc->dev, "gadget run/stop timeout, DCTL : 0x%x\n", reg);
-			reg = dwc3_readl(dwc->regs, DWC3_DSTS);
-			dev_err(dwc->dev, "gadget run/stop timeout, DSTS : 0x%x\n", reg);
-			do {
+			if(is_on) {
 				reg = dwc3_readl(dwc->regs, DWC3_DCTL);
-				if (!(reg & DWC3_DCTL_CSFTRST)) {
-					dev_info(dwc->dev, "gadget run/stop DCTL softreset, DCTL : 0x%x\n",
-							reg);
-					goto good;
-				}
-				udelay(1);
+				reg |= DWC3_DCTL_CSFTRST;
+				dwc3_writel(dwc->regs, DWC3_DCTL, reg);
+				dev_err(dwc->dev, "gadget run/stop timeout, DCTL : 0x%x\n", reg);
+				reg = dwc3_readl(dwc->regs, DWC3_DSTS);
+				dev_err(dwc->dev, "gadget run/stop timeout, DSTS : 0x%x\n", reg);
+				do {
+					reg = dwc3_readl(dwc->regs, DWC3_DCTL);
+					if (!(reg & DWC3_DCTL_CSFTRST)) {
+						dev_info(dwc->dev, "gadget run/stop DCTL softreset, DCTL : 0x%x\n",
+								reg);
+						goto good;
+					}
+					udelay(1);
 
-			} while (--retries);
+				} while (--retries);
 
-			return -ETIMEDOUT;
+				return -ETIMEDOUT;
+			} else {
+				/* Do nothing in DCTL stop timeout */
+				dev_err(dwc->dev, "gadget DCTL stop timeout, DSTS: 0x%x\n", reg);
+				goto good;
+			}
 		}
 		udelay(1);
 	} while (1);

@@ -58,17 +58,19 @@ struct asv_tbl_info {
 struct id_tbl_info {
 	unsigned reserved_0;
 	unsigned reserved_1;
-	unsigned reserved_2:16;
+	unsigned reserved_2:10;
+	unsigned char product_line:2;
+	unsigned char reserved_3:4;
 	unsigned char ids_cpucl0:8;
 	unsigned char ids_g3d:8;
 	unsigned char ids_int:8;
-	unsigned char ids_cpucl1:8;
+	unsigned char asb_version:8;
 	unsigned char ids_mif:8;
-	unsigned reserved_3:8;
-	unsigned reserved_4:16;
+	unsigned reserved_4:8;
+	unsigned reserved_5:16;
 	unsigned short sub_rev:4;
 	unsigned short main_rev:4;
-	unsigned reserved_5:8;
+	unsigned reserved_6:8;
 };
 
 #define ASV_INFO_ADDR_CNT	(sizeof(struct asv_tbl_info) / 4)
@@ -120,15 +122,11 @@ int asv_get_ids_info(unsigned int id)
 	case dvfs_cpucl0:
 		ids = id_tbl.ids_cpucl0;
 		break;
-	case dvfs_cpucl1:
-		ids = id_tbl.ids_cpucl1;
-		break;
 	case dvfs_g3d:
 		ids = id_tbl.ids_g3d;
 		break;
 	case dvfs_mif:
-		ids = id_tbl.ids_mif;
-		break;
+	case dvfs_cpucl1:
 	case dvfs_int:
 	case dvfs_cam:
 	case dvfs_disp:
@@ -154,10 +152,21 @@ int id_get_rev(void)
 	return id_tbl.main_rev;
 }
 
+int id_get_product_line(void)
+{
+	return id_tbl.product_line;
+}
+
+int id_get_asb_ver(void)
+{
+	return id_tbl.asb_version;
+}
+
 int asv_table_init(void)
 {
 	int i;
 	unsigned int *p_table;
+	unsigned int *regs;
 	unsigned long tmp;
 
 	p_table = (unsigned int *)&asv_tbl;
@@ -169,10 +178,9 @@ int asv_table_init(void)
 
 	p_table = (unsigned int *)&id_tbl;
 
-	for (i = 0; i < ID_INFO_ADDR_CNT; i++) {
-		exynos_smc_readsfr((unsigned long)(ID_TABLE_BASE + 0x4 * i), &tmp);
-		*(p_table + i) = (unsigned int)tmp;
-	}
+	regs = (unsigned int *)ioremap(ID_TABLE_BASE, ID_INFO_ADDR_CNT * sizeof(int));
+	for (i = 0; i < ID_INFO_ADDR_CNT; i++)
+		*(p_table + i) = (unsigned int)regs[i];
 
 	pr_info("asv_table_version : %d\n", asv_tbl.asv_table_ver);
 	pr_info("  big grp : %d\n", asv_tbl.big_asv_group);
@@ -182,6 +190,8 @@ int asv_table_init(void)
 	pr_info("  int grp : %d\n", asv_tbl.int_asv_group);
 	pr_info("  fsys grp : %d\n", asv_tbl.fsys_asv_group);
 	pr_info("  cp grp : %d\n", asv_tbl.cp_asv_group);
+	pr_info("  product_line : %d\n", id_tbl.product_line);
+	pr_info("  asb_version : %d\n", id_tbl.asb_version);
 
 	return asv_tbl.asv_table_ver;
 }

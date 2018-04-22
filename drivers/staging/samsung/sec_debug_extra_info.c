@@ -26,6 +26,7 @@
 #define SZ_96	0x00000060
 #define SZ_960	0x000003c0
 
+#define EXTRA_VERSION	"RA30"
 /******************************************************************************
  * sec_debug_extra_info details
  *
@@ -42,6 +43,7 @@ struct sec_debug_panic_extra_info sec_debug_extra_info_init = {
 		{"AID",		"", SZ_32},
 		{"KTIME",	"", SZ_8},
 		{"BIN",		"", SZ_16},
+		{"FTYPE",	"", SZ_16},
 		{"FAULT",	"", SZ_32},
 		{"BUG",		"", SZ_64},
 		{"PANIC",	"", SZ_96},
@@ -56,14 +58,14 @@ struct sec_debug_panic_extra_info sec_debug_extra_info_init = {
 		{"SMP",		"", SZ_8},
 		{"ETC",		"", SZ_256},
 		{"ESR",		"", SZ_64},
-		{"MER",		"", SZ_8},
+		{"MER",		"", SZ_16},
 		{"PCB",		"", SZ_8},
 		{"SMD",		"", SZ_16},
 		{"CHI",		"", SZ_4},
 		{"LPI",		"", SZ_4},
 		{"CDI",		"", SZ_4},
 		{"KLG",		"", SZ_128},
-		{"RST",		"", SZ_128},
+		{"HINT",	"", SZ_16},
 		{"LEV",		"", SZ_4},
 		{"DCN",		"", SZ_32},
 		{"WAK",		"", SZ_16},
@@ -71,19 +73,28 @@ struct sec_debug_panic_extra_info sec_debug_extra_info_init = {
 
 		/* extrb reset information */
 		{"BID",		"", SZ_32},
+		{"BRR",		"", SZ_8},
 		{"ASB",		"", SZ_32},
 		{"PSITE",	"", SZ_32},
 		{"DDRID",	"", SZ_32},
+		{"RST",		"", SZ_32},
+		{"INFO2",	"", SZ_32},
+		{"INFO3",	"", SZ_32},
+		{"RBASE",	"", SZ_32},
+		{"MAGIC",	"", SZ_32},
+		{"PWR",		"", SZ_8},
+		{"PWROFF",	"", SZ_8},
+		{"PINT1",	"", SZ_8},
+		{"PINT2",	"", SZ_8},
+		{"PINT5",	"", SZ_8},
+		{"PINT6",	"", SZ_8},
 		{"RVD1",	"", SZ_256},
 		{"RVD2",	"", SZ_256},
 		{"RVD3",	"", SZ_256},
-		{"RVD4",	"", SZ_256},
-		{"RVD5",	"", SZ_256},
-		{"RVD6",	"", SZ_256},
-		{"RVD7",	"", SZ_256},
 
 		/* core lockup information */
 		{"CID",		"", SZ_32},
+		{"CRR",		"", SZ_8},
 		{"CPU0",	"", SZ_256},
 		{"CPU1",	"", SZ_256},
 		{"CPU2",	"", SZ_256},
@@ -95,12 +106,43 @@ struct sec_debug_panic_extra_info sec_debug_extra_info_init = {
 
 		/* core lockup information */
 		{"MID",		"", SZ_32},
+		{"MRR",		"", SZ_8},
 		{"MFC",		"", SZ_960},
 	}
 };
 
+const char *ftype_items[MAX_EXTRA_INFO_KEY_LEN] = {
+	"UNDF",
+	"BAD",
+	"WATCH",
+	"KERN",
+	"MEM",
+	"SPPC",
+	"PAGE",
+	"AUF",
+	"EUF",
+	"AUOF"
+};
+
+
+
 struct sec_debug_panic_extra_info *sec_debug_extra_info;
 struct sec_debug_panic_extra_info *sec_debug_extra_info_backup;
+
+#define MAX_DRAMINFO	15
+static char dram_info[MAX_DRAMINFO + 1];
+
+static int __init sec_hw_param_get_dram_info(char *arg)
+{
+	if (strlen(arg) > MAX_DRAMINFO)
+		return 0;
+
+	memcpy(dram_info, arg, (int)strlen(arg));
+
+	return 0;
+}
+
+early_param("androidboot.dram_info", sec_hw_param_get_dram_info);
 
 /******************************************************************************
  * sec_debug_init_extra_info() - function to init extra info
@@ -114,7 +156,8 @@ void sec_debug_init_extra_info(struct sec_debug_shared_info *sec_debug_info)
 		sec_debug_extra_info = &sec_debug_info->sec_debug_extra_info;
 		sec_debug_extra_info_backup = &sec_debug_info->sec_debug_extra_info_backup;
 
-		if (reset_reason == RR_K || reset_reason == RR_D || reset_reason == RR_P) {
+		if (reset_reason == RR_K || reset_reason == RR_D || 
+			reset_reason == RR_P || reset_reason == RR_S) {
 			memcpy(sec_debug_extra_info_backup, sec_debug_extra_info,
 				sizeof(struct sec_debug_panic_extra_info));
 		}
@@ -236,10 +279,14 @@ void sec_debug_set_extra_info_id(void)
 
 	getnstimeofday(&ts);
 
-	sec_debug_set_extra_info(INFO_AID, "%09lu", ts.tv_nsec);
-	sec_debug_set_extra_info(INFO_BID, "%09lu", ts.tv_nsec);
-	sec_debug_set_extra_info(INFO_CID, "%09lu", ts.tv_nsec);
-	sec_debug_set_extra_info(INFO_MID, "%09lu", ts.tv_nsec);
+	sec_debug_set_extra_info(INFO_AID, "%09lu%s", ts.tv_nsec, EXTRA_VERSION);
+	sec_debug_set_extra_info(INFO_BID, "%09lu%s", ts.tv_nsec, EXTRA_VERSION);
+	sec_debug_set_extra_info(INFO_CID, "%09lu%s", ts.tv_nsec, EXTRA_VERSION);
+	sec_debug_set_extra_info(INFO_MID, "%09lu%s", ts.tv_nsec, EXTRA_VERSION);
+
+	sec_debug_set_extra_info(INFO_ASB, "%d", id_get_asb_ver());
+	sec_debug_set_extra_info(INFO_PSITE, "%d", id_get_product_line());
+	sec_debug_set_extra_info(INFO_DDRID, "%s", dram_info);
 }
 
 /******************************************************************************
@@ -265,8 +312,9 @@ void sec_debug_set_extra_info_fault(enum sec_debug_extra_fault_type type,
 	phys_addr_t paddr = 0;
 
 	if (regs) {
-		pr_crit("sec_debug_set_extra_info_fault = %d/0x%lx\n", type, addr);
-		sec_debug_set_extra_info(INFO_FAULT, "%d/0x%lx", type, addr);
+		pr_crit("%s = %s / 0x%lx\n", __func__, ftype_items[type], addr);
+		sec_debug_set_extra_info(INFO_FTYPE, "%s", ftype_items[type]);
+		sec_debug_set_extra_info(INFO_FAULT, "0x%lx", addr);
 		sec_debug_set_extra_info(INFO_PC, "%pS", regs->pc);
 		sec_debug_set_extra_info(INFO_LR, "%pS",
 				compat_user_mode(regs) ?
@@ -481,6 +529,16 @@ void sec_debug_set_extra_info_esr(unsigned int esr)
 }
 
 /******************************************************************************
+ * sec_debug_set_extra_info_hint
+ ******************************************************************************/
+
+void sec_debug_set_extra_info_hint(u64 hint)
+{
+	if (hint)
+		sec_debug_set_extra_info(INFO_HINT, "%llx", hint);
+}
+
+/******************************************************************************
  * sec_debug_set_extra_info_merr
 ******************************************************************************/
 
@@ -518,13 +576,15 @@ static int set_debug_reset_extra_info_proc_show(struct seq_file *m, void *v)
 {
 	char buf[SZ_1K];
 
-	sec_debug_store_extra_info_A();
-	memcpy(buf, (char *)SEC_DEBUG_EXTRA_INFO_VA, SZ_1K);
+	if (reset_reason == RR_K || reset_reason == RR_D || 
+		reset_reason == RR_P || reset_reason == RR_S) {
+		sec_debug_store_extra_info_A();
+		memcpy(buf, (char *)SEC_DEBUG_EXTRA_INFO_VA, SZ_1K);
 
-	if (reset_reason == RR_K || reset_reason == RR_D || reset_reason == RR_P)
 		seq_printf(m, buf);
-	else
+	} else {
 		return -ENOENT;
+	}
 
 	return 0;
 }

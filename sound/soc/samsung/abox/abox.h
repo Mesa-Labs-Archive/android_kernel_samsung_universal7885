@@ -451,6 +451,8 @@ enum sound_type {
 	SOUND_TYPE_SPEAKER,
 	SOUND_TYPE_HEADSET,
 	SOUND_TYPE_BTVOICE,
+	SOUND_TYPE_USB,
+	SOUND_TYPE_CALLFWD,
 	SOUND_TYPE_DEFAULT = 128,
 };
 
@@ -649,6 +651,7 @@ struct abox_data {
 	enum audio_mode audio_mode;
 	enum sound_type sound_type;
 	int save_recp;
+	int save_spus_ctrl1;
 	unsigned int bt_status_spk;
 	unsigned int bt_status_mic;
 	bool bt_probed;

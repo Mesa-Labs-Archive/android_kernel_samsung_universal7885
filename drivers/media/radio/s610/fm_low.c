@@ -465,11 +465,6 @@ void fm_set_freq(struct s610_radio *radio, u32 freq, bool mix_hi)
 		for (ii = 0; ii < 32; ii++)
 			fifo_tmp = fmspeedy_get_reg_work(0xFFF3C0);
 
-		memset(radio->pi.rt_buf, 0, 3 * (MAX_RT + 1));
-		memset(radio->pi.ps_buf, 0, 3 * (MAX_PS + 1));
-		memset(radio->pi.rt_candidate, 0, 3 * (MAX_RT + 1));
-		memset(radio->pi.ps_candidate, 0, 3 * (MAX_PS + 1));
-
 #ifdef	USE_RINGBUFF_API
 		radio->rds_rb.head = radio->rds_rb.tail= radio->rds_rb.buf;
 #else	/* USE_RINGBUFF_API */

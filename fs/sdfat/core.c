@@ -1707,6 +1707,7 @@ s32 fscore_mount(struct super_block *sb)
 	s32 ret;
 	pbr_t *p_pbr;
 	struct buffer_head *tmp_bh = NULL;
+	struct gendisk *disk = sb->s_bdev->bd_disk;
 	struct sdfat_mount_options *opts = &(SDFAT_SB(sb)->options);
 	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
 
@@ -1804,6 +1805,11 @@ free_bh:
 		sb->s_blocksize, fsi->sect_per_clus, fsi->data_start_sector,
 		(fsi->data_start_sector & (fsi->sect_per_clus - 1)) ?
 		"misaligned" : "aligned");
+
+	sdfat_log_msg(sb, KERN_INFO,
+		"detected volume size     : %u MB (disk_size : %llu MB)",
+		fsi->num_sectors >> 11,
+		disk ? (u64)((disk->part0.nr_sects) >> 11) : 0);
 
 	ret = load_upcase_table(sb);
 	if (ret) {

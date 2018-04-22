@@ -260,12 +260,20 @@ static int coredump_helper(void)
 {
 	int r;
 	int i;
+	static char mdbin[128];
 
 	slsi_kic_system_event(slsi_kic_system_event_category_recovery,
 			      slsi_kic_system_events_coredump_in_progress, GFP_KERNEL);
 
+	/* Determine path to moredump helper script */
+	r = mx140_exe_path(NULL, mdbin, sizeof(mdbin), "moredump");
+	if (r) {
+		SCSC_TAG_ERR(MXMAN, "moredump path error\n");
+		return r;
+	}
+
 	for (i = 0; i < 20; i++) {
-		r = _mx_exec("/system/bin/moredump", UMH_WAIT_PROC);
+		r = _mx_exec(mdbin, UMH_WAIT_PROC);
 		if (r != -EBUSY)
 			break;
 		/* If the usermode helper fails with -EBUSY, the userspace is
@@ -1392,8 +1400,20 @@ static int __mxman_open(struct mxman *mxman)
 		mxman->users++;
 		mxman->mxman_state = MXMAN_STATE_STARTED;
 		mutex_unlock(&mxman->mxman_mutex);
-		if (!disable_logger)
-			_mx_exec("/system/bin/mx_logger.sh", UMH_WAIT_EXEC);
+
+		/* Start mxlogger */
+		if (!disable_logger) {
+			static char mxlbin[128];
+
+			r = mx140_exe_path(NULL, mxlbin, sizeof(mxlbin), "mx_logger.sh");
+			if (r) {
+				/* Not found */
+				SCSC_TAG_ERR(MXMAN, "mx_logger.sh path error\n");
+			} else {
+				/* Launch it */
+				_mx_exec(mxlbin, UMH_WAIT_EXEC);
+			}
+		}
 		return 0;
 	}
 	WARN_ON(mxman->mxman_state != MXMAN_STATE_STARTED && mxman->mxman_state != MXMAN_STATE_STOPPED);
@@ -1688,7 +1708,7 @@ static void _mx_exec_cleanup(struct subprocess_info *sp_info)
  */
 static int _mx_exec(char *prog, int wait_exec)
 {
-	static char const      *envp[] = { "HOME=/", "PATH=/system/bin:/sbin:", NULL };
+	static char const      *envp[] = { "HOME=/", "PATH=/vendor/bin:/system/bin:/sbin:", NULL };
 	const int              exec_string_buffer_len = STRING_BUFFER_MAX_LENGTH;
 	const int              exec_string_args = NUMBER_OF_STRING_ARGS;
 	char                   **argv;
@@ -1757,11 +1777,17 @@ static int _mx_exec(char *prog, int wait_exec)
 int mx140_log_dump(void)
 {
 	int r;
+	char mxlbin[128];
 
-	SCSC_TAG_INFO(MXMAN, "Invoking mx_logger_dump.sh UHM\n");
-	r = _mx_exec("/system/bin/mx_logger_dump.sh", UMH_WAIT_EXEC);
-	if (r)
-		SCSC_TAG_ERR(MXMAN, "mx_logger_dump.sh err:%d\n", r);
+	r = mx140_exe_path(NULL, mxlbin, sizeof(mxlbin), "mx_logger_dump.sh");
+	if (r) {
+		SCSC_TAG_ERR(MXMAN, "mx_logger_dump.sh path error\n");
+	} else {
+		SCSC_TAG_INFO(MXMAN, "Invoking mx_logger_dump.sh UHM\n");
+		r = _mx_exec(mxlbin, UMH_WAIT_EXEC);
+		if (r)
+			SCSC_TAG_ERR(MXMAN, "mx_logger_dump.sh err:%d\n", r);
+	}
 	return r;
 }
 EXPORT_SYMBOL(mx140_log_dump);

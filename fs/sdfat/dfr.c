@@ -137,7 +137,7 @@ error:
  * @return	0 on success, -errno otherwise
  * @param	sb		super block
  * @param	args	traverse args
- * @remark	protected by i_mutex, super_block and volume lock
+ * @remark	protected by inode_lock, super_block and volume lock
  */
 int
 defrag_scan_dir(
@@ -367,7 +367,7 @@ __defrag_check_au(
 {
 	unsigned int nr_free = amap_get_freeclus(sb, clus);
 
-#if defined(CONFIG_SDFAT_DFR_DEBUG) || defined(CONFIG_SDFAT_DBG_MSG)
+#if defined(CONFIG_SDFAT_DFR_DEBUG) && defined(CONFIG_SDFAT_DBG_MSG)
 	if (nr_free < limit) {
 		AMAP_T *amap = SDFAT_SB(sb)->fsi.amap;
 		AU_INFO_T *au = GET_AU(amap, i_AU_of_CLU(amap, clus));
@@ -1155,7 +1155,7 @@ defrag_check_discard(
 						- au_align_factor);
 			nr_blks = ((sector_t)CLUS_PER_AU(sb)) << fsi->sect_per_clus_bits;
 
-			dfr_debug("Send DISCARD for AU[%d] (blk %08llx)", au->idx, blk);
+			dfr_debug("Send DISCARD for AU[%d] (blk %08zx)", au->idx, blk);
 			sb_issue_discard(sb, blk, nr_blks, GFP_NOFS, 0);
 
 			/* Save previous AU's index */

@@ -157,7 +157,7 @@ config SCSC_WLAN_MAC_ADDRESS_FILENAME
 
 config SCSC_WLAN_MAX_INTERFACES
         int "Max number of virtual interfaces supported"
-        range 1 3
+        range 1 4
         default 3
         ---help---
           The driver structures are sized to support this
@@ -169,3 +169,17 @@ config SCSC_WLAN_AP_INFO_FILE
         ---help---
           The option enables the driver to create .softap.info
           file in user space and fill information in it.
+
+config SCSC_WLAN_WIFI_SHARING
+	bool "Wifi Sharing Support"
+	default n
+	---help---
+	  This option tells if wifi sharing is supported or not.
+
+config SCSC_WLAN_SINGLE_ANTENNA
+	depends on SCSC_WLAN_WIFI_SHARING
+	bool "Single Antenna Supported"
+	default y
+	---help---
+	  This option tells if there is support for single
+	  antenna or dual antenna.

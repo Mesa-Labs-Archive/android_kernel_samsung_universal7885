@@ -169,9 +169,9 @@ static bool sec_tclm_check_condition_valid(struct sec_tclm_data *data)
 		if ((data->root_of_calibration == CALPOSITION_TUNEUP)
 			|| (data->root_of_calibration == CALPOSITION_INITIAL)) {
 			return true;
-		} else if (!((data->cal_position == CALPOSITION_LCIA)
-			|| (data->cal_position == CALPOSITION_SVCCENTER))
-			&& (data->root_of_calibration == CALPOSITION_TESTMODE)) {
+		} else if ((data->root_of_calibration == CALPOSITION_TESTMODE)
+			&& ((data->cal_position == CALPOSITION_TESTMODE)
+			|| (data->cal_position == CALPOSITION_TUNEUP))) {
 			return true;
 		}
 		break;
@@ -292,8 +292,8 @@ bool sec_execute_tclm_package(struct sec_tclm_data *data, int factory_mode)
 
 	/* saving tune_version */
 	rc = data->tclm_read(data->client, SEC_TCLM_NVM_OFFSET_IC_FIRMWARE_VER);
-	data->tune_fix_ver = rc;
 	data->tclm_write(data->client, SEC_TCLM_NVM_OFFSET_TUNE_VERSION, rc);
+	data->tune_fix_ver = data->tclm_read(data->client, SEC_TCLM_NVM_OFFSET_TUNE_VERSION);
 
 	sec_tclm_position_history(data);
 

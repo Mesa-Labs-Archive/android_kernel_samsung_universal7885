@@ -199,20 +199,16 @@ static inline void fcq_wake_all_queues(struct slsi_dev *sdev)
 
 void scsc_wifi_fcq_pause_queues(struct slsi_dev *sdev)
 {
-	spin_lock(&sdev->hip4_inst.hip_priv->gbot_lock);
 	SLSI_DBG4_NODEV(SLSI_WIFI_FCQ, "Pause queues\n");
 	atomic_set(&sdev->in_pause_state, 1);
 	fcq_stop_all_queues(sdev);
-	spin_unlock(&sdev->hip4_inst.hip_priv->gbot_lock);
 }
 
 void scsc_wifi_fcq_unpause_queues(struct slsi_dev *sdev)
 {
-	spin_lock(&sdev->hip4_inst.hip_priv->gbot_lock);
 	SLSI_DBG4_NODEV(SLSI_WIFI_FCQ, "Unpause queues\n");
 	atomic_set(&sdev->in_pause_state, 0);
 	fcq_wake_all_queues(sdev);
-	spin_unlock(&sdev->hip4_inst.hip_priv->gbot_lock);
 }
 
 #ifdef ENABLE_QCOD

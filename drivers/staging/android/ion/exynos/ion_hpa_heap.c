@@ -128,10 +128,18 @@ static int ion_hpa_heap_allocate(struct ion_heap *heap,
 		info->prot_desc.chunk_size = ION_HPA_DEFAULT_SIZE;
 		info->prot_desc.bus_address = (count == 1) ?  phys[0] :
 						info->handle;
-		ion_secure_protect(buffer);
+		ret = ion_secure_protect(buffer);
+		if (ret) {
+			pr_err("%s: Failed to protect buffer with %u chunks\n",
+			       __func__, count);
+			goto err_protect;
+		}
 	}
 
 	return 0;
+err_protect:
+	for_each_sg(info->table.sgl, sg, info->table.orig_nents, i)
+		__free_pages(sg_page(sg), ION_HPA_DEFAULT_ORDER);
 err_hpa:
 	sg_free_table(&info->table);
 err_sg:

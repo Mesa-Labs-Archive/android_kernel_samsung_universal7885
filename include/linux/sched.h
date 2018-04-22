@@ -1166,6 +1166,9 @@ extern void wake_up_if_idle(int cpu);
 struct hmp_domain {
 	struct cpumask cpus;
 	struct cpumask possible_cpus;
+#ifdef CONFIG_SCHED_SKIP_CORE_SELECTION_MASK
+	struct cpumask cpumask_skip;
+#endif
 	struct list_head hmp_domains;
 };
 

@@ -24,7 +24,6 @@
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/completion.h>
-#include <linux/time.h>
 
 #include <linux/ccic/usbpd.h>
 #include <linux/ccic/usbpd-s2mu004.h>
@@ -89,8 +88,6 @@ static void s2mu004_usbpd_notify_detach(struct s2mu004_usbpd_data *pdic_data);
 #endif
 static void s2mu004_usbpd_detach_init(struct s2mu004_usbpd_data *pdic_data);
 static int s2mu004_usbpd_set_cc_control(struct s2mu004_usbpd_data  *pdic_data, int val);
-static void s2mu004_usbpd_control_cc12_rd(struct s2mu004_usbpd_data *pdic_data,
-									bool enable);
 
 char *rid_text[] = {
 	"UNDEFINED",
@@ -1389,15 +1386,9 @@ int s2mu004_set_lpm_mode(struct s2mu004_usbpd_data *pdic_data)
 	int ret = 0;
 	struct i2c_client *i2c = pdic_data->i2c;
 	struct device *dev = &i2c->dev;
-	struct usbpd_data *pd_data = dev_get_drvdata(dev);
 
 	pdic_data->lpm_mode = true;
 	pdic_data->vbus_short_check_cnt = 0;
-
-	if (pdic_data->abnormal_state) {
-		s2mu004_assert_drp(pd_data);
-		pdic_data->abnormal_state = false;
-	}
 
 	s2mu004_usbpd_read_reg(i2c, S2MU004_REG_PLUG_CTRL_PORT, &data);
 	data &= ~(S2MU004_REG_PLUG_CTRL_MODE_MASK | S2MU004_REG_PLUG_CTRL_RP_SEL_MASK);
@@ -1422,25 +1413,24 @@ void s2mu004_set_water_detect_pre_cond(struct s2mu004_usbpd_data *pdic_data)
 	u8 cc_val[2] = {0,};
 
 	s2mu004_set_normal_mode(pdic_data);
-	mdelay(50);
+	mdelay(10);
 
-	for (i = 0; i < 3; i++) {
+	for (i = 0; i < 14; i++) {
 		if (s2mu004_get_plug_monitor(pdic_data, cc_val) < 0) {
 			pr_info("%s abnormal", __func__);
-			mdelay(25);
+			mdelay(10);
 		} else {
 			if (IS_CC_RP(cc_val[0], cc_val[1]))
 				break;
 			else {
 				pr_info("%s Not Rp yet. ", __func__);
-				mdelay(25);
+				mdelay(10);
 			}
 		}
 	}
 }
 
-
-void s2mu004_set_water_detect_lp_mode(struct s2mu004_usbpd_data *pdic_data)
+void s2mu004_set_water_1st_detect(struct s2mu004_usbpd_data *pdic_data)
 {
 	u8 data, data_lpm;
 	struct i2c_client *i2c = pdic_data->i2c;
@@ -1451,7 +1441,7 @@ void s2mu004_set_water_detect_lp_mode(struct s2mu004_usbpd_data *pdic_data)
 
 	s2mu004_usbpd_read_reg(i2c, S2MU004_REG_PLUG_CTRL_PORT, &data);
 	data &= ~(S2MU004_REG_PLUG_CTRL_MODE_MASK | S2MU004_REG_PLUG_CTRL_RP_SEL_MASK);
-	data |= S2MU004_REG_PLUG_CTRL_DFP | S2MU004_REG_PLUG_CTRL_RP180
+	data |= S2MU004_REG_PLUG_CTRL_DFP | S2MU004_REG_PLUG_CTRL_RP80
 			| S2MU004_REG_PLUG_CTRL_DETECT_BAT_DISABLE_MASK
 			| S2MU004_REG_PLUG_CTRL_DETECT_OCP_DISABLE_MASK;
 	s2mu004_usbpd_read_reg(i2c, S2MU004_REG_PD_CTRL, &data_lpm);
@@ -1468,8 +1458,63 @@ void s2mu004_set_water_detect_lp_mode(struct s2mu004_usbpd_data *pdic_data)
 	data |= S2MU004_REG_PLUG_CTRL_DFP | S2MU004_REG_PLUG_CTRL_RP0;
 	s2mu004_usbpd_write_reg(i2c, S2MU004_REG_PLUG_CTRL_PORT, data);
 
-
 	dev_info(dev, "%s s2mu004 enter water chk lpm mode\n", __func__);
+}
+
+static bool s2mu004_is_water_detected_2nd_seq(struct s2mu004_usbpd_data *pdic_data, u8 *cc_val)
+{
+	struct i2c_client *i2c = pdic_data->i2c;
+	u8 cc_chk[2] = {0,};
+
+	if (cc_val[0] == USBPD_Rp)
+		cc_chk[0] = 1;
+	if (cc_val[1] == USBPD_Rp)
+		cc_chk[1] = 1;
+
+	s2mu004_usbpd_write_reg(i2c, S2MU004_REG_PLUG_CTRL_SET_RD,
+							S2MU004_THRESHOLD_214MV);
+	s2mu004_set_lpm_mode(pdic_data);
+	s2mu004_usbpd_update_bit(i2c, S2MU004_REG_PD_CTRL,
+						S2MU004_REG_LPM_EN, 0, 0);
+	msleep(300);
+
+	if (s2mu004_get_plug_monitor(pdic_data, cc_val) < 0) {
+		pr_err("%s Failed to get the plug monitor.\n", __func__);
+		return false;
+	}
+
+	/* Rd is detected due to the water CAPACITOR. */
+	if (((cc_chk[0] && !cc_chk[1]) && (cc_val[0] == USBPD_Rd)) ||
+		((cc_chk[1] && !cc_chk[0]) && (cc_val[1] == USBPD_Rd)) ||
+		((cc_chk[0] && cc_chk[1]) && ((cc_val[0] == USBPD_Rd) && (cc_val[1] == USBPD_Rd)))) {
+			return true;
+	}
+
+	return false;
+}
+
+static void _s2mu004_pdic_enter_to_water(struct s2mu004_usbpd_data *pdic_data)
+{
+	struct i2c_client *i2c = pdic_data->i2c;
+#if defined(CONFIG_USB_HW_PARAM) && !defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER)
+	struct otg_notify *o_notify = get_otg_notify();
+#endif
+
+#if defined(CONFIG_CCIC_NOTIFIER)
+	ccic_event_work(pdic_data,
+		CCIC_NOTIFY_DEV_MUIC, CCIC_NOTIFY_ID_WATER, CCIC_NOTIFY_ATTACH, 0);
+#else
+	s2mu004_pdic_notifier_attach_attached_jig_dev(ATTACHED_DEV_WATER_MUIC);
+#endif
+	pdic_data->is_water_detect = true;
+	pdic_data->water_detect_cnt = 0;
+	s2mu004_set_lpm_mode(pdic_data);
+	s2mu004_usbpd_update_bit(i2c, S2MU004_REG_PD_CTRL,
+									S2MU004_REG_LPM_EN, 0, 0);
+#if defined(CONFIG_USB_HW_PARAM) && !defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER)
+	if (o_notify)
+		inc_hw_param(o_notify, USB_CCIC_WATER_INT_COUNT);
+#endif
 }
 
 static void s2mu004_pdic_water_detect_handler(struct work_struct *work)
@@ -1477,9 +1522,6 @@ static void s2mu004_pdic_water_detect_handler(struct work_struct *work)
 	struct s2mu004_usbpd_data *pdic_data =
 		container_of(work, struct s2mu004_usbpd_data, water_detect_handler.work);
 	struct i2c_client *i2c = pdic_data->i2c;
-#if defined(CONFIG_USB_HW_PARAM) && !defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER)
-	struct otg_notify *o_notify = get_otg_notify();
-#endif
 
 	u8 cc_val[2] = {0,};
 
@@ -1500,8 +1542,8 @@ static void s2mu004_pdic_water_detect_handler(struct work_struct *work)
 	}
 
 	s2mu004_set_water_detect_pre_cond(pdic_data);
-	s2mu004_set_water_detect_lp_mode(pdic_data);
-	mdelay(400);
+	s2mu004_set_water_1st_detect(pdic_data);
+	msleep(400);
 
 	if (s2mu004_get_plug_monitor(pdic_data, cc_val) < 0) {
 		pr_err("%s Failed to get the plug monitor.\n", __func__);
@@ -1511,36 +1553,27 @@ static void s2mu004_pdic_water_detect_handler(struct work_struct *work)
 	if (IS_CC_WATER(cc_val[0], cc_val[1]))	{
 		pr_info("%s, water is detected, cc1 : 0x%X, cc2 : 0x%X\n",
 				__func__, cc_val[0], cc_val[1]);
-
-#if defined(CONFIG_CCIC_NOTIFIER)
-		ccic_event_work(pdic_data,
-			CCIC_NOTIFY_DEV_MUIC, CCIC_NOTIFY_ID_WATER, CCIC_NOTIFY_ATTACH, 0);
-#else
-		s2mu004_pdic_notifier_attach_attached_jig_dev(ATTACHED_DEV_WATER_MUIC);
-#endif
-		pdic_data->is_water_detect = true;
-		pdic_data->water_detect_cnt = 0;
-		s2mu004_set_lpm_mode(pdic_data);
-		s2mu004_usbpd_update_bit(i2c, S2MU004_REG_PD_CTRL,
-										S2MU004_REG_LPM_EN, 0, 0);
-#if defined(CONFIG_USB_HW_PARAM) && !defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER)
-		if (o_notify)
-			inc_hw_param(o_notify, USB_CCIC_WATER_INT_COUNT);
-#endif
+		_s2mu004_pdic_enter_to_water(pdic_data);
+		goto WATER_MODE_OUT;
 	} else {
-		pr_info("%s, It is not water, cc1 : 0x%X, cc2 : 0x%X\n",
+		pr_info("%s, 1st chk is not water, cc1 : 0x%X, cc2 : 0x%X\n",
+								__func__, cc_val[0], cc_val[1]);
+		if (s2mu004_is_water_detected_2nd_seq(pdic_data, cc_val)) {
+			pr_info("%s, 2nd seq, water is detected, cc1 : 0x%X, cc2 : 0x%X\n",
+					__func__, cc_val[0], cc_val[1]);
+			_s2mu004_pdic_enter_to_water(pdic_data);
+			goto WATER_MODE_OUT;
+		}
+
+		pr_info("%s, 2nd chk : not water, cc1 : 0x%X, cc2 : 0x%X\n",
 								__func__, cc_val[0], cc_val[1]);
 
-		s2mu004_set_lpm_mode(pdic_data);
-		s2mu004_usbpd_update_bit(i2c, S2MU004_REG_PD_CTRL,
-							S2MU004_REG_LPM_EN, 0, 0);
-
 		if (pdic_data->water_detect_cnt++ >= WATER_CHK_RETRY_CNT) {
-		pdic_data->is_water_detect = false;
+			pdic_data->is_water_detect = false;
 			pdic_data->water_detect_cnt = 0;
 #if defined(CONFIG_CCIC_NOTIFIER)
-		ccic_event_work(pdic_data,
-			CCIC_NOTIFY_DEV_MUIC, CCIC_NOTIFY_ID_WATER, CCIC_NOTIFY_DETACH, 0);
+			ccic_event_work(pdic_data,
+				CCIC_NOTIFY_DEV_MUIC, CCIC_NOTIFY_ID_WATER, CCIC_NOTIFY_DETACH, 0);
 #endif
 		} else {
 			/*
@@ -1554,6 +1587,8 @@ static void s2mu004_pdic_water_detect_handler(struct work_struct *work)
 		}
 	}
 WATER_MODE_OUT:
+	s2mu004_usbpd_write_reg(i2c, S2MU004_REG_PLUG_CTRL_SET_RD,
+								S2MU004_THRESHOLD_428MV);
 	s2mu004_usbpd_write_reg(i2c, S2MU004_REG_PLUG_CTRL_SET_RP,
 								S2MU004_THRESHOLD_2057MV);
 WATER_OUT:
@@ -1572,16 +1607,19 @@ static void s2mu004_pdic_water_dry_handler(struct work_struct *work)
 	mutex_lock(&pdic_data->_mutex);
 
 	s2mu004_set_water_detect_pre_cond(pdic_data);
-	s2mu004_set_water_detect_lp_mode(pdic_data);
-	mdelay(400);
+	s2mu004_set_water_1st_detect(pdic_data);
+	msleep(400);
 
 	if (s2mu004_get_plug_monitor(pdic_data, cc_val) < 0) {
 		pr_err("%s Failed to get the plug monitor.\n", __func__);
 	}
 
 	if (IS_CC_RP(cc_val[0], cc_val[1]))	{
-		pr_info("%s, water DRY is detected, cc1 : 0x%X, cc2 : 0x%X\n",
+		pr_info("%s, 1st, water DRY is detected, cc1 : 0x%X, cc2 : 0x%X\n",
 				__func__, cc_val[0], cc_val[1]);
+
+		s2mu004_usbpd_write_reg(i2c, S2MU004_REG_PLUG_CTRL_SET_RD,
+									S2MU004_THRESHOLD_428MV);
 		s2mu004_usbpd_write_reg(i2c, S2MU004_REG_PLUG_CTRL_SET_RP,
 									S2MU004_THRESHOLD_2057MV);
 #if defined(CONFIG_CCIC_NOTIFIER)
@@ -1751,6 +1789,7 @@ EOH:
 }
 #endif
 
+#if defined(CONFIG_DUAL_ROLE_USB_INTF)
 static void s2mu004_usbpd_control_cc12_rd(struct s2mu004_usbpd_data *pdic_data,
 									bool enable)
 {
@@ -1773,6 +1812,7 @@ static void s2mu004_usbpd_control_cc12_rd(struct s2mu004_usbpd_data *pdic_data,
 		s2mu004_usbpd_write_reg(i2c, S2MU004_REG_PLUG_CTRL_PORT, data);
 	}
 }
+#endif
 
 static void s2mu004_vbus_short_check(struct s2mu004_usbpd_data *pdic_data)
 {
@@ -1997,9 +2037,7 @@ static void s2mu004_usbpd_detach_init(struct s2mu004_usbpd_data *pdic_data)
 	struct device *dev = pdic_data->dev;
 	struct usbpd_data *pd_data = dev_get_drvdata(dev);
 	struct i2c_client *i2c = pdic_data->i2c;
-	struct timeval time;
 	int ret = 0;
-	unsigned long interval_time = 0;
 
 	dev_info(dev, "%s\n", __func__);
 
@@ -2027,28 +2065,6 @@ static void s2mu004_usbpd_detach_init(struct s2mu004_usbpd_data *pdic_data)
 #endif
 	s2mu004_usbpd_reg_init(pdic_data);
 	s2mu004_set_vconn_source(pd_data, USBPD_VCONN_OFF);
-
-	do_gettimeofday(&time);
-
-	interval_time = (time.tv_sec * 1000) + (time.tv_usec / 1000);
-
-	if ((interval_time - pdic_data->attach_time) < 150) {
-		pdic_data->abnormal_detach_cnt++;
-		pr_info("%s, abnormal detach time(%ld)\n", __func__,
-				interval_time - pdic_data->attach_time);
-	} else
-		pdic_data->abnormal_detach_cnt = 0;
-
-	if (pdic_data->abnormal_detach_cnt > 5) {
-		mutex_lock(&pdic_data->lpm_mutex);
-		if (!pdic_data->lpm_mode) {
-			pr_info("%s, abnormal detach occured!!\n", __func__);
-			s2mu004_assert_rd(pd_data);
-			pdic_data->abnormal_state = true;
-		}
-		mutex_unlock(&pdic_data->lpm_mutex);
-		pdic_data->abnormal_detach_cnt = 0;
-	}
 }
 
 static void s2mu004_usbpd_notify_detach(struct s2mu004_usbpd_data *pdic_data)
@@ -2155,7 +2171,6 @@ static int s2mu004_check_port_detect(struct s2mu004_usbpd_data *pdic_data)
 	struct i2c_client *i2c = pdic_data->i2c;
 	struct device *dev = &i2c->dev;
 	struct usbpd_data *pd_data = dev_get_drvdata(dev);
-	struct timeval time;
 	u8 data;
 	int ret = 0;
 
@@ -2226,10 +2241,6 @@ static int s2mu004_check_port_detect(struct s2mu004_usbpd_data *pdic_data)
 	}
 
 	pdic_data->detach_valid = false;
-
-	do_gettimeofday(&time);
-
-	pdic_data->attach_time = (time.tv_sec * 1000) + (time.tv_usec / 1000);
 
 	s2mu004_set_irq_enable(pdic_data, ENABLED_INT_0, ENABLED_INT_1,
 				ENABLED_INT_2, ENABLED_INT_3, ENABLED_INT_4, ENABLED_INT_5);
@@ -2406,15 +2417,7 @@ static int s2mu004_usbpd_reg_init(struct s2mu004_usbpd_data *_data)
 		s2mu004_usbpd_write_reg(i2c, S2MU004_REG_PLUG_CTRL_RpRd, data);
 	}
 
-	mutex_lock(&_data->lpm_mutex);
-	if (_data->abnormal_state) {
-		s2mu004_usbpd_read_reg(i2c, S2MU004_REG_PLUG_CTRL_RpRd, &data);
-		data &= ~(S2MU004_REG_PLUG_CTRL_RpRd_MANUAL_MASK |
-				S2MU004_REG_PLUG_CTRL_RpRd_VCONN_MASK);
-		s2mu004_usbpd_write_reg(i2c, S2MU004_REG_PLUG_CTRL_RpRd, data);
-	} else
-		s2mu004_usbpd_write_reg(i2c, S2MU004_REG_PLUG_CTRL_RpRd, S2MU004_RESET_REG_00);
-	mutex_unlock(&_data->lpm_mutex);
+	s2mu004_usbpd_write_reg(i2c, S2MU004_REG_PLUG_CTRL_RpRd, S2MU004_RESET_REG_00);
 
 	s2mu004_usbpd_set_vconn_manual(_data, true);
 
@@ -2475,7 +2478,7 @@ static void s2mu004_usbpd_init_configure(struct s2mu004_usbpd_data *_data)
 	struct i2c_client *i2c = _data->i2c;
 	struct device *dev = _data->dev;
 	u8 rid = 0;
-	bool pdic_port = 0;
+	int pdic_port = 0;
 
 	s2mu004_usbpd_read_reg(i2c, S2MU004_REG_ADC_STATUS, &rid);
 
@@ -2530,8 +2533,6 @@ static void s2mu004_usbpd_pdic_data_init(struct s2mu004_usbpd_data *_data)
 	_data->vbus_short = false;
 	_data->vbus_short_check = false;
 	_data->vbus_short_check_cnt = 0;
-	_data->abnormal_detach_cnt = 0;
-	_data->abnormal_state = 0;
 #ifndef CONFIG_SEC_FACTORY
 	_data->lpcharge_water = false;
 #endif

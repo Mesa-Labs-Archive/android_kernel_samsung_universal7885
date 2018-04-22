@@ -33,6 +33,20 @@ enum slsi_ac_index_wmm_pe {
 #define SLSI_WLAN_EXT_CAPA3_INTERWORKING_ENABLED        (1 << 7)
 #define SLSI_WLAN_EXT_CAPA4_QOS_MAP_ENABLED                  (1 << 0)
 #define SLSI_WLAN_EXT_CAPA5_WNM_NOTIF_ENABLED              (1 << 6)
+#define SLSI_WLAN_EXT_CAPA2_QBSS_LOAD_ENABLED                  BIT(7)
+#define SLSI_WLAN_EXT_CAPA1_PROXY_ARP_ENABLED                  BIT(4)
+#define SLSI_WLAN_EXT_CAPA2_TFS_ENABLED                              BIT(0)
+#define SLSI_WLAN_EXT_CAPA2_WNM_SLEEP_ENABLED                 BIT(1)
+#define SLSI_WLAN_EXT_CAPA2_TIM_ENABLED                              BIT(2)
+#define SLSI_WLAN_EXT_CAPA2_DMS_ENABLED                             BIT(4)
+
+/*RM Enabled Capabilities Bytes*/
+#define SLSI_WLAN_RM_CAPA0_LINK_MEASUREMENT_ENABLED       BIT(0)
+#define SLSI_WLAN_RM_CAPA0_NEIGHBOR_REPORT_ENABLED         BIT(1)
+#define SLSI_WLAN_RM_CAPA0_PASSIVE_MODE_ENABLED              BIT(4)
+#define SLSI_WLAN_RM_CAPA0_ACTIVE_MODE_ENABLED	               BIT(5)
+#define SLSI_WLAN_RM_CAPA0_TABLE_MODE_ENABLED                 BIT(6)
+
 
 #define SLSI_AP_EXT_CAPAB_IE_LEN_MAX 12           /* EID (1) + Len (1) + Ext Capab (8) */
 
@@ -73,7 +87,6 @@ enum slsi_ac_index_wmm_pe {
  * the configured channel.
  */
 #define SLSI_FW_CHANNEL_DURATION_UNSPECIFIED             (0x0000)
-
 extern struct ieee80211_supported_band    slsi_band_2ghz;
 extern struct ieee80211_supported_band    slsi_band_5ghz;
 extern struct ieee80211_sta_vht_cap       slsi_vht_cap;
@@ -84,6 +97,12 @@ extern struct ieee80211_sta_vht_cap       slsi_vht_cap;
 #define SLSI_PKT_FILTER_ELEM_FIXED_LEN  6                                  /* oui(3) + oui type(1) + filter id (1) + pkt filter mode(1)*/
 #define SLSI_PKT_FILTER_ELEM_HDR_LEN  (2 + SLSI_PKT_FILTER_ELEM_FIXED_LEN) /* element id + len + SLSI_PKT_FILTER_ELEM_FIXED_LEN*/
 #define SLSI_MAX_PATTERN_LENGTH 6
+
+/*Default values of MIBS params for GET_STA_INFO driver private command */
+#define SLSI_DEFAULT_UNIFI_PEER_BANDWIDTH             -1
+#define SLSI_DEFAULT_UNIFI_PEER_NSS                          0
+#define SLSI_DEFAULT_UNIFI_PEER_RSSI                         1
+#define SLSI_DEFAULT_UNIFI_PEER_TX_DATA_RATE          0
 
 struct slsi_mlme_pattern_desc {
 	u8 offset;
@@ -214,5 +233,5 @@ int slsi_mlme_set_host_state(struct slsi_dev *sdev, struct net_device *dev, u8 h
 int slsi_mlme_set_ctwindow(struct slsi_dev *sdev, struct net_device *dev, unsigned int ct_param);
 int slsi_mlme_set_p2p_noa(struct slsi_dev *sdev, struct net_device *dev, unsigned int noa_count,
 			  unsigned int interval, unsigned int duration);
-void slsi_mlme_fw_tx_rate_calc(u16 fw_rate, struct rate_info *tx_rate);
+void slsi_fw_tx_rate_calc(u16 fw_rate, struct rate_info *tx_rate, unsigned long *data_rate_mbps);
 #endif /*__SLSI_MLME_H__*/

@@ -10,23 +10,29 @@
 static char *nf_history_buffer;
 static int nf_history_index;
 
-static int nf_history_proc_show(struct seq_file *m, void *v)
+static ssize_t nf_history_read(struct file *file,
+			       char __user *buf,
+				size_t len, loff_t *offset)
 {
+	ssize_t count = min_t(size_t, len, (size_t)nf_history_buffer_size);
+	loff_t pos = *offset;
+
 	if (!nf_history_buffer)
 		return 0;
 
-	seq_printf(m, "%s", nf_history_buffer);
-	return 0;
-}
+	if (pos + count > nf_history_buffer_size)
+		return 0;
 
-static int nf_history_proc_open(struct inode *inode, struct file  *file)
-{
-	return single_open(file, nf_history_proc_show, PDE_DATA(inode));
+	if (copy_to_user(buf, nf_history_buffer + pos, count))
+		return -EFAULT;
+
+	*offset += count;
+	return count;
 }
 
 static ssize_t nf_history_write(struct file *file,
-					const char __user *buf,
-					size_t len, loff_t *offset)
+				const char __user *buf,
+				size_t len, loff_t *offset)
 {
 	if (!nf_history_buffer)
 		return 0;
@@ -40,12 +46,14 @@ static ssize_t nf_history_write(struct file *file,
 	if (nf_history_index + len < nf_history_buffer_size) {
 		if (copy_from_user(nf_history_buffer + nf_history_index, buf, len))
 			return -EFAULT;
+
 		nf_history_index += len;
 	} else {
 		if (copy_from_user(nf_history_buffer + nf_history_index,
 							buf,
 							nf_history_buffer_size - nf_history_index))
 			return -EFAULT;
+
 		if (copy_from_user(nf_history_buffer,
 							buf + nf_history_buffer_size - nf_history_index,
 							len + nf_history_index - nf_history_buffer_size))
@@ -58,8 +66,7 @@ static ssize_t nf_history_write(struct file *file,
 
 static const struct file_operations nfhistory_file_ops = {
 	.owner		= THIS_MODULE,
-	.open		= nf_history_proc_open,
-	.read		= seq_read,
+	.read		= nf_history_read,
 	.write		= nf_history_write,
 };
 

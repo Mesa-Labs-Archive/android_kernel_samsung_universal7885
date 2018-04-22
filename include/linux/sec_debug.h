@@ -25,6 +25,9 @@
 #define BUF_SIZE_MARGIN (SZ_1K - 0x80)
 
 #ifdef CONFIG_SEC_DEBUG
+extern int id_get_asb_ver(void);
+extern int id_get_product_line(void);
+
 extern int  sec_debug_setup(void);
 extern void sec_debug_recovery_reboot(void);
 extern void sec_debug_reboot_handler(void);
@@ -39,6 +42,8 @@ extern void sec_getlog_supply_kernel(void *klog_buf);
 extern void sec_getlog_supply_platform(unsigned char *buffer, const char *name);
 extern void sec_gaf_supply_rqinfo(unsigned short curr_offset, unsigned short rq_offset);
 #else
+#define int id_get_asb_ver(void)			(-1)
+#define int id_get_product_line(void)			(-1)
 #define sec_debug_setup()			(-1)
 #define sec_debug_recovery_reboot()		do { } while (0)
 #define sec_debug_reboot_handler()		do { } while (0)
@@ -85,6 +90,7 @@ enum sec_debug_extra_buf_type {
 	INFO_AID,
 	INFO_KTIME,
 	INFO_BIN,
+	INFO_FTYPE,
 	INFO_FAULT,
 	INFO_BUG,
 	INFO_PANIC,
@@ -106,7 +112,7 @@ enum sec_debug_extra_buf_type {
 	INFO_LPI,
 	INFO_CDI,
 	INFO_KLG,
-	INFO_RST,
+	INFO_HINT,
 	INFO_LEVEL,
 	INFO_DECON,
 	INFO_WAKEUP,
@@ -114,19 +120,28 @@ enum sec_debug_extra_buf_type {
 	INFO_MAX_A,
 
 	INFO_BID = INFO_MAX_A,
+	INFO_BREASON,
 	INFO_ASB,
 	INFO_PSITE,
 	INFO_DDRID,
+	INFO_RST,
+	INFO_INFO2,
+	INFO_INFO3,
+	INFO_RBASE,
+	INFO_MAGIC,
+	INFO_PWRSRC,
+	INFO_PWROFF,
+	INFO_PINT1,
+	INFO_PINT2,
+	INFO_PINT5,
+	INFO_PINT6,
 	INFO_RVD1,
-	INFO_RRD2,
+	INFO_RVD2,
 	INFO_RVD3,
-	INFO_RVD4,
-	INFO_RVD5,
-	INFO_RVD6,
-	INFO_RVD7,
 	INFO_MAX_B,
 
 	INFO_CID = INFO_MAX_B,
+	INFO_CREASON,
 	INFO_CPU0,
 	INFO_CPU1,
 	INFO_CPU2,
@@ -138,6 +153,7 @@ enum sec_debug_extra_buf_type {
 	INFO_MAX_C,
 
 	INFO_MID = INFO_MAX_C,
+	INFO_MREASON,
 	INFO_MFC,
 	INFO_MAX_M,
 
@@ -155,13 +171,16 @@ struct sec_debug_panic_extra_info {
 };
 
 enum sec_debug_extra_fault_type {
-	UNDEF_FAULT,
-	BAD_MODE_FAULT,
-	WATCHDOG_FAULT,
-	KERNEL_FAULT,
-	MEM_ABORT_FAULT,
-	SP_PC_ABORT_FAULT,
-	RESERVED_FAULT,
+	UNDEF_FAULT,                /* 0 */
+	BAD_MODE_FAULT,             /* 1 */
+	WATCHDOG_FAULT,             /* 2 */
+	KERNEL_FAULT,               /* 3 */
+	MEM_ABORT_FAULT,            /* 4 */
+	SP_PC_ABORT_FAULT,          /* 5 */
+	PAGE_FAULT,		    /* 6 */
+	ACCESS_USER_FAULT,          /* 7 */
+	EXE_USER_FAULT,             /* 8 */
+	ACCESS_USER_OUTSIDE_FAULT,  /* 9 */
 	FAULT_MAX,
 };
 
@@ -238,6 +257,7 @@ extern void sec_debug_set_extra_info_busmon(char *str);
 extern void sec_debug_set_extra_info_dpm_timeout(char *devname);
 extern void sec_debug_set_extra_info_smpl(unsigned int count);
 extern void sec_debug_set_extra_info_esr(unsigned int esr);
+extern void sec_debug_set_extra_info_hint(u64 hint);
 extern void sec_debug_set_extra_info_merr(void);
 extern void sec_debug_set_extra_info_decon(unsigned int err);
 extern void sec_debug_set_extra_info_batt(int cap, int volt, int temp, int curr);
@@ -266,6 +286,7 @@ extern void sec_debug_set_extra_info_mfc_error(char *str);
 #define sec_debug_set_extra_info_dpm_timeout(a)	do { } while (0)
 #define sec_debug_set_extra_info_smpl(a)	do { } while (0)
 #define sec_debug_set_extra_info_esr(a)		do { } while (0)
+#define sec_debug_set_extra_info_hint(a)	do { } while (0)
 #define sec_debug_set_extra_info_merr()		do { } while (0)
 #define sec_debug_set_extra_info_decon(a)	do { } while (0)
 #define sec_debug_set_extra_info_batt(a, b, c, d)	do { } while (0)

@@ -324,17 +324,17 @@ static int ss310ap_on(struct modem_ctl *mc)
 		if (cal_cp_status()) {
 			mif_err("CP aleady Init, Just reset release!\n");
 			cal_cp_reset_release();
-			exynos_pmu_shared_reg_disable();
 		} else {
 			mif_err("CP first Init!\n");
 			exynos_pmu_shared_reg_enable();
 			cal_cp_init();
-			list_for_each_entry(iod, &mc->modem_state_notify_list, list) {
-				if (iod && atomic_read(&iod->opened) > 0)
-					iod->modem_state_changed(iod, STATE_BOOTING);
-			}
-			exynos_pmu_shared_reg_disable();
 		}
+
+		list_for_each_entry(iod, &mc->modem_state_notify_list, list) {
+			if (iod && atomic_read(&iod->opened) > 0)
+				iod->modem_state_changed(iod, STATE_BOOTING);
+		}
+		exynos_pmu_shared_reg_disable();
 #else
 		if (exynos_get_cp_power_status() > 0) {
 			mif_err("CP aleady Power on, Just start!\n");
@@ -716,6 +716,9 @@ static void ss310ap_get_pdata(struct modem_ctl *mc, struct modem_data *modem)
 
 	mc->sbi_uart_noti_mask = mbx->sbi_uart_noti_mask;
 	mc->sbi_uart_noti_pos = mbx->sbi_uart_noti_pos;
+
+	mc->sbi_crash_type_mask = mbx->sbi_crash_type_mask;
+	mc->sbi_crash_type_pos = mbx->sbi_crash_type_pos;
 }
 
 #ifdef CONFIG_EXYNOS_BUSMONITOR

@@ -102,7 +102,7 @@ unsigned int spl_clk_peri_spi_0_blk_cmu_l2_lut_params[] = {
 	 15, 1,
 };
 unsigned int spl_clk_peri_spi_0_blk_cmu_l3_lut_params[] = {
-	 3, 0,
+	 1, 0,
 };
 unsigned int spl_clk_peri_spi_0_blk_cmu_l4_lut_params[] = {
 	 49, 1,
@@ -159,7 +159,7 @@ unsigned int spl_clk_peri_spi_1_blk_cmu_l2_lut_params[] = {
 	 15, 1,
 };
 unsigned int spl_clk_peri_spi_1_blk_cmu_l3_lut_params[] = {
-	 3, 0,
+	 1, 0,
 };
 unsigned int spl_clk_peri_spi_1_blk_cmu_l4_lut_params[] = {
 	 49, 1,

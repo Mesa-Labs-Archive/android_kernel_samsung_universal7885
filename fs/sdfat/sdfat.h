@@ -69,10 +69,12 @@
 #define CLUSTER_16(x)	((u16)((x) & 0xFFFFU))
 #define CLUSTER_32(x)	((u32)((x) & 0xFFFFFFFFU))
 #define CLUS_EOF	CLUSTER_32(~0)
+#define CLUS_BAD	(0xFFFFFFF7U)
 #define CLUS_FREE	(0)
 #define CLUS_BASE	(2)
-#define IS_CLUS_EOF(x)	(x == CLUS_EOF)
-#define IS_CLUS_FREE(x)	(x == CLUS_FREE)
+#define IS_CLUS_EOF(x)	((x) == CLUS_EOF)
+#define IS_CLUS_BAD(x)	((x) == CLUS_BAD)
+#define IS_CLUS_FREE(x)	((x) == CLUS_FREE)
 #define IS_LAST_SECT_IN_CLUS(fsi, sec)				\
 	((((sec) - (fsi)->data_start_sector + 1)		\
 	& ((1 << (fsi)->sect_per_clus_bits) - 1)) == 0)
@@ -193,7 +195,7 @@ struct sdfat_sb_info {
 struct sdfat_inode_info {
 	FILE_ID_T fid;
 	char  *target;
-	/* NOTE: i_size_ondisk is 64bits, so must hold ->i_mutex to access */
+	/* NOTE: i_size_ondisk is 64bits, so must hold ->inode_lock to access */
 	loff_t i_size_ondisk;         /* physically allocated size */
 	loff_t i_size_aligned;          /* block-aligned i_size (used in cont_write_begin) */
 	loff_t i_pos;               /* on-disk position of directory entry or 0 */

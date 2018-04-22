@@ -164,6 +164,7 @@ static int s2mu004_i2c_update_bit(struct i2c_client *client,
 	u8 reg, u8 mask, u8 shift, u8 value);
 static int s2mu004_muic_set_com_sw(struct s2mu004_muic_data *muic_data,
 	u8 reg_val);
+static void s2mu004_muic_set_dn_ready_for_killer(struct s2mu004_muic_data *muic_data);
 
 #if IS_ENABLED(DEBUG_MUIC)
 #define MAX_LOG 25
@@ -594,77 +595,72 @@ int s2mu004_if_check_usb_killer(void *mdata)
 		(struct s2mu004_muic_data *)mdata;
 	struct i2c_client *i2c = muic_data->i2c;
 	u8 reg_val = 0, muic_sw_ctrl = 0;
-	u8 afc_otp4, afc_ctrl1, afc_ctrl2, is_dnres, is_vdnmon;
-	int ret = MUIC_ABNORMAL_OTG;
+	u8 afc_int_mask, afc_otp4, afc_ctrl1, afc_ctrl2, is_dnres, is_vdnmon;
+	int ret = MUIC_NORMAL_OTG;
 
 	pr_info("%s, enter", __func__);
 
 	/* muic path open */
 	mutex_lock(&muic_data->switch_mutex);
-	muic_sw_ctrl = s2mu004_i2c_read_byte(i2c, S2MU004_REG_MUIC_SW_CTRL); 
+	muic_sw_ctrl = s2mu004_i2c_read_byte(i2c, S2MU004_REG_MUIC_SW_CTRL);
 	s2mu004_muic_set_com_sw(muic_data, MANSW_OPEN);
 
-	/* 1st check */
-	/* DM Current 5uA */
-	afc_otp4 = s2mu004_i2c_read_byte(i2c, S2MU004_REG_AFC_OTP4);
-	afc_ctrl1 = s2mu004_i2c_read_byte(i2c, S2MU004_REG_AFC_CTRL1);
-	afc_ctrl2 = s2mu004_i2c_read_byte(i2c, S2MU004_REG_AFC_CTRL2);
+	/* AFC Block Enable & INT Masking */
+	afc_int_mask = s2mu004_i2c_read_byte(i2c, S2MU004_REG_AFC_INT_MASK);
+	reg_val = afc_int_mask | INTm_VDNMon_MASK;
+	s2mu004_i2c_write_byte(i2c, S2MU004_REG_AFC_INT_MASK, reg_val);
 
+	afc_ctrl1 = s2mu004_i2c_read_byte(i2c, S2MU004_REG_AFC_CTRL1);
+	reg_val = afc_ctrl1 | MUIC_AFC_CTRL1_AFC_EN_MASK | MUIC_AFC_CTRL1_DPDNVD_EN_MASK;
+	s2mu004_i2c_write_byte(i2c, S2MU004_REG_AFC_CTRL1, reg_val);
+
+	s2mu004_muic_set_dn_ready_for_killer(muic_data);
+
+	/* 1st check */
+	reg_val = (MUIC_AFC_CTRL1_VD_SEL_0_6V << MUIC_AFC_CTRL1_DPVD_SEL_SHIFT) |
+			MUIC_AFC_CTRL1_AFC_EN_MASK | MUIC_AFC_CTRL1_DPDNVD_EN_MASK;
+	s2mu004_i2c_write_byte(i2c, S2MU004_REG_AFC_CTRL1, reg_val);
+
+	mdelay(50);
+
+	is_vdnmon = s2mu004_i2c_read_byte(i2c, S2MU004_REG_AFC_STATUS)
+			& MUIC_AFC_STATUS_VDNMON_MASK;
+	if (!is_vdnmon) {
+		pr_info("%s, 1st chk: Normal OTG.", __func__);
+		goto exit_chk;
+	}
+
+	/* 2nd check */
+	afc_otp4 = s2mu004_i2c_read_byte(i2c, S2MU004_REG_AFC_OTP4);
 	reg_val = afc_otp4 | MUIC_AFC_OTP4_CTRL_IDM_ON_REG_SELL_MASK;
 	s2mu004_i2c_write_byte(i2c, S2MU004_REG_AFC_OTP4, reg_val);
 
-	reg_val = MUIC_AFC_CTRL1_AFC_EN_MASK
-			| MUIC_AFC_CTRL1_CTRL_IDM_ON_MASK;
-	s2mu004_i2c_write_byte(i2c, S2MU004_REG_AFC_CTRL1, reg_val);
-
-	reg_val = MUIC_AFC_CTRL2_DNRESEN_MASK;
+	afc_ctrl2 = s2mu004_i2c_read_byte(i2c, S2MU004_REG_AFC_CTRL2);
+	reg_val = afc_ctrl2 | MUIC_AFC_CTRL2_DNRESEN_MASK;
 	s2mu004_i2c_write_byte(i2c, S2MU004_REG_AFC_CTRL2, reg_val);
 
-	/* 50ms delay */
+	reg_val = reg_val | MUIC_AFC_CTRL1_CTRL_IDM_ON_MASK |
+		MUIC_AFC_CTRL1_AFC_EN_MASK | MUIC_AFC_CTRL1_DPDNVD_EN_MASK;
+	s2mu004_i2c_write_byte(i2c, S2MU004_REG_AFC_CTRL1, reg_val);
+
 	msleep(50);
 
 	reg_val = s2mu004_i2c_read_byte(i2c, S2MU004_REG_AFC_STATUS);
 	is_dnres = reg_val & MUIC_AFC_STATUS_DNRES_MASK;
 
-	/* restore regs */	
-	s2mu004_i2c_write_byte(i2c, S2MU004_REG_AFC_OTP4, afc_otp4);
-	s2mu004_i2c_write_byte(i2c, S2MU004_REG_AFC_CTRL1, afc_ctrl1);
-	s2mu004_i2c_write_byte(i2c, S2MU004_REG_AFC_CTRL2, afc_ctrl2);
-
-	if (is_dnres)
-		ret = MUIC_NORMAL_OTG; 
-	else {
-		/* 2nd check */
-		/* DP 0.6V */
-		reg_val = MUIC_AFC_CTRL1_AFC_EN_MASK | MUIC_AFC_CTRL1_DPDNVD_EN_MASK;
-		reg_val |= MUIC_AFC_CTRL1_VD_SEL_0_6V << MUIC_AFC_CTRL1_DPVD_SEL_SHIFT;
-		s2mu004_i2c_write_byte(i2c, S2MU004_REG_AFC_CTRL1, reg_val);
-
-		/* guarranted 50ms delay */
-		mdelay(50);
-
-		/* 0x48 read */
-		reg_val = s2mu004_i2c_read_byte(i2c, S2MU004_REG_AFC_STATUS);
-		is_vdnmon = reg_val & MUIC_AFC_STATUS_VDNMON_MASK;
-		
-		if (is_vdnmon)
-			ret = MUIC_ABNORMAL_OTG;
-		else
-			ret = MUIC_NORMAL_OTG;
+	if (!is_dnres) {
+		pr_info("%s, USB Killer is detected.", __func__);
+		ret = MUIC_ABNORMAL_OTG;
 	}
-	/* DP/DM GND */
-	reg_val = MUIC_AFC_CTRL1_AFC_EN_MASK | MUIC_AFC_CTRL1_DPDNVD_EN_MASK;
-	reg_val |= MUIC_AFC_CTRL1_VD_SEL_GND << MUIC_AFC_CTRL1_DPVD_SEL_SHIFT;
-	reg_val |= MUIC_AFC_CTRL1_VD_SEL_GND << MUIC_AFC_CTRL1_DNVD_SEL_SHIFT;
 
-	s2mu004_i2c_write_byte(i2c, S2MU004_REG_AFC_CTRL1, reg_val);
-	usleep_range(1000, 1100);
-
-	/* restore regs */	
+	s2mu004_i2c_write_byte(i2c, S2MU004_REG_AFC_OTP4, afc_otp4);
+	s2mu004_i2c_write_byte(i2c, S2MU004_REG_AFC_CTRL2, afc_ctrl2);
+exit_chk:
+	s2mu004_i2c_write_byte(i2c, S2MU004_REG_AFC_INT_MASK, afc_int_mask);
 	s2mu004_i2c_write_byte(i2c, S2MU004_REG_AFC_CTRL1, afc_ctrl1);
 
 	/* restore muic path */
-	s2mu004_muic_set_com_sw(muic_data, muic_sw_ctrl);	
+	s2mu004_muic_set_com_sw(muic_data, muic_sw_ctrl);
 	mutex_unlock(&muic_data->switch_mutex);
 
 	return ret;
@@ -778,6 +774,63 @@ static int s2mu004_i2c_update_bit(struct i2c_client *i2c,
 	return ret;
 }
 
+static void s2mu004_muic_set_dn_ready_for_killer(struct s2mu004_muic_data *muic_data)
+{
+	struct i2c_client *i2c = muic_data->i2c;
+	u8 reg_val, is_vdnmon;
+	int i, vdnmon_gnd_cnt;
+
+	usleep_range(10000, 11000);
+	is_vdnmon = s2mu004_i2c_read_byte(i2c, S2MU004_REG_AFC_STATUS)
+			& MUIC_AFC_STATUS_VDNMON_MASK;
+
+	if (is_vdnmon) {
+		reg_val = MUIC_AFC_CTRL1_AFC_EN_MASK | MUIC_AFC_CTRL1_DPDNVD_EN_MASK |
+				(MUIC_AFC_CTRL1_VD_SEL_GND << MUIC_AFC_CTRL1_DPVD_SEL_SHIFT) |
+				(MUIC_AFC_CTRL1_VD_SEL_GND << MUIC_AFC_CTRL1_DNVD_SEL_SHIFT);
+		s2mu004_i2c_write_byte(i2c, S2MU004_REG_AFC_CTRL1, reg_val);
+
+		msleep(50);
+
+		is_vdnmon = s2mu004_i2c_read_byte(i2c, S2MU004_REG_AFC_STATUS)
+				& MUIC_AFC_STATUS_VDNMON_MASK;
+		if (!is_vdnmon) {
+			pr_info("%s done(Line:%d)", __func__, __LINE__);
+			goto vdnmon_chk_done;
+		}
+
+		vdnmon_gnd_cnt = 0;
+		for (i = 0; i < 10; i++) {
+			reg_val = MUIC_AFC_CTRL1_AFC_EN_MASK | MUIC_AFC_CTRL1_DPDNVD_EN_MASK |
+					(MUIC_AFC_CTRL1_VD_SEL_GND << MUIC_AFC_CTRL1_DPVD_SEL_SHIFT) |
+					(MUIC_AFC_CTRL1_VD_SEL_GND << MUIC_AFC_CTRL1_DNVD_SEL_SHIFT);
+			s2mu004_i2c_write_byte(i2c, S2MU004_REG_AFC_CTRL1, reg_val);
+
+			usleep_range(20000, 21000);
+
+			reg_val &= ~((MUIC_AFC_CTRL1_VD_SEL_GND << MUIC_AFC_CTRL1_DNVD_SEL_SHIFT) |
+					(MUIC_AFC_CTRL1_VD_SEL_GND << MUIC_AFC_CTRL1_DPVD_SEL_SHIFT));
+			s2mu004_i2c_write_byte(i2c, S2MU004_REG_AFC_CTRL1, reg_val);
+
+			usleep_range(10000, 11000);
+			is_vdnmon = s2mu004_i2c_read_byte(i2c, S2MU004_REG_AFC_STATUS)
+					& MUIC_AFC_STATUS_VDNMON_MASK;
+			if (!is_vdnmon) {
+				vdnmon_gnd_cnt++;
+				if (vdnmon_gnd_cnt >= 2) {
+					pr_info("%s done(Line:%d)", __func__, __LINE__);
+					goto vdnmon_chk_done;
+				}
+			}
+		}
+		pr_info("%s done(Line:%d)", __func__, __LINE__);
+
+vdnmon_chk_done:
+		reg_val &= ~(MUIC_AFC_CTRL1_VD_SEL_GND << MUIC_AFC_CTRL1_DNVD_SEL_SHIFT);
+		s2mu004_i2c_write_byte(i2c, S2MU004_REG_AFC_CTRL1, reg_val);
+	}
+}
+
 int s2mu004_muic_control_rid_adc(struct s2mu004_muic_data *muic_data, bool enable)
 {
 	int data = 0;
@@ -842,11 +895,15 @@ int s2mu004_muic_check_afc_ready(struct s2mu004_muic_data *muic_data)
 	else {
 		pr_info("%s ready:%d  afc_check:%d\n", __func__,
 				muic_data->is_afc_muic_ready, muic_data->afc_check);
-		if (muic_data->is_afc_muic_ready == false && muic_data->afc_check)
-			s2mu004_muic_prepare_afc_charger(muic_data);
+		if (muic_data->is_afc_muic_ready == false && muic_data->afc_check) {
+			cancel_delayed_work(&muic_data->prepare_afc_charger);
+			schedule_delayed_work(&muic_data->prepare_afc_charger,
+					msecs_to_jiffies(200));
+		}
 	}
 #else
-	s2mu004_muic_prepare_afc_charger(muic_data);
+	cancel_delayed_work(&muic_data->prepare_afc_charger);
+	schedule_delayed_work(&muic_data->prepare_afc_charger, msecs_to_jiffies(200));
 #endif
 
 	return 0;
@@ -1168,16 +1225,6 @@ static int s2mu004_muic_set_int_mask(struct s2mu004_muic_data *muic_data, bool o
 	return ret;
 }
 
-static int s2mu004_muic_set_manual_sw(struct s2mu004_muic_data *muic_data, bool on)
-{
-	int shift = CTRL_MANUAL_SW_SHIFT;
-	int ret = 0;
-
-	ret = s2mu004_muic_set_ctrl_reg(muic_data, shift, on);
-
-	return ret;
-}
-
 static int s2mu004_muic_set_com_sw(struct s2mu004_muic_data *muic_data,
 	u8 reg_val)
 {
@@ -1354,38 +1401,58 @@ static void s2mu004_muic_set_rid_int_mask_en(struct s2mu004_muic_data *muic_data
 	struct i2c_client *i2c = muic_data->i2c;
 	u8 irq_reg[S2MU004_IRQ_GROUP_NR] = {0};
 
+	pr_info("%s en : %d\n",	__func__, (int)en);
+
 	if (en) {
 		s2mu004_i2c_update_bit(i2c,
 			S2MU004_REG_MUIC_INT2_MASK,
-			INT_ADC_CHANGE_MASK,
-			INT_ADC_CHANGE_SHIFT, 1);
+			INT_ADC_CHANGE_MASK | INT_RSRV_ATTACH_MASK,
+			0, INT_ADC_CHANGE_MASK | INT_RSRV_ATTACH_MASK);
 		s2mu004_i2c_update_bit(i2c,
 			S2MU004_REG_MUIC_INT1_MASK,
-			INT_ATTACH_MASK | INT_DETACH_MASK,
-			0, INT_ATTACH_MASK | INT_DETACH_MASK);
+			INT_DETACH_MASK | INT_ATTACH_MASK,
+			0, INT_DETACH_MASK | INT_ATTACH_MASK);
 	} else {
 		s2mu004_bulk_read(i2c, S2MU004_REG_MUIC_INT1,
 				S2MU004_NUM_IRQ_MUIC_REGS, &irq_reg[MUIC_INT1]);
 
 		s2mu004_i2c_update_bit(i2c,
 				S2MU004_REG_MUIC_INT2_MASK,
-				INT_ADC_CHANGE_MASK,
-				INT_ADC_CHANGE_SHIFT, 0);
+				INT_ADC_CHANGE_MASK | INT_RSRV_ATTACH_MASK,
+				0, 0);
 
 		s2mu004_i2c_update_bit(i2c,
 				S2MU004_REG_MUIC_INT1_MASK,
-				INT_ATTACH_MASK | INT_DETACH_MASK,
+				INT_DETACH_MASK | INT_ATTACH_MASK,
 				0, 0);
 	}
 }
 
 int s2mu004_muic_recheck_adc(struct s2mu004_muic_data *muic_data)
 {
+	int i = 0;
+	struct i2c_client *i2c = muic_data->i2c;
+	int adc = ADC_OPEN;
+	u8 chk_int;
+
 	s2mu004_muic_set_rid_adc_en(muic_data, false);
 	usleep_range(10000, 12000);
+	s2mu004_read_reg(i2c, 0x6, &chk_int);
 	s2mu004_muic_set_rid_adc_en(muic_data, true);
-	msleep(RID_REFRESH_DURATION_MS);
-	return s2mu004_i2c_read_byte(muic_data->i2c, S2MU004_REG_MUIC_ADC) & ADC_MASK;
+	usleep_range(20000, 21000);
+
+	for (i = 0; i < 50; i++) {
+		usleep_range(1000, 1050);
+		adc = s2mu004_i2c_read_byte(i2c, S2MU004_REG_MUIC_ADC) & ADC_MASK;
+		if (adc != ADC_OPEN) {
+			pr_info("%s, %d th try, adc : 0x%x\n", __func__, i, adc);
+			return adc;
+		}
+	}
+
+	usleep_range(10000, 10500);
+	pr_info("%s, after delay\n", __func__);
+	return s2mu004_i2c_read_byte(i2c, S2MU004_REG_MUIC_ADC) & ADC_MASK;
 }
 
 int s2mu004_muic_refresh_adc(struct s2mu004_muic_data *muic_data)
@@ -1576,6 +1643,7 @@ static int s2mu004_muic_detect_ccic_jig_cable(struct s2mu004_muic_data *muic_dat
 
 static void s2mu004_muic_detect_first_attach(struct s2mu004_muic_data *muic_data, int vbvolt)
 {
+	struct muic_interface_t *muic_if = (struct muic_interface_t *)muic_data->if_data;
 	int check_adc = 0;
 
 	muic_data->jig_state = false;
@@ -1594,6 +1662,7 @@ static void s2mu004_muic_detect_first_attach(struct s2mu004_muic_data *muic_data
 
 	if (check_adc == 0) {
 		muic_data->attach_mode = S2MU004_FIRST_ATTACH;
+		muic_if->is_dcdtmr_intr = true;
 		MUIC_SEND_NOTI_TO_CCIC_ATTACH(ATTACHED_DEV_TYPE3_MUIC);
 		if (vbvolt) {
 			pr_info("%s change mode to second attach!\n", __func__);
@@ -2191,7 +2260,8 @@ static int s2mu004_muic_check_irq_exeptions(struct s2mu004_muic_data *muic_data,
 	if (((adc > 0 && adc < ADC_OPEN) || (adc & 0x80))
 		&& !muic_data->re_detect && !vbvolt
 		&& (muic_if->opmode & OPMODE_CCIC)
-		&& (irq_num == S2MU004_MUIC_IRQ2_ADC_CHANGE)) {
+		&& ((irq_num == S2MU004_MUIC_IRQ2_ADC_CHANGE)
+			|| (irq_num == S2MU004_MUIC_IRQ1_ATTATCH))) {
 		adc = s2mu004_muic_water_judge(muic_data);
 	}
 
@@ -2203,15 +2273,16 @@ static int s2mu004_muic_check_irq_exeptions(struct s2mu004_muic_data *muic_data,
 
 	pr_info("%s adc 0x%x, vbvolt : %d, irq_num : %d\n",
 		__func__, adc, vbvolt, irq_num);
-	if (irq_num == S2MU004_MUIC_IRQ2_ADC_CHANGE && !vbvolt &&
-		adc != ADC_GND && (muic_if->opmode & OPMODE_CCIC)) {
+	adc &= ADC_MASK;
+	if (((irq_num == S2MU004_MUIC_IRQ2_ADC_CHANGE) || (irq_num == S2MU004_MUIC_IRQ1_ATTATCH))
+		&& !vbvolt && adc != ADC_GND && (muic_if->opmode & OPMODE_CCIC)) {
 		pr_info("%s:%d adc : 0x%X, water_status : %d, vbvolt : %d\n",
 					__func__, __LINE__, adc, muic_data->water_status, vbvolt);
-		if (adc < ADC_OPEN && muic_data->water_status == S2MU004_WATER_MUIC_IDLE) {
+		if (adc < 0x1F && muic_data->water_status == S2MU004_WATER_MUIC_IDLE) {
 			cancel_delayed_work(&muic_data->water_detect_handler);
 			schedule_delayed_work(&muic_data->water_detect_handler,
 				msecs_to_jiffies(0));
-		} else if (adc == ADC_OPEN && IS_WATER_STATUS(muic_data->water_status)) {
+		} else if (adc == 0x1F && IS_WATER_STATUS(muic_data->water_status)) {
 			cancel_delayed_work(&muic_data->water_dry_handler);
 			schedule_delayed_work(&muic_data->water_dry_handler,
 				msecs_to_jiffies(WATER_DET_STABLE_DURATION_MS + 1000));
@@ -2219,8 +2290,8 @@ static int s2mu004_muic_check_irq_exeptions(struct s2mu004_muic_data *muic_data,
 		} else if ((muic_data->water_status == S2MU004_WATER_MUIC_CCIC_DET ||
 				muic_data->water_status == S2MU004_WATER_MUIC_CCIC_STABLE ||
 				muic_data->water_status == S2MU004_WATER_MUIC_DET) &&
-				IS_AUDIO_ADC(adc)) {
-			s2mu004_muic_set_water_adc_ldo_wa(muic_data, true);
+				IS_WATER_ADC(adc)) {
+			s2mu004_muic_set_rid_adc_en(muic_data, false);
 			pr_info("%s WATER Toggling(audio),, adc : 0x%X\n", __func__, adc);
 		}
 
@@ -2332,6 +2403,15 @@ EOH:
 }
 
 #if IS_ENABLED(CONFIG_MUIC_SUPPORT_CCIC)
+static void s2mu004_muic_put_dry_chk_time(struct s2mu004_muic_data *muic_data)
+{
+	struct timeval time;
+
+	do_gettimeofday(&time);
+	pr_info("%s Dry check time : %ld\n", __func__, (long)time.tv_sec);
+	muic_data->dry_chk_time = (long)time.tv_sec;
+}
+
 static void s2mu004_muic_set_water_adc_ldo_wa(struct s2mu004_muic_data *muic_data, bool en)
 {
 	struct i2c_client *i2c = muic_data->i2c;
@@ -2413,21 +2493,27 @@ static void s2mu004_muic_water_detect_handler(struct work_struct *work)
 	} else {
 		if (muic_data->water_status == S2MU004_WATER_MUIC_CCIC_DET) {
 			pr_info("%s: WATER DETECT!!!\n", __func__);
+			muic_data->dry_cnt = 0;
+			muic_data->dry_duration_sec = WATER_DRY_RETRY_INTERVAL_SEC;
 			MUIC_SEND_NOTI_ATTACH(ATTACHED_DEV_UNDEFINED_RANGE_MUIC);
 			s2mu004_i2c_update_bit(muic_data->i2c,
-					S2MU004_REG_LDOADC_VSETH,
+					0xD5,
 					LDOADC_VSETH_WAKE_HYS_MASK,
 					LDOADC_VSETH_WAKE_HYS_SHIFT, 0x1);
 			s2mu004_muic_set_water_adc_ldo_wa(muic_data, true);
-			msleep(RID_REFRESH_DURATION_MS);
+			msleep(100);
 			adc = s2mu004_muic_recheck_adc(muic_data);
-			msleep(WATER_DET_STABLE_DURATION_MS);
+			msleep(2000);
 			muic_data->water_status = S2MU004_WATER_MUIC_CCIC_STABLE;
 			muic_data->water_dry_status = S2MU004_WATER_DRY_MUIC_IDLE;
 #if IS_ENABLED(CONFIG_VBUS_NOTIFIER)
 			vbvolt = s2mu004_muic_get_vbus_state(muic_data);
 			vbus_notifier_handle(vbvolt ? STATUS_VBUS_HIGH : STATUS_VBUS_LOW);
 #endif /* CONFIG_VBUS_NOTIFIER */
+			s2mu004_muic_put_dry_chk_time(muic_data);
+			cancel_delayed_work(&muic_data->water_dry_handler);
+			schedule_delayed_work(&muic_data->water_dry_handler,
+				msecs_to_jiffies(1800000));
 			pr_info("%s %d WATER DETECT stabled adc : 0x%X\n", __func__, __LINE__, adc);
 		} else if (muic_data->water_status == S2MU004_WATER_MUIC_CCIC_INVALID) {
 			pr_info("%s Not Water From CCIC.\n", __func__);
@@ -2457,17 +2543,25 @@ static void s2mu004_muic_water_dry_handler(struct work_struct *work)
 	}
 
 	pr_info("%s Dry check start\n", __func__);
+	s2mu004_muic_put_dry_chk_time(muic_data);
 	s2mu004_muic_set_rid_int_mask_en(muic_data, true);
+	s2mu004_muic_set_water_adc_ldo_wa(muic_data, false);
+
+	if (muic_data->dry_cnt++ > 5) {
+		muic_data->dry_duration_sec = 1800;
+		pr_info("%s Dry check cnt : %d\n", __func__, muic_data->dry_cnt);
+	}
 
 	for (i = 0; i < WATER_DET_RETRY_CNT; i++) {
 		adc = s2mu004_muic_recheck_adc(muic_data);
 		pr_info("%s, %d th try, adc : 0x%X\n", __func__, i, (char)adc);
-		if (adc < ADC_OPEN) {
+		if (adc < 0x1F) {
 			pr_info("%s WATER IS NOT DRIED YET!!!\n", __func__);
-			s2mu004_muic_set_water_adc_ldo_wa(muic_data, true);
+			s2mu004_muic_set_rid_adc_en(muic_data, false);
 			cancel_delayed_work(&muic_data->water_dry_handler);
 			schedule_delayed_work(&muic_data->water_dry_handler,
-				msecs_to_jiffies(WATER_DRY_RETRY_INTERVAL_MS));
+				msecs_to_jiffies(1800000));
+			msleep(1000);
 			goto EXIT_DRY;
 		}
 	}
@@ -2488,10 +2582,11 @@ static void s2mu004_muic_water_dry_handler(struct work_struct *work)
 		muic_data->water_status = S2MU004_WATER_MUIC_CCIC_STABLE;
 		cancel_delayed_work(&muic_data->water_dry_handler);
 		schedule_delayed_work(&muic_data->water_dry_handler,
-			msecs_to_jiffies(60000));
+			msecs_to_jiffies(WATER_DRY_RETRY_INTERVAL_MS));
 	} else if (muic_data->water_dry_status == S2MU004_WATER_DRY_MUIC_CCIC_DET) {
 		pr_info("%s WATER DRIED!!!\n", __func__);
 		s2mu004_muic_set_water_adc_ldo_wa(muic_data, false);
+		msleep(500);
 		MUIC_SEND_NOTI_DETACH(ATTACHED_DEV_UNDEFINED_RANGE_MUIC);
 		MUIC_SEND_NOTI_TO_CCIC_DETACH(ATTACHED_DEV_UNDEFINED_RANGE_MUIC);
 		muic_data->attach_mode = S2MU004_NONE_CABLE;
@@ -2499,6 +2594,8 @@ static void s2mu004_muic_water_dry_handler(struct work_struct *work)
 		muic_data->water_dry_status = S2MU004_WATER_DRY_MUIC_IDLE;
 		muic_data->re_detect = 0;
 		muic_data->is_hiccup_mode = false;
+		muic_data->dry_duration_sec = WATER_DRY_RETRY_INTERVAL_SEC;
+		muic_data->dry_cnt = 0;
 	}
 EXIT_DRY:
 	pr_info("%s %d Exit DRY handler!!!\n", __func__, __LINE__);
@@ -2729,6 +2826,9 @@ static void s2mu004_muic_init_drvdata(struct s2mu004_muic_data *muic_data,
 	muic_data->is_dcd_recheck = false;
 	muic_data->water_status = S2MU004_WATER_MUIC_IDLE;
 	muic_data->water_dry_status = S2MU004_WATER_DRY_MUIC_IDLE;
+	muic_data->dry_chk_time = 0;
+	muic_data->dry_cnt = 0;
+	muic_data->dry_duration_sec = WATER_DRY_RETRY_INTERVAL_SEC;
 }
 
 static void s2mu004_muic_init_interface(struct s2mu004_muic_data *muic_data,
@@ -2973,7 +3073,6 @@ static int s2mu004_muic_remove(struct platform_device *pdev)
 static void s2mu004_muic_shutdown(struct platform_device *pdev)
 {
 	struct s2mu004_muic_data *muic_data = platform_get_drvdata(pdev);
-	int ret;
 
 	pr_info("%s\n", __func__);
 
@@ -2985,19 +3084,6 @@ static void s2mu004_muic_shutdown(struct platform_device *pdev)
 #if IS_ENABLED(CONFIG_HV_MUIC_S2MU004_AFC)
 	s2mu004_hv_muic_remove(muic_data);
 #endif
-
-	ret = s2mu004_muic_com_to_open(muic_data);
-	if (ret < 0)
-		pr_err("fail to open mansw\n");
-
-	/* set auto sw mode before shutdown to make sure device goes into */
-	/* LPM charging when TA or USB is connected during off state */
-	pr_info("muic auto detection enable\n");
-	ret = s2mu004_muic_set_manual_sw(muic_data, true);
-	if (ret < 0) {
-		pr_err("%s fail to update reg\n", __func__);
-		return;
-	}
 }
 
 #if IS_ENABLED(CONFIG_PM)
@@ -3015,6 +3101,8 @@ static int s2mu004_muic_resume(struct device *dev)
 {
 	struct s2mu004_muic_data *muic_data = dev_get_drvdata(dev);
 	struct muic_platform_data *muic_pdata = muic_data->pdata;
+	struct timeval time;
+	long duration;
 
 	muic_pdata->suspended = false;
 
@@ -3024,6 +3112,18 @@ static int s2mu004_muic_resume(struct device *dev)
 		else
 			MUIC_SEND_NOTI_DETACH(muic_pdata->attached_dev);
 		muic_pdata->need_to_noti = false;
+	}
+
+	if (muic_data->water_status == S2MU004_WATER_MUIC_CCIC_STABLE) {
+		if (!s2mu004_muic_get_vbus_state(muic_data)) {
+			do_gettimeofday(&time);
+			duration = (long)time.tv_sec - muic_data->dry_chk_time;
+			pr_info("%s dry check duration : (%ld)\n", __func__, duration);
+			if (duration > muic_data->dry_duration_sec || duration < 0) {
+				cancel_delayed_work(&muic_data->water_dry_handler);
+				schedule_delayed_work(&muic_data->water_dry_handler, 0);
+			}
+		}
 	}
 
 	return 0;

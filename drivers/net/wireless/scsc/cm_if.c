@@ -167,6 +167,7 @@ void slsi_wlan_service_probe(struct scsc_mx_module_client *module_client, struct
 		recovery_in_progress = 0;
 		sdev->fail_reported = false;
 		sdev->recovery_status = 0;
+		sdev->mlme_blocked = false;
 		complete_all(&sdev->recovery_completed);
 	} else {
 		/* Register callbacks */
@@ -454,7 +455,7 @@ int slsi_sm_wlan_service_start(struct slsi_dev *sdev)
 
 	/* Get RAM from the MIF */
 	SLSI_INFO(sdev, "Allocate mifram\n");
-	err = scsc_mx_service_mifram_alloc(sdev->service, 1.75 * 1024 * 1024, &sdev->hip4_inst.hip_ref, 4096);
+	err = scsc_mx_service_mifram_alloc(sdev->service, 2 * 1024 * 1024, &sdev->hip4_inst.hip_ref, 4096);
 	if (err) {
 		SLSI_WARN(sdev, "scsc_mx_service_mifram_alloc failed err: %d\n", err);
 		atomic_set(&sdev->cm_if.cm_if_state, SCSC_WIFI_CM_IF_STATE_STOPPED);
@@ -524,7 +525,6 @@ static void __slsi_sm_wlan_service_stop_wait_locked(struct slsi_dev *sdev)
 {
 	int r;
 
-	sdev->recovery_next_state = SCSC_WIFI_CM_IF_STATE_STOPPING;
 	mutex_unlock(&slsi_start_mutex);
 	r = wait_for_completion_timeout(&sdev->recovery_remove_completion,
 					msecs_to_jiffies(SLSI_SM_WLAN_SERVICE_STOP_RECOVERY_TIMEOUT));
@@ -556,8 +556,9 @@ void slsi_sm_wlan_service_stop(struct slsi_dev *sdev)
 	if (cm_if_state == SCSC_WIFI_CM_IF_STATE_BLOCKED) {
 		__slsi_sm_wlan_service_stop_wait_locked(sdev);
 
-		/* If the wait hasn't timed out, then the cm_if_state will be
-		 * set to probed here. If the probe hasn't fired for some reason
+		/* If the wait hasn't timed out, the recovery remove completion
+		 * will have completed properly and the cm_if_state will be
+		 * set to stopped here. If the probe hasn't fired for some reason
 		 * try and do a service_stop regardless, since that's all we can
 		 * do in this situation; hence skip the state check.
 		 */
@@ -572,8 +573,15 @@ void slsi_sm_wlan_service_stop(struct slsi_dev *sdev)
 		goto exit;
 	}
 
-skip_state_check:
+	/**
+	 * Note that the SCSC_WIFI_CM_IF_STATE_STOPPING state will inhibit
+	 * auto-recovery mechanism, so be careful not to abuse it: as an
+	 * example if panic happens on start or stop we don't want to
+	 * un-necessarily pass by STOPPING in order to have a successful
+	 * recovery in such a situation.
+	 */
 	atomic_set(&sdev->cm_if.cm_if_state, SCSC_WIFI_CM_IF_STATE_STOPPING);
+skip_state_check:
 	SLSI_INFO_NODEV("Stopping WLAN service\n");
 	err = scsc_mx_service_stop(sdev->service);
 	if (err == -EILSEQ) {

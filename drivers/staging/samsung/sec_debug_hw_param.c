@@ -42,7 +42,6 @@ enum ids_info {
 };
 
 extern int asv_ids_information(enum ids_info id);
-extern struct thermal_data_devices thermal_data_info[THERMAL_ZONE_MAX];
 
 /*
  * LPDDR4 (JESD209-4) MR5 Manufacturer ID
@@ -82,6 +81,7 @@ static unsigned int codediff_cnt;
 static unsigned long pcb_offset;
 static unsigned long smd_offset;
 static unsigned int lpddr4_size;
+static char warranty = 'D';
 
 static int __init sec_hw_param_get_hw_rev(char *arg)
 {
@@ -147,6 +147,14 @@ static int __init sec_hw_param_lpddr4_size(char *arg)
 
 early_param("sec_debug.lpddr4_size", sec_hw_param_lpddr4_size);
 
+static int __init sec_hw_param_bin(char *arg)
+{
+	warranty = (char)*arg;
+	return 0;
+}
+
+early_param("sec_debug.bin", sec_hw_param_bin);
+
 static u32 chipid_reverse_value(u32 value, u32 bitcnt)
 {
 	int tmp, ret = 0;
@@ -210,6 +218,15 @@ static ssize_t sec_hw_param_ap_info_show(struct kobject *kobj,
 	info_size += snprintf(buf, DATA_SIZE, "\"HW_REV\":\"%d\",", sec_hw_rev);
 	info_size +=
 	    snprintf((char *)(buf + info_size), DATA_SIZE - info_size,
+		     "\"BIN\":\"%c\",", warranty);
+	info_size +=
+	    snprintf((char *)(buf + info_size), DATA_SIZE - info_size,
+		     "\"ASB\":\"%d\",", id_get_asb_ver());
+	info_size +=
+	    snprintf((char *)(buf + info_size), DATA_SIZE - info_size,
+		     "\"PSITE\":\"%d\",", id_get_product_line());
+	info_size +=
+	    snprintf((char *)(buf + info_size), DATA_SIZE - info_size,
 		     "\"LOT_ID\":\"%s\",", lot_id);
 	info_size +=
 	    snprintf((char *)(buf + info_size), DATA_SIZE - info_size,
@@ -266,7 +283,8 @@ static ssize_t sec_hw_param_extra_info_show(struct kobject *kobj,
 {
 	ssize_t info_size = 0;
 
-	if (reset_reason == RR_K || reset_reason == RR_D || reset_reason == RR_P) {
+	if (reset_reason == RR_K || reset_reason == RR_D || 
+		reset_reason == RR_P || reset_reason == RR_S) {
 		sec_debug_store_extra_info_A();
 		strncpy(buf, (char *)SEC_DEBUG_EXTRA_INFO_VA, SZ_1K);
 		info_size = strlen(buf);
@@ -280,7 +298,8 @@ static ssize_t sec_hw_param_extrb_info_show(struct kobject *kobj,
 {
 	ssize_t info_size = 0;
 
-	if (reset_reason == RR_K || reset_reason == RR_D || reset_reason == RR_P) {
+	if (reset_reason == RR_K || reset_reason == RR_D || 
+		reset_reason == RR_P || reset_reason == RR_S) {
 		sec_debug_store_extra_info_B();
 		strncpy(buf, (char *)SEC_DEBUG_EXTRA_INFO_VA, SZ_1K);
 		info_size = strlen(buf);
@@ -294,7 +313,8 @@ static ssize_t sec_hw_param_extrc_info_show(struct kobject *kobj,
 {
 	ssize_t info_size = 0;
 
-	if (reset_reason == RR_K || reset_reason == RR_D || reset_reason == RR_P) {
+	if (reset_reason == RR_K || reset_reason == RR_D || 
+		reset_reason == RR_P || reset_reason == RR_S) {
 		sec_debug_store_extra_info_C();
 		strncpy(buf, (char *)SEC_DEBUG_EXTRA_INFO_VA, SZ_1K);
 		info_size = strlen(buf);
@@ -308,7 +328,8 @@ static ssize_t sec_hw_param_extrm_info_show(struct kobject *kobj,
 {
 	ssize_t info_size = 0;
 
-	if (reset_reason == RR_K || reset_reason == RR_D || reset_reason == RR_P) {
+	if (reset_reason == RR_K || reset_reason == RR_D || 
+		reset_reason == RR_P || reset_reason == RR_S) {
 		sec_debug_store_extra_info_M();
 		strncpy(buf, (char *)SEC_DEBUG_EXTRA_INFO_VA, SZ_1K);
 		info_size = strlen(buf);

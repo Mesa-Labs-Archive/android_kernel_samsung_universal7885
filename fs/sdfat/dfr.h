@@ -38,10 +38,10 @@
 
 
 /* Debugging support*/
-#define dfr_err(fmt, args...) EMSG("DFR: " fmt "\n", args)
+#define dfr_err(fmt, args...) pr_err("DFR: " fmt "\n", args)
 
 #ifdef	CONFIG_SDFAT_DFR_DEBUG
-#define dfr_debug(fmt, args...) DMSG("DFR: " fmt "\n", args)
+#define dfr_debug(fmt, args...) pr_debug("DFR: " fmt "\n", args)
 #else
 #define dfr_debug(fmt, args...)
 #endif

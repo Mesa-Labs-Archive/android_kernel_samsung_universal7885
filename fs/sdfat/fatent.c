@@ -63,11 +63,10 @@ static s32 exfat_ent_get(struct super_block *sb, u32 loc, u32 *content)
 		return -EIO;
 
 	_content = le32_to_cpu(*(__le32 *)(&fat_sector[off]));
-	if (_content >= CLUSTER_32(0xFFFFFFF8)) {
-		//return 0xFFFFFFFF to simplify code
-		*content = CLUS_EOF;
-		return 0;
-	}
+
+	/* remap reserved clusters to simplify code */
+	if (_content >= CLUSTER_32(0xFFFFFFF8))
+		_content = CLUS_EOF;
 
 	*content = CLUSTER_32(_content);
 	return 0;
@@ -93,6 +92,8 @@ static s32 exfat_ent_set(struct super_block *sb, u32 loc, u32 content)
 	return fcache_modify(sb, sec);
 }
 
+#define FATENT_FAT32_VALID_MASK		(0x0FFFFFFFU)
+#define FATENT_FAT32_IGNORE_MASK	(0xF0000000U)
 static s32 fat32_ent_get(struct super_block *sb, u32 loc, u32 *content)
 {
 	u32 sec, off, _content;
@@ -107,13 +108,13 @@ static s32 fat32_ent_get(struct super_block *sb, u32 loc, u32 *content)
 		return -EIO;
 
 	_content = le32_to_cpu(*(__le32 *)(&fat_sector[off]));
-	_content &= 0x0FFFFFFF;
+	_content &= FATENT_FAT32_VALID_MASK;
 
-	if (_content >= CLUSTER_32(0x0FFFFFF8)) {
-		//return 0xFFFFFFFF to simplify code
-		*content = CLUS_EOF;
-		return 0;
-	}
+	/* remap reserved clusters to simplify code */
+	if (_content == CLUSTER_32(0x0FFFFFF7U))
+		_content = CLUS_BAD;
+	else if (_content >= CLUSTER_32(0x0FFFFFF8U))
+		_content = CLUS_EOF;
 
 	*content = CLUSTER_32(_content);
 	return 0;
@@ -126,7 +127,7 @@ static s32 fat32_ent_set(struct super_block *sb, u32 loc, u32 content)
 	__le32 *fat_entry;
 	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
 
-	content &= 0x0FFFFFFF;
+	content &= FATENT_FAT32_VALID_MASK;
 
 	sec = fsi->FAT1_start_sector + (loc >> (sb->s_blocksize_bits-2));
 	off = (loc << 2) & (u32)(sb->s_blocksize - 1);
@@ -136,12 +137,13 @@ static s32 fat32_ent_set(struct super_block *sb, u32 loc, u32 content)
 		return -EIO;
 
 	fat_entry = (__le32 *)&(fat_sector[off]);
-	content |= (le32_to_cpu(*fat_entry) & 0xF0000000);
+	content |= (le32_to_cpu(*fat_entry) & FATENT_FAT32_IGNORE_MASK);
 	*fat_entry = cpu_to_le32(content);
 
 	return fcache_modify(sb, sec);
 }
 
+#define FATENT_FAT16_VALID_MASK		(0x0000FFFFU)
 static s32 fat16_ent_get(struct super_block *sb, u32 loc, u32 *content)
 {
 	u32 sec, off, _content;
@@ -156,13 +158,13 @@ static s32 fat16_ent_get(struct super_block *sb, u32 loc, u32 *content)
 		return -EIO;
 
 	_content = (u32)le16_to_cpu(*(__le16 *)(&fat_sector[off]));
-	_content &= 0x0000FFFF;
+	_content &= FATENT_FAT16_VALID_MASK;
 
-	if (_content >= CLUSTER_16(0xFFF8)) {
-		// return 0x0FFFFFFF to simplify code
-		*content = CLUS_EOF;
-		return 0;
-	}
+	/* remap reserved clusters to simplify code */
+	if (_content == CLUSTER_16(0xFFF7U))
+		_content = CLUS_BAD;
+	else if (_content >= CLUSTER_16(0xFFF8U))
+		_content = CLUS_EOF;
 
 	*content = CLUSTER_32(_content);
 	return 0;
@@ -175,7 +177,7 @@ static s32 fat16_ent_set(struct super_block *sb, u32 loc, u32 content)
 	__le16 *fat_entry;
 	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
 
-	content &= 0x0000FFFF;
+	content &= FATENT_FAT16_VALID_MASK;
 
 	sec = fsi->FAT1_start_sector + (loc >> (sb->s_blocksize_bits-1));
 	off = (loc << 1) & (u32)(sb->s_blocksize - 1);
@@ -190,6 +192,7 @@ static s32 fat16_ent_set(struct super_block *sb, u32 loc, u32 content)
 	return fcache_modify(sb, sec);
 }
 
+#define FATENT_FAT12_VALID_MASK		(0x00000FFFU)
 static s32 fat12_ent_get(struct super_block *sb, u32 loc, u32 *content)
 {
 	u32 sec, off, _content;
@@ -218,13 +221,13 @@ static s32 fat12_ent_get(struct super_block *sb, u32 loc, u32 *content)
 	if (loc & 1)
 		_content >>= 4;
 
-	_content &= 0x00000FFF;
+	_content &= FATENT_FAT12_VALID_MASK;
 
-	if (_content >= CLUSTER_16(0x0FF8)) {
-		/* return 0xFFFFFFFF to simplify code */
-		*content = CLUS_EOF;
-		return 0;
-	}
+	/* remap reserved clusters to simplify code */
+	if (_content == CLUSTER_16(0x0FF7U))
+		_content = CLUS_BAD;
+	else if (_content >= CLUSTER_16(0x0FF8U))
+		_content = CLUS_EOF;
 
 	*content = CLUSTER_32(_content);
 	return 0;
@@ -236,7 +239,7 @@ static s32 fat12_ent_set(struct super_block *sb, u32 loc, u32 content)
 	u8 *fat_sector, *fat_entry;
 	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
 
-	content &= 0x00000FFF;
+	content &= FATENT_FAT12_VALID_MASK;
 
 	sec = fsi->FAT1_start_sector + ((loc + (loc >> 1)) >> sb->s_blocksize_bits);
 	off = (loc + (loc >> 1)) & (u32)(sb->s_blocksize - 1);
@@ -333,12 +336,30 @@ s32 fat_ent_ops_init(struct super_block *sb)
 	return 0;
 }
 
+static inline bool is_reserved_clus(u32 clus)
+{
+	if (IS_CLUS_FREE(clus))
+		return true;
+	if (IS_CLUS_EOF(clus))
+		return true;
+	if (IS_CLUS_BAD(clus))
+		return true;
+	return false;
+}
+
+static inline bool is_valid_clus(FS_INFO_T *fsi, u32 clus)
+{
+	if (clus < CLUS_BASE || fsi->num_clusters <= clus)
+		return false;
+	return true;
+}
+
 s32 fat_ent_get(struct super_block *sb, u32 loc, u32 *content)
 {
 	FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
 	s32 err;
 
-	if (loc < CLUS_BASE || fsi->num_clusters <= loc) {
+	if (!is_valid_clus(fsi, loc)) {
 		sdfat_fs_error(sb, "invalid access to FAT (entry 0x%08x)", loc);
 		return -EIO;
 	}
@@ -350,8 +371,7 @@ s32 fat_ent_get(struct super_block *sb, u32 loc, u32 *content)
 		return err;
 	}
 
-	if (*content && !IS_CLUS_EOF(*content) &&
-		(*content < CLUS_BASE || fsi->num_clusters <= *content)) {
+	if (!is_reserved_clus(*content) && !is_valid_clus(fsi, *content)) {
 		sdfat_fs_error(sb, "invalid access to FAT (entry 0x%08x) "
 			"bogus content (0x%08x)", loc, *content);
 		return -EIO;
@@ -375,7 +395,13 @@ s32 fat_ent_get_safe(struct super_block *sb, u32 loc, u32 *content)
 		return err;
 
 	if (IS_CLUS_FREE(*content)) {
-		sdfat_fs_error(sb, "invalid access to free FAT "
+		sdfat_fs_error(sb, "invalid access to FAT free cluster "
+				"(entry 0x%08x)", loc);
+		return -EIO;
+	}
+
+	if (IS_CLUS_BAD(*content)) {
+		sdfat_fs_error(sb, "invalid access to FAT bad cluster "
 				"(entry 0x%08x)", loc);
 		return -EIO;
 	}

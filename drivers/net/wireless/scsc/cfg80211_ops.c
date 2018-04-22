@@ -417,6 +417,13 @@ int slsi_scan(struct wiphy *wiphy, struct net_device *dev,
 	bool                      strip_p2p = false;
 	struct ieee80211_channel  *channels[64];
 	int                       i, chan_count = 0;
+#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+#ifdef CONFIG_SCSC_WLAN_SINGLE_ANTENNA
+	struct netdev_vif         *ndev_softap_vif;
+	struct net_device         *softap_dev;
+	int                       ap_frequency;
+#endif
+#endif
 
 	if (WARN_ON(!request->wdev))
 		return -EINVAL;
@@ -453,6 +460,33 @@ int slsi_scan(struct wiphy *wiphy, struct net_device *dev,
 			sdev->initial_scan = false;
 			scan_type = FAPI_SCANTYPE_INITIAL_SCAN;
 		}
+
+#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+#ifdef CONFIG_SCSC_WLAN_SINGLE_ANTENNA
+	if (SLSI_IS_VIF_INDEX_WLAN(ndev_vif)) {
+		softap_dev = slsi_get_netdev(sdev, SLSI_NET_INDEX_SWLAN);
+		ap_frequency = 0;
+		if (softap_dev) {
+			ndev_softap_vif  = netdev_priv(softap_dev);
+			if (ndev_softap_vif->activated)
+				ap_frequency = ndev_softap_vif->chan->center_freq;
+		}
+
+		if ((ap_frequency / 1000) == 2) { /*Check if AP is on 2.4GHz*/
+			/*do not scan 5GHz as STA is not allowed to connect on 5GHz as it will fail later*/
+			int  j = 0;
+
+			for (i = 0; i < request->n_channels; i++) {
+				if (request->channels[i]->hw_value > 14)
+					continue;
+				channels[j] = request->channels[i];
+				j++;
+			}
+			chan_count = j;
+		}
+	}
+#endif
+#endif
 
 	/* Update scan timing for P2P social channels scan.
 	 * Checking for SSID and num_channel looks good enough, hence skip social channel check
@@ -691,12 +725,31 @@ exit:
 	return r;
 }
 
+static void slsi_abort_hw_scan(struct slsi_dev *sdev, struct net_device *dev)
+{
+	struct netdev_vif   *ndev_vif = netdev_priv(dev);
+
+	SLSI_MUTEX_LOCK(ndev_vif->scan_mutex);
+	if (ndev_vif->scan[SLSI_SCAN_HW_ID].scan_req) {
+		SLSI_NET_DBG1(dev, SLSI_CFG80211, "Abort on-going scan\n");
+		(void)slsi_mlme_del_scan(sdev, dev, ndev_vif->ifnum << 8 | SLSI_SCAN_HW_ID, false);
+		slsi_scan_complete(sdev, dev, SLSI_SCAN_HW_ID, false);
+	}
+	SLSI_MUTEX_UNLOCK(ndev_vif->scan_mutex);
+}
+
 int slsi_connect(struct wiphy *wiphy, struct net_device *dev,
 		 struct cfg80211_connect_params *sme)
 {
 	struct slsi_dev     *sdev = SDEV_FROM_WIPHY(wiphy);
 	struct netdev_vif   *ndev_vif = netdev_priv(dev);
 	struct netdev_vif   *ndev_p2p_vif;
+
+#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+	struct netdev_vif   *ndev_softap_vif;
+	struct net_device   *softap_dev;
+	int ap_frequency;
+#endif
 	u8                  device_address[ETH_ALEN] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 	int                 r = 0;
 	u16                 capability = WLAN_CAPABILITY_ESS;
@@ -798,6 +851,41 @@ int slsi_connect(struct wiphy *wiphy, struct net_device *dev,
 			}
 		}
 	}
+	/* Sta started case */
+
+#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+	/*if swlan0 is created*/
+	softap_dev = slsi_get_netdev(sdev, SLSI_NET_INDEX_SWLAN);
+	if (!softap_dev)
+		goto exit_wifi_sharing;
+	ndev_softap_vif  = netdev_priv(softap_dev);
+	if (ndev_softap_vif->is_available) {
+		if (ndev_vif->iftype == NL80211_IFTYPE_P2P_CLIENT)
+			goto exit_with_error;
+		if (ndev_softap_vif->activated) {
+			ap_frequency = ndev_softap_vif->chan->center_freq;
+#ifdef CONFIG_SCSC_WLAN_SINGLE_ANTENNA
+			 /*if AP is on 2.4G and STA on 5G, reject the connection*/
+			if (((ap_frequency / 1000) == 2) &&
+			    ((sme->channel->center_freq / 1000) == 5)) {
+				cfg80211_connect_result(dev,
+							sme->bssid,
+							NULL, 0,
+							NULL, 0,
+							WLAN_STATUS_REQUEST_DECLINED,
+							GFP_KERNEL);
+				SLSI_NET_ERR(dev, "VIF status: %d\n", ndev_vif->sta.vif_status);
+			} else {
+				SLSI_NET_DBG1(dev, SLSI_CFG80211,
+					      "AP frequency: %d STA frequency: %d to be handled by firmware.\n",
+					      ap_frequency, sme->channel->center_freq);
+			}
+#endif /*single antenna*/
+		}
+	}
+
+exit_wifi_sharing:
+#endif /*wifi sharing*/
 	if (WARN_ON(ndev_vif->activated))
 		goto exit_with_error;
 	if (WARN_ON(ndev_vif->vif_type == FAPI_VIFTYPE_STATION &&
@@ -835,13 +923,7 @@ int slsi_connect(struct wiphy *wiphy, struct net_device *dev,
 	ndev_vif->vif_type = FAPI_VIFTYPE_STATION;
 
 	/* Abort on-going scans (if any) */
-	SLSI_MUTEX_LOCK(ndev_vif->scan_mutex);
-	if (ndev_vif->scan[SLSI_SCAN_HW_ID].scan_req) {
-		SLSI_NET_DBG1(dev, SLSI_CFG80211, "Abort on-going scan\n");
-		(void)slsi_mlme_del_scan(sdev, dev, ndev_vif->ifnum << 8 | SLSI_SCAN_HW_ID, false);
-		slsi_scan_complete(sdev, dev, SLSI_SCAN_HW_ID, false);
-	}
-	SLSI_MUTEX_UNLOCK(ndev_vif->scan_mutex);
+	slsi_abort_hw_scan(sdev, dev);
 
 	channel = sme->channel;
 	bssid = sme->bssid;
@@ -899,6 +981,7 @@ int slsi_connect(struct wiphy *wiphy, struct net_device *dev,
 
 	ndev_vif->channel_type = NL80211_CHAN_NO_HT;
 	ndev_vif->chan = channel;
+
 	if (slsi_mlme_add_vif(sdev, dev, dev->dev_addr, device_address) != 0) {
 		SLSI_NET_ERR(dev, "slsi_mlme_add_vif failed\n");
 		goto exit_with_bss;
@@ -915,7 +998,6 @@ int slsi_connect(struct wiphy *wiphy, struct net_device *dev,
 	r = slsi_set_boost(sdev, dev);
 	if (r != 0)
 		SLSI_NET_ERR(dev, "Rssi Boost set failed: %d\n", r);
-
 	r = slsi_set_uapsd_qos_info(sdev, dev);
 	if (r != 0) {
 		SLSI_NET_ERR(dev, "qosInfo MIB write failed: %d\n", r);
@@ -943,6 +1025,7 @@ int slsi_connect(struct wiphy *wiphy, struct net_device *dev,
 	netif_carrier_on(dev);
 	ndev_vif->sta.vif_status = SLSI_VIF_STATUS_CONNECTING;
 	r = slsi_mlme_connect(sdev, dev, sme, channel, bssid);
+
 	if (r != 0) {
 		ndev_vif->sta.is_wps = false;
 		SLSI_NET_ERR(dev, "connect failed: %d\n", r);
@@ -1816,6 +1899,7 @@ int slsi_start_ap(struct wiphy *wiphy, struct net_device *dev,
 {
 	struct slsi_dev   *sdev = SDEV_FROM_WIPHY(wiphy);
 	struct netdev_vif *ndev_vif = netdev_priv(dev);
+	struct net_device *wlan_dev;
 	u8                device_address[ETH_ALEN] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 	int               r = 0;
 	const u8          *wpa_ie_pos = NULL;
@@ -1825,6 +1909,20 @@ int slsi_start_ap(struct wiphy *wiphy, struct net_device *dev,
 	const u8          *country_ie = NULL;
 	char              alpha2[SLSI_COUNTRY_CODE_LEN];
 	bool              append_vht_ies = false;
+	const u8             *ie;
+#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+	int channel_switched_flag = 0;
+	u8 *ds_params_ie = NULL;
+	struct ieee80211_mgmt  *mgmt;
+	u16                    beacon_ie_head_len;
+	u8 *ht_operation_ie;
+	struct net_device *sta_dev = slsi_get_netdev(sdev, SLSI_NET_INDEX_WLAN);
+	struct net_device *p2px_dev = slsi_get_netdev(sdev, SLSI_NET_INDEX_P2PX);
+	struct net_device *ap_dev = slsi_get_netdev(sdev, SLSI_NET_INDEX_SWLAN);
+	struct netdev_vif *ndev_ap_vif;
+	struct netdev_vif *ndev_sta_vif  = netdev_priv(sta_dev);
+	struct netdev_vif *ndev_p2px_vif;
+#endif
 
 	SLSI_MUTEX_LOCK(sdev->start_stop_mutex);
 	if (sdev->device_state != SLSI_DEVICE_STATE_STARTED) {
@@ -1833,10 +1931,47 @@ int slsi_start_ap(struct wiphy *wiphy, struct net_device *dev,
 		goto exit_with_start_stop_mutex;
 	}
 
+	/* Abort any ongoing wlan scan. */
+	wlan_dev = slsi_get_netdev(sdev, SLSI_NET_INDEX_WLAN);
+	if (wlan_dev)
+		slsi_abort_hw_scan(sdev, wlan_dev);
+#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+	mgmt = (struct ieee80211_mgmt *)settings->beacon.head;
+	beacon_ie_head_len = settings->beacon.head_len - ((u8 *)mgmt->u.beacon.variable - (u8 *)mgmt);
+
 	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
+	if (ap_dev) {
+		ndev_ap_vif = netdev_priv(ap_dev);
+		if (!(ndev_ap_vif->is_available)) {
+			r = -EINVAL;
+			goto exit_with_vif_mutex;
+		}
 
-	SLSI_NET_DBG2(dev, SLSI_CFG80211, "Iftype: %d\n", ndev_vif->iftype);
+		if (strcmp(dev->name, "wlan0") == 0) { /*if wlan0 is sent by framework*/
+			dev = ap_dev; /*change it to swlan0*/
+		}
+	} else {
+		goto exit_wifi_sharing;
+	}
 
+	if (p2px_dev)
+		ndev_p2px_vif = netdev_priv(p2px_dev);
+
+	if (strcmp(dev->name, "swlan0") == 0) {
+		if (p2px_dev) {
+			r = -EINVAL;
+			goto exit_with_vif_mutex;
+		}
+
+		if ((ndev_sta_vif->activated) && (ndev_sta_vif->vif_type == FAPI_VIFTYPE_STATION) &&
+		    (ndev_sta_vif->sta.vif_status == SLSI_VIF_STATUS_CONNECTING ||
+		     ndev_sta_vif->sta.vif_status == SLSI_VIF_STATUS_CONNECTED)) {
+			slsi_select_wifi_sharing_ap_channel(wiphy, dev, settings, sdev, &channel_switched_flag);
+		}
+	}
+
+exit_wifi_sharing:
+#endif
 	r = slsi_ap_start_validate(dev, sdev, settings);
 	if (r != 0)
 		goto exit_with_vif_mutex;
@@ -1974,6 +2109,20 @@ int slsi_start_ap(struct wiphy *wiphy, struct net_device *dev,
 	}
 #endif
 
+#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+if (channel_switched_flag == 1) {
+	ds_params_ie = (u8 *)cfg80211_find_ie(WLAN_EID_DS_PARAMS, mgmt->u.beacon.variable, beacon_ie_head_len);
+	slsi_modify_ies(dev, WLAN_EID_DS_PARAMS, mgmt->u.beacon.variable,
+			beacon_ie_head_len, 2, ieee80211_frequency_to_channel(settings->chandef.chan->center_freq));
+
+	ht_operation_ie = (u8 *)cfg80211_find_ie(WLAN_EID_HT_OPERATION, settings->beacon.tail,
+						 settings->beacon.tail_len);
+	slsi_modify_ies(dev, WLAN_EID_HT_OPERATION, (u8 *)settings->beacon.tail,
+			settings->beacon.tail_len, 2,
+			ieee80211_frequency_to_channel(settings->chandef.chan->center_freq));
+}
+#endif
+
 	ndev_vif->vif_type = FAPI_VIFTYPE_AP;
 
 	if (slsi_mlme_add_vif(sdev, dev, dev->dev_addr, device_address) != 0) {
@@ -2043,7 +2192,26 @@ int slsi_start_ap(struct wiphy *wiphy, struct net_device *dev,
 		}
 	}
 
+	if (append_vht_ies) {
+		ndev_vif->ap.mode = SLSI_80211_MODE_11AC;
+	} else if (cfg80211_find_ie(WLAN_EID_HT_CAPABILITY, settings->beacon.tail, settings->beacon.tail_len) &&
+		cfg80211_find_ie(WLAN_EID_HT_OPERATION, settings->beacon.tail, settings->beacon.tail_len)) {
+		ndev_vif->ap.mode = SLSI_80211_MODE_11N;
+	} else {
+		ie = cfg80211_find_ie(WLAN_EID_SUPP_RATES, settings->beacon.tail, settings->beacon.tail_len);
+		if (ie)
+			ndev_vif->ap.mode = slsi_get_supported_mode(ie);
+	}
+
 	r = slsi_mlme_start(sdev, dev, dev->dev_addr, settings, wpa_ie_pos, wmm_ie_pos, append_vht_ies);
+
+#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+	if (channel_switched_flag == 1)
+		cfg80211_ch_switch_notify(dev, &settings->chandef);
+	if (ap_dev)
+		ndev_ap_vif->chan = settings->chandef.chan;
+#endif
+
 	if (r != 0) {
 		SLSI_NET_ERR(dev, "Start ap failed: resultcode = %d\n", r);
 		goto exit_with_vif;
@@ -2110,6 +2278,11 @@ int slsi_stop_ap(struct wiphy *wiphy, struct net_device *dev)
 {
 	struct slsi_dev   *sdev = SDEV_FROM_WIPHY(wiphy);
 	struct netdev_vif *ndev_vif = netdev_priv(dev);
+#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+#ifdef CONFIG_SCSC_WLAN_SINGLE_ANTENNA
+	int error = 0;
+#endif
+#endif
 
 	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
 
@@ -2124,6 +2297,17 @@ int slsi_stop_ap(struct wiphy *wiphy, struct net_device *dev)
 		SLSI_NET_DBG1(dev, SLSI_CFG80211, "Invalid Device Type: %d\n", ndev_vif->iftype);
 		goto exit;
 	}
+
+#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+#ifdef CONFIG_SCSC_WLAN_SINGLE_ANTENNA
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	error = slsi_set_mib_wifi_sharing_allowed(sdev, dev, SLSI_PSID_UNIFI_WI_FI_SHARING5_GHZ_ALLOWED, 0,
+						  false);
+	if (error)
+		SLSI_ERR(sdev, "Err setting value for 5GHz wifi sharing allowed . error = %d\n", error);
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+#endif
+#endif
 
 	/* Free WPA and WMM IEs if present */
 	slsi_clear_cached_ies(&ndev_vif->ap.cache_wpa_ie, &ndev_vif->ap.wpa_ie_len);

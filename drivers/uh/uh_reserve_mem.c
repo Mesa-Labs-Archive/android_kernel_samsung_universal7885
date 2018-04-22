@@ -29,6 +29,9 @@ static int __init fill_uh_mem_info(void)
 	uh_mem[cnt].start_add 	= UH_HEAP_START;
 	uh_mem[cnt++].size 	= UH_HEAP_SIZE;
 
+	uh_mem[cnt].start_add 	= UH_BIGDATA_START;
+	uh_mem[cnt++].size 	= UH_BIGDATA_SIZE;
+
 #ifdef CONFIG_UH_RKP
 	uh_mem[cnt].start_add 	= RKP_PHYS_MAP_START;
 	uh_mem[cnt++].size 	= RKP_PHYS_MAP_SIZE;

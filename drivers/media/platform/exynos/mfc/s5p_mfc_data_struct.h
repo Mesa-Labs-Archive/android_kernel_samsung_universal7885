@@ -36,9 +36,10 @@
 #define MFC_MAX_BUFFERS			32
 #define MFC_MAX_EXTRA_BUF		10
 #define MFC_TIME_INDEX			15
-#define MFC_SFR_LOGGING_COUNT_SET1	4
-#define MFC_SFR_LOGGING_COUNT_SET2	23
-#define MFC_LOGGING_DATA_SIZE		256
+#define MFC_SFR_LOGGING_COUNT_SET0	10
+#define MFC_SFR_LOGGING_COUNT_SET1	28
+#define MFC_SFR_LOGGING_COUNT_SET2	32
+#define MFC_LOGGING_DATA_SIZE		950
 
 /* Maximum number of temporal layers */
 #define VIDEO_MAX_TEMPORAL_LAYERS	7
@@ -188,6 +189,7 @@ enum s5p_mfc_ctrl_mode {
 struct s5p_mfc_ctx;
 
 enum s5p_mfc_debug_cause {
+	/* panic cause */
 	MFC_CAUSE_0WRITE_PAGE_FAULT		= 0,
 	MFC_CAUSE_0READ_PAGE_FAULT		= 1,
 	MFC_CAUSE_1WRITE_PAGE_FAULT		= 2,
@@ -202,15 +204,44 @@ enum s5p_mfc_debug_cause {
 	MFC_CAUSE_FAIL_RISC_ON			= 11,
 	MFC_CAUSE_FAIL_DPB_FLUSH		= 12,
 	MFC_CAUSE_FAIL_CHACHE_FLUSH		= 13,
+	/* last information */
+	MFC_LAST_INFO_BLACK_BAR			= 26,
+	MFC_LAST_INFO_NAL_QUEUE			= 27,
+	MFC_LAST_INFO_CLOCK			= 28,
+	MFC_LAST_INFO_POWER			= 29,
+	MFC_LAST_INFO_SHUTDOWN			= 30,
+	MFC_LAST_INFO_DRM			= 31,
 };
 
 struct s5p_mfc_debug {
+	u32	fw_version;
 	u32	cause;
 	u8	fault_status;
 	u32	fault_trans_info;
 	u32	fault_addr;
-	u8	SFRs_set1[MFC_SFR_LOGGING_COUNT_SET1];
+	u32	SFRs_set0[MFC_SFR_LOGGING_COUNT_SET0];
+	u32	SFRs_set1[MFC_SFR_LOGGING_COUNT_SET1];
 	u32	SFRs_set2[MFC_SFR_LOGGING_COUNT_SET2];
+	u8	curr_ctx;
+	u8	state;
+	u8	last_cmd;
+	u32	last_cmd_sec;
+	u32	last_cmd_usec;
+	u8	last_int;
+	u32	last_int_sec;
+	u32	last_int_usec;
+	u32	frame_cnt;
+	u8	hwlock_dev;
+	u32	hwlock_ctx;
+	u8	num_inst;
+	u8	num_drm_inst;
+	u8	power_cnt;
+	u8	clock_cnt;
+	/* for decoder only */
+	u32	dynamic_used;
+	u32	last_src_addr;
+	u32	last_dst_addr[MFC_MAX_PLANES];
+	/* total logging data */
 	char	errorinfo[MFC_LOGGING_DATA_SIZE];
 };
 
@@ -474,6 +505,8 @@ struct s5p_mfc_dev {
 	struct _mfc_trace *mfc_trace;
 	atomic_t trace_ref_hwlock;
 	struct _mfc_trace *mfc_trace_hwlock;
+	atomic_t trace_ref_log;
+	struct _mfc_trace_logging *mfc_trace_logging;
 	bool continue_clock_on;
 
 	bool reboot;
@@ -490,6 +523,11 @@ struct s5p_mfc_dev {
 	struct s5p_mfc_debugfs debugfs;
 
 	struct notifier_block reboot_notifier;
+
+	int last_cmd;
+	int last_int;
+	struct timeval last_cmd_time;
+	struct timeval last_int_time;
 };
 
 /**
@@ -1066,6 +1104,10 @@ struct s5p_mfc_ctx {
 
 	unsigned long raw_protect_flag;
 	unsigned long stream_protect_flag;
+
+	int frame_cnt;
+	u32 last_src_addr;
+	u32 last_dst_addr[MFC_MAX_PLANES];
 };
 
 #endif /* __S5P_MFC_DATA_STRUCT_H */

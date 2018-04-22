@@ -113,6 +113,8 @@ typedef enum {
 	ADC_ERROR		= 0xff, /* ADC value read error */
 } muic_adc_t;
 
+#define ADC_WATER_THRESHOLD	ADC_OPEN
+
 /* MUIC attached device type */
 typedef enum {
 	ATTACHED_DEV_NONE_MUIC = 0,

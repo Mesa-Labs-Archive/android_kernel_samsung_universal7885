@@ -24,6 +24,9 @@
 #include <linux/muic/muic.h>
 #include <linux/muic/muic_interface.h>
 #include <linux/muic/s2mu004-muic-hv.h>
+#include <linux/time.h>
+#include <linux/ktime.h>
+#include <linux/rtc.h>
 
 #define MUIC_DEV_NAME	"muic-s2mu004"
 
@@ -128,6 +131,11 @@
 #define INTm_ADC_CHANGE_MASK	(0x1 << INTm_ADC_CHANGE_SHIFT)
 #define INTm_RSRV_ATTACH_MASK	(0x1 << INTm_RSRV_ATTACH_SHIFT)
 #define INTm_VBUS_ON_MASK		(0x1 << INTm_CHG_DET_SHIFT)
+
+/* S2MU004 MUIC AFC Interrupt MASK register */
+#define INTm_VDNMon_SHIFT		(1)
+
+#define INTm_VDNMon_MASK		(0x1 << INTm_VDNMon_SHIFT)
 
 /* S2MU004 MUIC Interrupt Maksing for pdic */
 #define INT_PDIC_MASK1			(0xFC)
@@ -333,7 +341,10 @@
 
 #define WATER_DET_RETRY_CNT				10
 #define WATER_CCIC_WAIT_DURATION_MS		4000
-#define WATER_DRY_RETRY_INTERVAL_MS		30000
+#define WATER_DRY_RETRY_INTERVAL_SEC	600
+#define WATER_DRY_RETRY_30MIN_SEC		1800
+#define WATER_DRY_RETRY_60MIN_SEC		6000
+#define WATER_DRY_RETRY_INTERVAL_MS		((WATER_DRY_RETRY_30MIN_SEC) * (1000))
 #define WATER_DRY_INTERVAL_MS			10000
 #define WATER_DET_STABLE_DURATION_MS	2000
 #define DRY_DET_RETRY_CNT_MAX			3
@@ -362,7 +373,7 @@ do {									\
 } while (0)
 
 #define IS_WATER_ADC(adc)\
-		( ((adc) > (ADC_GND)) && ((adc) < (ADC_OPEN)) \
+		( ((adc) > (ADC_GND)) && ((adc) < (ADC_WATER_THRESHOLD)) \
 		? 1 : 0 )
 #define IS_AUDIO_ADC(adc)\
 		( ((adc) >= (ADC_SEND_END)) && ((adc) <= (ADC_REMOTE_S12)) \
@@ -535,6 +546,7 @@ struct s2mu004_muic_data {
 	struct delayed_work afc_control_ping_retry;
 	struct delayed_work afc_qc_retry;
 	struct delayed_work afc_after_prepare;
+	struct delayed_work prepare_afc_charger;
 	struct delayed_work afc_check_interrupt;
 	struct delayed_work dcd_recheck;
 	struct delayed_work incomplete_check;
@@ -562,6 +574,9 @@ struct s2mu004_muic_data {
 	struct wake_lock water_dry_wake_lock;
 	t_water_status water_status;
 	t_water_dry_status water_dry_status;
+	long dry_chk_time;
+	int dry_cnt;
+	int dry_duration_sec;
 #endif
 
 #if defined(CONFIG_HV_MUIC_S2MU004_AFC)

@@ -1,6 +1,6 @@
 /*****************************************************************************
  *
- * Copyright (c) 2012 - 2017 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright (c) 2012 - 2018 Samsung Electronics Co., Ltd. All rights reserved
  *
  ****************************************************************************/
 #include <linux/etherdevice.h>
@@ -555,6 +555,47 @@ void slsi_rx_scan_done_ind(struct slsi_dev *sdev, struct net_device *dev, struct
 	SLSI_MUTEX_UNLOCK(ndev_vif->scan_mutex);
 	SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
 	slsi_kfree_skb(skb);
+}
+
+void slsi_rx_channel_switched_ind(struct slsi_dev *sdev, struct net_device *dev, struct sk_buff *skb)
+{
+	u16 freq;
+	int width;
+	int primary_chan_pos;
+	u16 temp_chan_info;
+	struct cfg80211_chan_def chandef;
+	u16 cf1 = 0;
+
+	temp_chan_info = fapi_get_u16(skb, u.mlme_channel_switched_ind.channel_information);
+	freq = fapi_get_u16(skb, u.mlme_channel_switched_ind.channel_frequency);
+	freq = freq / 2;
+
+	primary_chan_pos = (temp_chan_info >> 8);
+	width = (temp_chan_info & 0x00FF);
+
+	/*If width is 80Mhz then do frequency calculation, else store as it is*/
+	if (width == 40)
+		cf1 = (10 + freq - (primary_chan_pos * 20));
+	else if (width == 80)
+		cf1 = (30 + freq - (primary_chan_pos * 20));
+	else
+		cf1 = freq;
+
+	if (width == 20)
+		width = NL80211_CHAN_WIDTH_20;
+	else if (width == 40)
+		width =  NL80211_CHAN_WIDTH_40;
+	else if (width == 80)
+		width =  NL80211_CHAN_WIDTH_80;
+	else if (width == 160)
+		width =  NL80211_CHAN_WIDTH_160;
+
+	chandef.chan = ieee80211_get_channel(sdev->wiphy, freq);
+	chandef.width = width;
+	chandef.center_freq1 = cf1;
+	chandef.center_freq2 = 0;
+
+	cfg80211_ch_switch_notify(dev, &chandef);
 }
 
 void __slsi_rx_blockack_ind(struct slsi_dev *sdev, struct net_device *dev, struct sk_buff *skb)
@@ -1461,11 +1502,12 @@ void slsi_rx_connect_ind(struct slsi_dev *sdev, struct net_device *dev, struct s
 		/* Firmware reported connection success, but driver reported failure to cfg80211:
 		 * send mlme-disconnect.req to firmware
 		 */
-		if ((fw_result_code == FAPI_RESULTCODE_SUCCESS) && peer)
-			slsi_mlme_disconnect(sdev, dev, peer->address, FAPI_REASONCODE_UNSPECIFIED_REASON, false);
-		netif_carrier_off(dev);
-		slsi_mlme_del_vif(sdev, dev);
-		slsi_vif_deactivated(sdev, dev);
+		if ((fw_result_code == FAPI_RESULTCODE_SUCCESS) && peer) {
+			slsi_mlme_disconnect(sdev, dev, peer->address, FAPI_REASONCODE_UNSPECIFIED_REASON, true);
+			slsi_handle_disconnect(sdev, dev, peer->address, FAPI_REASONCODE_UNSPECIFIED_REASON);
+		} else {
+			slsi_handle_disconnect(sdev, dev, NULL, FAPI_REASONCODE_UNSPECIFIED_REASON);
+		}
 	}
 
 exit_with_lock:

@@ -177,10 +177,9 @@ uint32_t send_cmd_to_user(uint32_t command_id, uint32_t data0, uint32_t data1)
 
 	/* Check id of the cmd processed by ioctl thread (paranoia) */
 	if (g_user_rsp.id != command_id) {
-//		pr_debug("ERROR %s:%d Wrong response id 0x%08x iso 0x%08x\n",
-		pr_info("ERROR %s:%d Wrong response id \n",
-			 __func__, __LINE__ /*, dci->nwd_rsp.id,
-			 RSP_ID(command_id)*/);
+				pr_info("ERROR %s:%d Wrong response id %d iso %d\n",
+		//		pr_info("ERROR %s:%d Wrong response id \n",
+					 __func__, __LINE__ , (unsigned int)g_user_rsp.id, (unsigned int)RSP_ID(command_id));
 		ret = TUI_DCI_ERR_INTERNAL_ERROR;
 	} else {
 		/* retrieve return code */

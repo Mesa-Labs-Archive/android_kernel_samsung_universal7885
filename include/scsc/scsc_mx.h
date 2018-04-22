@@ -10,10 +10,10 @@
 #include <linux/types.h>
 #include "scsc_mifram.h"
 
-#define SCSC_PANIC_CODE_FW 0
-#define SCSC_PANIC_CODE_HOST 1
+#define SCSC_PANIC_CODE_FW	0
+#define SCSC_PANIC_CODE_HOST	1
 /* offset from 0x80000000, the start of BAAW1 region */
-#define SCSC_BAAW1_OFFSET 0x400000
+#define SCSC_BAAW1_OFFSET		0x400000
 
 struct device;
 struct firmware;
@@ -96,7 +96,6 @@ int scsc_mx_service_stop(struct scsc_service *service);
 int scsc_mx_service_close(struct scsc_service *service);
 int scsc_mx_service_mif_dump_registers(struct scsc_service *service);
 int scsc_mx_service_get_abox_shared_mem(struct scsc_service *service, void **data);
-
 /** Signal a failure detected by the Client. This will trigger the systemwide
  * failure handling procedure: _All_ Clients will be called back via
  * their stop_on_failure() handler as a side-effect. */
@@ -110,7 +109,7 @@ int scsc_mx_service_mifram_alloc(struct scsc_service *service, size_t nbytes, sc
 void scsc_mx_service_mifram_free(struct scsc_service *service, scsc_mifram_ref ref);
 
 /* MBOX Interface */
-/** Allocate n contiguous mailboxes. Outputs index of first mbox, returns FALSE if can?™t allocate n contiguous mailboxes. */
+/** Allocate n contiguous mailboxes. Outputs index of first mbox, returns FALSE if canâ€™t allocate n contiguous mailboxes. */
 bool scsc_mx_service_alloc_mboxes(struct scsc_service *service, int n, int *first_mbox_index);
 /** Free n contiguous mailboxes. */
 void scsc_service_free_mboxes(struct scsc_service *service, int n, int first_mbox_index);
@@ -283,5 +282,4 @@ struct scsc_btabox_data {
 	unsigned long btaboxmem_start;
 	size_t        btaboxmem_size;
 };
-
 #endif

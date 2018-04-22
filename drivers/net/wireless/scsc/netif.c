@@ -172,7 +172,11 @@ static int slsi_net_open(struct net_device *dev)
 		SLSI_ETHER_COPY(sdev->netdev_addresses[SLSI_NET_INDEX_P2PX], sdev->hw_addr);
 		sdev->netdev_addresses[SLSI_NET_INDEX_P2PX][0] |= 0x02; /* Set the local bit */
 		sdev->netdev_addresses[SLSI_NET_INDEX_P2PX][4] ^= 0x80; /* EXOR 5th byte with 0x80 */
-
+#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+		SLSI_ETHER_COPY(sdev->netdev_addresses[SLSI_NET_INDEX_SWLAN], sdev->hw_addr);
+		sdev->netdev_addresses[SLSI_NET_INDEX_SWLAN][0] |= 0x02; /* Set the local bit */
+		sdev->netdev_addresses[SLSI_NET_INDEX_SWLAN][4] ^= 0x40; /* EXOR 5th byte with 0x40 */
+#endif
 		sdev->initial_scan = true;
 	}
 
@@ -1162,11 +1166,18 @@ int slsi_netif_add(struct slsi_dev *sdev, const char *name)
 	int err;
 
 	SLSI_MUTEX_LOCK(sdev->netdev_add_remove_mutex);
-	for (i = 1; i <= CONFIG_SCSC_WLAN_MAX_INTERFACES; i++)
-		if (!sdev->netdev[i]) {
-			index = i;
-			break;
-		}
+
+#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+	if (strcmp(name, "swlan0") == 0)
+		index = SLSI_NET_INDEX_SWLAN;
+	else
+#endif
+		for (i = 1; i <= CONFIG_SCSC_WLAN_MAX_INTERFACES; i++)
+			if (!sdev->netdev[i]) {
+				index = i;
+				break;
+			}
+
 	if (index > 0) {
 		err = slsi_netif_add_locked(sdev, name, index);
 		if (err != 0)

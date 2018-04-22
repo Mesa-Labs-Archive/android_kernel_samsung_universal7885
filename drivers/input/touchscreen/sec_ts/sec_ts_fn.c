@@ -1977,7 +1977,7 @@ static void get_pat_information(void *device_data)
 	sec_cmd_set_default_result(sec);
 
 	/* fixed tune version will be saved at excute autotune */
-	snprintf(buff, sizeof(buff), "C%02XT%04X.%4s%s%s",
+	snprintf(buff, sizeof(buff), "C%02XT01%02X.%4s%s%s",
 		ts->tdata->cal_count, ts->tdata->tune_fix_ver, ts->tdata->tclm_string[ts->tdata->cal_position].f_name,
 		(ts->tdata->tclm_level == TCLM_LEVEL_LOCKDOWN) ? ".L " : " ", ts->tdata->cal_pos_hist_last3);
 
@@ -3315,8 +3315,7 @@ int sec_tclm_data_read(struct i2c_client *client, int address)
 	}
 
 	if (tune_ver_flag) {
-		ret = (get_tsp_nvm_data(ts, SEC_TS_NVM_OFFSET_TUNE_VERSION) << 8)
-			| get_tsp_nvm_data(ts, SEC_TS_NVM_OFFSET_TUNE_VERSION + 1);
+		ret = get_tsp_nvm_data(ts, SEC_TS_NVM_OFFSET_TUNE_VERSION + 1);
 		return ret;
 	}
 	ret = get_tsp_nvm_data(ts, reg);
@@ -3362,8 +3361,8 @@ void sec_tclm_data_write(struct i2c_client *client, int address, int data)
 	}
 
 	if (tune_ver_flag) {
-		sec_ts_tclm_set_nvm_data(ts, reg, (u8)data << 8);
-		sec_ts_tclm_set_nvm_data(ts, reg + 1, (u8)0xff & data);
+		sec_ts_tclm_set_nvm_data(ts, reg, (u8)(data >> 8));
+		sec_ts_tclm_set_nvm_data(ts, reg + 1, (u8)(0xff & data));
 	} else {
 		sec_ts_tclm_set_nvm_data(ts, reg, (u8)data);
 	}
@@ -3376,8 +3375,8 @@ void sec_ts_tclm_set_nvm_data(struct sec_ts_data *ts, u8 reg, u8 data)
 	buff[0] = reg;
 	buff[1] = 0;	/* 1bytes */
 	buff[2] = (u8) data;
-	input_info(true, &ts->client->dev, "%s: write to nvm (%d)\n",
-				__func__, buff[2]);
+	input_info(true, &ts->client->dev, "%s: write (%d) to nvm register(%d)\n",
+				__func__, buff[2], buff[0]);
 
 	rc = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_NVM, buff, 3);
 	if (rc < 0) {

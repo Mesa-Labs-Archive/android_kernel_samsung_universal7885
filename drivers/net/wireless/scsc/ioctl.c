@@ -80,6 +80,7 @@
 #define CMD_FAKEMAC "FAKEMAC"
 
 #define CMD_GETBSSINFO "GETBSSINFO"
+#define CMD_GETSTAINFO "GETSTAINFO"
 #define CMD_GETASSOCREJECTINFO "GETASSOCREJECTINFO"
 
 /* Known commands from framework for which no handlers */
@@ -106,13 +107,6 @@
 
 #define ROAMOFFLAPLIST_MIN 1
 #define ROAMOFFLAPLIST_MAX 100
-
-/* Modes for CMDGETBSSINFO */
-#define SLSI_80211_MODE_11B 0
-#define SLSI_80211_MODE_11G 1
-#define SLSI_80211_MODE_11N 2
-#define SLSI_80211_MODE_11A 3
-#define SLSI_80211_MODE_11AC 4
 
 static int slsi_parse_hex(unsigned char c)
 {
@@ -679,6 +673,39 @@ static ssize_t slsi_rx_filter_num_write(struct net_device *dev, int add_remove, 
 		sdev->device_config.rx_filter_num = 0;
 	return ret;
 }
+
+#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+static ssize_t slsi_create_interface(struct net_device *dev, char *intf_name)
+{
+	struct netdev_vif *ndev_vif = netdev_priv(dev);
+	struct slsi_dev   *sdev = ndev_vif->sdev;
+	struct net_device   *p2p_dev;
+	int res;
+
+	p2p_dev = slsi_get_netdev(sdev, SLSI_NET_INDEX_P2PX);
+	if (p2p_dev)
+		return -EINVAL;
+
+	res = slsi_new_interface_create(sdev->wiphy, intf_name, NL80211_IFTYPE_AP, NULL, NULL);
+
+	return res;
+}
+
+static ssize_t slsi_delete_interface(struct net_device *dev, char *intf_name)
+{
+	struct netdev_vif *ndev_vif = netdev_priv(dev);
+	struct slsi_dev   *sdev = ndev_vif->sdev;
+	int res;
+
+	if (strcmp(intf_name, "swlan0") == 0)
+	dev = sdev->netdev[SLSI_NET_INDEX_SWLAN];
+	if (WARN_ON(!dev))
+		return -EINVAL;
+	res = slsi_interface_delete(sdev->wiphy, dev);
+
+	return res;
+}
+#endif
 
 static ssize_t slsi_set_country_rev(struct net_device *dev, char *country_code)
 {
@@ -1300,6 +1327,14 @@ static ssize_t slsi_auto_chan_write(struct net_device *dev, char *command, int b
 	int                      count_channels;
 	int                      offset;
 	int                      chan;
+#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+#ifdef CONFIG_SCSC_WLAN_SINGLE_ANTENNA
+	int r;
+#endif
+	struct net_device *sta_dev = slsi_get_netdev(sdev, SLSI_NET_INDEX_WLAN);
+	struct netdev_vif *ndev_sta_vif  = netdev_priv(sta_dev);
+	int sta_frequency;
+#endif
 
 	offset = slsi_str_to_int(&command[21], &n_channels);
 	if (!offset) {
@@ -1340,6 +1375,50 @@ static ssize_t slsi_auto_chan_write(struct net_device *dev, char *command, int b
 	sdev->device_config.ap_auto_chan = 0;
 	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
 
+#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+if ((ndev_sta_vif->activated) && (ndev_sta_vif->vif_type == FAPI_VIFTYPE_STATION) &&
+				 (ndev_sta_vif->sta.vif_status == SLSI_VIF_STATUS_CONNECTING ||
+				  ndev_sta_vif->sta.vif_status == SLSI_VIF_STATUS_CONNECTED)) {
+	sta_frequency = ndev_sta_vif->chan->center_freq;
+	if (((sta_frequency) / 1000) == 2) { /*For 2.4GHz */
+		SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+		sdev->device_config.ap_auto_chan = ieee80211_frequency_to_channel(sta_frequency);
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return 0;
+	}
+
+	else { /* For 5GHz */
+#ifdef CONFIG_SCSC_WLAN_SINGLE_ANTENNA
+		SLSI_MUTEX_LOCK(ndev_sta_vif->vif_mutex);
+
+		SLSI_DBG2(sdev, SLSI_MLME, "VIF TYPE ndev_vif->vif_type : %d\n",
+			  ndev_sta_vif->vif_type);
+		if (!ndev_sta_vif->sta.sta_bss) {
+			SLSI_ERR(sdev, "slsi_mlme_disconnect failed, sta_bss is not available\n");
+			SLSI_MUTEX_UNLOCK(ndev_sta_vif->vif_mutex);
+			return 0;
+		}
+
+		ndev_vif->sta.vif_status = SLSI_VIF_STATUS_DISCONNECTING;
+		netif_carrier_off(sta_dev);
+		r = slsi_mlme_disconnect(sdev, sta_dev, ndev_sta_vif->sta.sta_bss->bssid,
+					 WLAN_REASON_DEAUTH_LEAVING, true);
+		LOG_CONDITIONALLY(r != 0, SLSI_ERR(sdev, "slsi_mlme_disconnect(%pM) failed with %d\n",
+						   ndev_sta_vif->sta.sta_bss->bssid, r));
+
+		r = slsi_handle_disconnect(sdev, sta_dev, ndev_sta_vif->sta.sta_bss->bssid, 0);
+		LOG_CONDITIONALLY(r != 0, SLSI_ERR(sdev,
+						   "slsi_handle_disconnect(%pM) failed with %d\n",
+						   ndev_sta_vif->sta.sta_bss->bssid, r));
+		SLSI_MUTEX_UNLOCK(ndev_sta_vif->vif_mutex);
+		if (r != 0)
+			return -EINVAL;
+#else
+		return slsi_auto_chan_select_scan(sdev, count_channels, channels);
+#endif
+	}
+}
+#endif /*wifi sharing*/
 	return slsi_auto_chan_select_scan(sdev, count_channels, channels);
 }
 
@@ -1968,43 +2047,6 @@ int slsi_fake_mac_write(struct net_device *dev, char *cmd)
 	return status;
 }
 
-static int slsi_sta_ieee80211_mode(struct net_device *dev, u16 current_bss_channel_frequency)
-{
-	struct netdev_vif    *ndev_vif = netdev_priv(dev);
-	struct slsi_peer     *peer;
-	const u8             *ie_data;
-	const u8             *ie;
-	u8                   ie_len;
-	int                  i;
-	int                  supported_rate;
-
-	peer = ndev_vif->peer_sta_record[SLSI_STA_PEER_QUEUESET]; /* connected AP */
-	ie = cfg80211_find_ie(WLAN_EID_VHT_OPERATION, peer->assoc_resp_ie->data, peer->assoc_resp_ie->len);
-	if (ie)
-		return SLSI_80211_MODE_11AC;
-
-	ie = cfg80211_find_ie(WLAN_EID_HT_OPERATION, peer->assoc_resp_ie->data, peer->assoc_resp_ie->len);
-	if (ie)
-		return SLSI_80211_MODE_11N;
-
-	if (current_bss_channel_frequency > 5000)
-		return  SLSI_80211_MODE_11A;
-
-	ie = cfg80211_find_ie(WLAN_EID_SUPP_RATES, peer->assoc_resp_ie->data, peer->assoc_resp_ie->len);
-	if (ie) {
-		ie_len = ie[1];
-		ie_data = &ie[2];
-		for (i = 0; i < ie_len; i++) {
-			supported_rate = ((ie_data[i] & 0x7F) / 2);
-			if (supported_rate > 11)
-				return SLSI_80211_MODE_11G;
-		}
-	} else {
-		return -EINVAL;
-	}
-	return SLSI_80211_MODE_11B;
-}
-
 static char *slsi_get_assoc_status(u16 fw_result_code)
 {
 	char *assoc_status_label = "unspecified_failure";
@@ -2038,154 +2080,54 @@ static char *slsi_get_assoc_status(u16 fw_result_code)
 	return assoc_status_label;
 }
 
-static int slsi_get_bss_info(struct net_device *dev, char *command, int buf_len)
+int slsi_get_sta_info(struct net_device *dev, char *command, int buf_len)
 {
-	struct netdev_vif        *ndev_vif = netdev_priv(dev);
-	struct slsi_dev          *sdev = ndev_vif->sdev;
-	struct slsi_mib_data     mibrsp = { 0, NULL };
-	struct slsi_mib_value    *values = NULL;
-	struct slsi_peer         *peer;
-	u8                       connected_ssid[33]; /* null terminated SSID*/
-	u8                       connected_bssid[6]; /* bssid*/
-	u16                      current_bss_channel_frequency = 0;
-	u16                      current_bss_bandwidth = 0;
-	int                      rssi = 0;
-	u16                      tx_data_rate = 0;
-	int                      mode = 0;
-	int                      current_bss_nss = 0;
-	bool                     ap_mimo_used = 0;
-	int                      passpoint_version = 0;
-	int                      snr = 0;
-	int                      noise_level = 0;
-	u16                      roaming_count = 0;
-	u8                       roaming_akm = 0;
-	int                      len = 0;
-	const u8                 *ie_data, *ie;
-	u8                       ie_len;
-
-	struct slsi_mib_get_entry get_values[] = { { SLSI_PSID_UNIFI_CURRENT_BSS_CHANNEL_FREQUENCY, { 0, 0 } },
-							       { SLSI_PSID_UNIFI_CURRENT_BSS_BANDWIDTH, { 0, 0 } },
-							       { SLSI_PSID_UNIFI_CURRENT_BSS_NSS, {0, 0} },
-							       { SLSI_PSID_UNIFI_AP_MIMO_USED, {0, 0} },
-							       { SLSI_PSID_UNIFI_SNR, {0, 0} },
-							       { SLSI_PSID_UNIFI_RSSI, { 0, 0 } },
-							       { SLSI_PSID_UNIFI_ROAMING_COUNT, {0, 0} },
-							       { SLSI_PSID_UNIFI_TX_DATA_RATE, { 0, 0 } },
-							       { SLSI_PSID_UNIFI_ROAMING_AKM, {0, 0} } };
+	struct netdev_vif   *ndev_vif = netdev_priv(dev);
+	struct slsi_dev      *sdev = ndev_vif->sdev;
+	int                       len;
 
 	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
 
-	if ((!ndev_vif->activated) || (ndev_vif->vif_type != FAPI_VIFTYPE_STATION) ||
-	    (ndev_vif->sta.vif_status != SLSI_VIF_STATUS_CONNECTED)) {
-		SLSI_ERR(sdev, "slsi_get_bss_info: Station not connected. vif.activated:%d, vif.type:%d, vif.bss:%s\n",
-			 ndev_vif->activated, ndev_vif->vif_type, ndev_vif->sta.sta_bss ? "yes" : "no");
+	if ((!ndev_vif->activated) || (ndev_vif->vif_type != FAPI_VIFTYPE_AP)) {
+		SLSI_ERR(sdev, "slsi_get_sta_info: AP is not up.Command not allowed vif.activated:%d, vif.type:%d\n",
+			 ndev_vif->activated, ndev_vif->vif_type);
 		SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
 		return -EINVAL;
 	}
 
-	mibrsp.dataLength = 10 * ARRAY_SIZE(get_values);
-	mibrsp.data = kmalloc(mibrsp.dataLength, GFP_KERNEL);
-	if (!mibrsp.data) {
-		SLSI_ERR(sdev, "Cannot kmalloc %d bytes for interface MIBs\n", mibrsp.dataLength);
-		return -ENOMEM;
-	}
-
-	values = slsi_read_mibs(sdev, dev, get_values, ARRAY_SIZE(get_values), &mibrsp);
-
-	if (!values) {
-		SLSI_NET_DBG1(dev, SLSI_MLME, "mib decode list failed\n");
-		kfree(values);
-		kfree(mibrsp.data);
-		return -EINVAL;
-	}
-
-	/* The Below sequence of reading the BSS Info related Mibs is very important */
-	if (values[0].type != SLSI_MIB_TYPE_NONE) {    /* CURRENT_BSS_CHANNEL_FREQUENCY */
-		WARN_ON(values[0].type != SLSI_MIB_TYPE_UINT);
-		current_bss_channel_frequency = ((values[0].u.uintValue) / 2);
-	}
-
-	if (values[1].type != SLSI_MIB_TYPE_NONE) {    /* CURRENT_BSS_BANDWIDTH */
-		WARN_ON(values[1].type != SLSI_MIB_TYPE_UINT);
-		current_bss_bandwidth = values[1].u.uintValue;
-	}
-
-	if (values[2].type != SLSI_MIB_TYPE_NONE) {    /* CURRENT_BSS_NSS */
-		WARN_ON(values[2].type != SLSI_MIB_TYPE_UINT);
-		current_bss_nss = values[2].u.uintValue;
-	}
-
-	if (values[3].type != SLSI_MIB_TYPE_NONE) {    /* AP_MIMO_USED */
-		WARN_ON(values[3].type != SLSI_MIB_TYPE_BOOL);
-		ap_mimo_used = values[3].u.boolValue;
-	}
-
-	if (values[4].type != SLSI_MIB_TYPE_NONE) {    /* SNR */
-		WARN_ON(values[4].type != SLSI_MIB_TYPE_INT);
-		snr = values[4].u.intValue;
-	}
-
-	if (values[5].type != SLSI_MIB_TYPE_NONE) {    /* RSSI */
-		WARN_ON(values[5].type != SLSI_MIB_TYPE_INT);
-		rssi = values[5].u.intValue;
-	}
-
-	if (values[6].type != SLSI_MIB_TYPE_NONE) {    /* ROAMING_COUNT */
-		WARN_ON(values[6].type != SLSI_MIB_TYPE_UINT);
-		roaming_count = values[6].u.uintValue;
-	}
-
-	if (values[7].type != SLSI_MIB_TYPE_NONE) {    /* TX_DATA_RATE */
-		WARN_ON(values[7].type != SLSI_MIB_TYPE_UINT);
-		tx_data_rate = values[7].u.uintValue;
-		peer = ndev_vif->peer_sta_record[SLSI_STA_PEER_QUEUESET]; /* connected AP */
-		slsi_mlme_fw_tx_rate_calc(tx_data_rate, &peer->sinfo.txrate);
-		tx_data_rate = (&peer->sinfo.txrate)->legacy;
-	}
-
-	if (values[8].type != SLSI_MIB_TYPE_NONE) {    /* ROAMING_AKM */
-		WARN_ON(values[8].type != SLSI_MIB_TYPE_UINT);
-		roaming_akm = values[8].u.uintValue;
-	}
-
-	kfree(values);
-	kfree(mibrsp.data);
-	SLSI_ETHER_COPY(connected_bssid, ndev_vif->sta.sta_bss->bssid);
-
-	ie = cfg80211_find_ie(WLAN_EID_SSID, ndev_vif->sta.sta_bss->ies->data,
-			      ndev_vif->sta.sta_bss->ies->len);
-	if (ie) {
-		ie_len = ie[1];
-		ie_data = &ie[2];
-		memcpy(connected_ssid, ie_data, ie_len);
-		connected_ssid[ie_len] = 0;
-	} else {
-		SLSI_ERR(sdev, "slsi_get_bss_info : SSID is null");
-		return -EINVAL;
-	}
-
-	mode = slsi_sta_ieee80211_mode(dev, current_bss_channel_frequency);
-	if (mode == -EINVAL) {
-		SLSI_ERR(sdev, "slsi_get_bss_info : Supported Rates IE is null");
-		return -EINVAL;
-	}
-
-	ie = cfg80211_find_vendor_ie(WLAN_OUI_WFA, SLSI_WLAN_OUI_TYPE_WFA_HS20_IND,
-				     ndev_vif->sta.sta_bss->ies->data, ndev_vif->sta.sta_bss->ies->len);
-	if (ie) {
-		if ((ie[6] >> 4) == 0)
-			passpoint_version = 1;
-		else
-			passpoint_version = 2;
-	}
+	len = snprintf(command, buf_len, "wl_get_sta_info : %02x%02x%02x %u %d %d %d %d %d %d %u ",
+		       ndev_vif->ap.last_disconnected_sta.address[0], ndev_vif->ap.last_disconnected_sta.address[1],
+		       ndev_vif->ap.last_disconnected_sta.address[2], ndev_vif->ap.channel_freq,
+		       ndev_vif->ap.last_disconnected_sta.bandwidth, ndev_vif->ap.last_disconnected_sta.rssi,
+		       ndev_vif->ap.last_disconnected_sta.tx_data_rate, ndev_vif->ap.last_disconnected_sta.mode,
+		       ndev_vif->ap.last_disconnected_sta.antenna_mode,
+		       ndev_vif->ap.last_disconnected_sta.mimo_used, ndev_vif->ap.last_disconnected_sta.reason);
 
 	SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
-	noise_level = (rssi - snr);
 
-	len = snprintf(command, buf_len, "wl_get_bss_info : %02x%02x%02x %s %u %u %d %u %u %u %u %u %d %d %u %u",
-		       connected_bssid[0], connected_bssid[1], connected_bssid[2], connected_ssid,
-		       current_bss_channel_frequency, current_bss_bandwidth, rssi, tx_data_rate, mode, current_bss_nss,
-		       ap_mimo_used, passpoint_version, snr, noise_level, roaming_akm, roaming_count);
+	return len;
+}
+
+static int slsi_get_bss_info(struct net_device *dev, char *command, int buf_len)
+{
+	struct netdev_vif        *ndev_vif = netdev_priv(dev);
+	int len = 0;
+
+	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
+
+	len = snprintf(command, buf_len, "%02x:%02x:%02x %u %u %d %u %u %u %u %u %d %d %u %u %u %u",
+		       ndev_vif->sta.last_connected_bss.address[0],  ndev_vif->sta.last_connected_bss.address[1],
+		       ndev_vif->sta.last_connected_bss.address[2],
+		       ndev_vif->sta.last_connected_bss.channel_freq, ndev_vif->sta.last_connected_bss.bandwidth,
+		       ndev_vif->sta.last_connected_bss.rssi, ndev_vif->sta.last_connected_bss.tx_data_rate,
+		       ndev_vif->sta.last_connected_bss.mode, ndev_vif->sta.last_connected_bss.antenna_mode,
+		       ndev_vif->sta.last_connected_bss.mimo_used,
+		       ndev_vif->sta.last_connected_bss.passpoint_version, ndev_vif->sta.last_connected_bss.snr,
+		       ndev_vif->sta.last_connected_bss.noise_level, ndev_vif->sta.last_connected_bss.roaming_akm,
+		       ndev_vif->sta.last_connected_bss.roaming_count, ndev_vif->sta.last_connected_bss.kv,
+		       ndev_vif->sta.last_connected_bss.kvie);
+
+	SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
 
 	return len;
 }
@@ -2207,7 +2149,7 @@ int slsi_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 #define MAX_LEN_PRIV_COMMAND    4096 /*This value is the max reply size set in supplicant*/
 	struct android_wifi_priv_cmd priv_cmd;
 	int                          ret = 0;
-	u8                        *command = NULL;
+	u8                           *command = NULL;
 
 	if (!dev) {
 		ret = -ENODEV;
@@ -2257,6 +2199,16 @@ int slsi_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 		int filter_num = *(command + strlen(CMD_RXFILTERREMOVE) + 1) - '0';
 
 		ret = slsi_rx_filter_num_write(dev, 0, filter_num);
+#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+	} else if (strncasecmp(command, CMD_INTERFACE_CREATE, strlen(CMD_INTERFACE_CREATE)) == 0) {
+		char *intf_name = command + strlen(CMD_INTERFACE_CREATE) + 1;
+
+		ret = slsi_create_interface(dev, intf_name);
+	} else if (strncasecmp(command, CMD_INTERFACE_DELETE, strlen(CMD_INTERFACE_DELETE)) == 0) {
+		char *intf_name = command + strlen(CMD_INTERFACE_DELETE) + 1;
+
+		ret = slsi_delete_interface(dev, intf_name);
+#endif
 	} else if (strncasecmp(command, CMD_SETCOUNTRYREV, strlen(CMD_SETCOUNTRYREV)) == 0) {
 		char *country_code = command + strlen(CMD_SETCOUNTRYREV) + 1;
 
@@ -2433,19 +2385,23 @@ int slsi_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 		ret = slsi_fake_mac_write(dev, command + strlen(CMD_FAKEMAC) + 1);
 	} else if (strncasecmp(command, CMD_GETBSSINFO, strlen(CMD_GETBSSINFO)) == 0) {
 		ret = slsi_get_bss_info(dev, priv_cmd.buf, priv_cmd.total_len);
+	} else if (strncasecmp(command, CMD_GETSTAINFO, strlen(CMD_GETSTAINFO)) == 0) {
+		ret = slsi_get_sta_info(dev, priv_cmd.buf, priv_cmd.total_len);
 	} else if (strncasecmp(command, CMD_GETASSOCREJECTINFO, strlen(CMD_GETASSOCREJECTINFO)) == 0) {
 		ret = slsi_get_assoc_reject_info(dev, priv_cmd.buf, priv_cmd.total_len);
 	} else if ((strncasecmp(command, CMD_RXFILTERSTART, strlen(CMD_RXFILTERSTART)) == 0) ||
 			(strncasecmp(command, CMD_RXFILTERSTOP, strlen(CMD_RXFILTERSTOP)) == 0) ||
-			(strncasecmp(command, CMD_AMPDU_MPDU, strlen(CMD_AMPDU_MPDU)) == 0) ||
 			(strncasecmp(command, CMD_BTCOEXMODE, strlen(CMD_BTCOEXMODE)) == 0) ||
 			(strncasecmp(command, CMD_BTCOEXSCAN_START, strlen(CMD_BTCOEXSCAN_START)) == 0) ||
 			(strncasecmp(command, CMD_BTCOEXSCAN_STOP, strlen(CMD_BTCOEXSCAN_STOP)) == 0) ||
+			(strncasecmp(command, CMD_MIRACAST, strlen(CMD_MIRACAST)) == 0)) {
+		SLSI_NET_DBG3(dev, SLSI_CFG80211, "known command %s - returning success for VTS\n", command);
+		ret = 0;
+	} else if ((strncasecmp(command, CMD_AMPDU_MPDU, strlen(CMD_AMPDU_MPDU)) == 0) ||
 			(strncasecmp(command, CMD_CHANGE_RL, strlen(CMD_CHANGE_RL)) == 0) ||
 			(strncasecmp(command, CMD_INTERFACE_CREATE, strlen(CMD_INTERFACE_CREATE)) == 0) ||
 			(strncasecmp(command, CMD_INTERFACE_DELETE, strlen(CMD_INTERFACE_DELETE)) == 0) ||
 			(strncasecmp(command, CMD_LTECOEX, strlen(CMD_LTECOEX)) == 0) ||
-			(strncasecmp(command, CMD_MIRACAST, strlen(CMD_MIRACAST)) == 0) ||
 			(strncasecmp(command, CMD_RESTORE_RL, strlen(CMD_RESTORE_RL)) == 0) ||
 			(strncasecmp(command, CMD_RPSMODE, strlen(CMD_RPSMODE)) == 0) ||
 			(strncasecmp(command, CMD_SETCCXMODE, strlen(CMD_SETCCXMODE)) == 0) ||
@@ -2461,7 +2417,7 @@ int slsi_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 #endif
 #endif
 	} else {
-		SLSI_NET_ERR(dev, "Not Supported : %.*s\n", priv_cmd.total_len, priv_cmd.buf);
+		SLSI_NET_ERR(dev, "Not Supported : %.*s\n", priv_cmd.total_len, command);
 		ret  = -ENOTSUPP;
 	}
 

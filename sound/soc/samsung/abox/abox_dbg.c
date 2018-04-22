@@ -200,6 +200,7 @@ void abox_dbg_dump_mem(struct device *dev, struct abox_data *data,
 
 		p_dump->time = sched_clock();
 		strncpy(p_dump->reason, reason, sizeof(p_dump->reason) - 1);
+		memcpy_fromio(p_dump->sram, data->sram_base, data->sram_size);
 		memcpy_fromio(p_dump->sfr, data->sfr_base, sizeof(p_dump->sfr));
 		memcpy_fromio(p_dump->sfr_gic_gicd, gic_data->gicd_base,
 				sizeof(p_dump->sfr_gic_gicd));

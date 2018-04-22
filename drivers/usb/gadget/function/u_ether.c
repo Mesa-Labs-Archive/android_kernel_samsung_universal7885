@@ -1523,7 +1523,7 @@ fail0:
 	return dev->net;
 }
 
-EXPORT_SYMBOL_GPL(gether_alloc_requset);
+EXPORT_SYMBOL_GPL(gether_alloc_request);
 /* gether_alloc_request - get usb request queue */
 int gether_alloc_request(struct gether *link)
 {
@@ -1543,7 +1543,7 @@ int gether_alloc_request(struct gether *link)
 	return result;
 }
 
-EXPORT_SYMBOL_GPL(gether_free_requset);
+EXPORT_SYMBOL_GPL(gether_free_request);
 void gether_free_request(struct gether *link)
 {
 	struct eth_dev		*dev = link->ioport;

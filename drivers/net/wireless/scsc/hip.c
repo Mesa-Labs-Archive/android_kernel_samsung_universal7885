@@ -215,6 +215,22 @@ int slsi_hip_start(struct slsi_dev *sdev)
 int slsi_hip_rx(struct slsi_dev *sdev, struct sk_buff *skb)
 {
 	u16 pid;
+#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+	int vif;
+	struct net_device *ap_dev;
+	struct netdev_vif *ndev_ap_vif;
+
+	vif = fapi_get_vif(skb);
+	ap_dev = sdev->netdev[SLSI_NET_INDEX_SWLAN];
+	if (ap_dev) {
+		ndev_ap_vif = netdev_priv(ap_dev);
+		if (ndev_ap_vif->is_available) {
+			/*firmware doesn't support vif index 4, so using P2PX for firmware interactions*/
+			if (vif == SLSI_NET_INDEX_P2PX)
+				fapi_set_vif(skb, SLSI_NET_INDEX_SWLAN);
+		}
+	}
+#endif
 
 	/* We enforce that all the SAPs are registered at this point */
 	if ((!hip_sap_cont.sap[SAP_MLME]) || (!hip_sap_cont.sap[SAP_MA]) ||

@@ -2615,29 +2615,29 @@ struct hmp_global_attr {
 #ifdef CONFIG_HMP_FREQUENCY_INVARIANT_SCALE
 #ifdef CONFIG_SCHED_HMP_TASK_BASED_SOFTLANDING
 #ifdef CONFIG_SCHED_HMP_SELECTIVE_BOOST_WITH_NITP
-#define HMP_DATA_SYSFS_MAX 21
+#define HMP_DATA_SYSFS_MAX 23
 #else
-#define HMP_DATA_SYSFS_MAX 20
+#define HMP_DATA_SYSFS_MAX 22
 #endif
 #else
 #ifdef CONFIG_SCHED_HMP_SELECTIVE_BOOST_WITH_NITP
-#define HMP_DATA_SYSFS_MAX 15
+#define HMP_DATA_SYSFS_MAX 17
 #else
-#define HMP_DATA_SYSFS_MAX 14
+#define HMP_DATA_SYSFS_MAX 16
 #endif
 #endif
 #else
 #ifdef CONFIG_SCHED_HMP_TASK_BASED_SOFTLANDING
 #ifdef CONFIG_SCHED_HMP_SELECTIVE_BOOST_WITH_NITP
-#define HMP_DATA_SYSFS_MAX 20
+#define HMP_DATA_SYSFS_MAX 22
 #else
-#define HMP_DATA_SYSFS_MAX 19
+#define HMP_DATA_SYSFS_MAX 21
 #endif
 #else
 #ifdef CONFIG_SCHED_HMP_SELECTIVE_BOOST_WITH_NITP
-#define HMP_DATA_SYSFS_MAX 14
+#define HMP_DATA_SYSFS_MAX 16
 #else
-#define HMP_DATA_SYSFS_MAX 13
+#define HMP_DATA_SYSFS_MAX 15
 #endif
 #endif
 #endif
@@ -2743,6 +2743,9 @@ unsigned int hmp_down_threshold = 256;
 
 unsigned int hmp_semiboost_up_threshold = 400;
 unsigned int hmp_semiboost_down_threshold = 150;
+
+unsigned int hmp_packing_enabled = 1;
+unsigned int hmp_packing_threshold = 460;	/* 45% of the NICE_0_LOAD */
 
 #ifdef CONFIG_SCHED_HMP_TASK_BASED_SOFTLANDING
 #include <linux/pm_qos.h>
@@ -6026,6 +6029,24 @@ int set_hmp_boostpulse(int duration)
 
 	return 0;
 }
+/* packing value must be non-negative */
+static int hmp_packing_enable_from_sysfs(int value)
+{
+	if (value < 0 || value > 1)
+		return -1;
+
+	hmp_packing_enabled = value;
+	return value;
+}
+
+static int hmp_packing_threshold_from_sysfs(int value)
+{
+	if (value < 0 || value > 1023)
+		return -1;
+
+	hmp_packing_threshold = value;
+	return value;
+}
 
 int set_active_down_migration(int enable)
 {
@@ -6209,6 +6230,15 @@ static int hmp_attr_init(void)
 		NULL,
 		hmp_tbsoftlanding_threshold_sysfs);
 #endif
+
+	hmp_attr_add("packing_enable",
+		&hmp_packing_enabled,
+		NULL,
+		hmp_packing_enable_from_sysfs);
+	hmp_attr_add("packing_threshold",
+		&hmp_packing_threshold,
+		NULL,
+		hmp_packing_threshold_from_sysfs);
 
 #ifdef CONFIG_HMP_FREQUENCY_INVARIANT_SCALE
 	/* default frequency-invariant scaling ON */
@@ -6425,6 +6455,35 @@ static int hmp_is_family_in_fastest_domain(struct task_struct *p)
 	}
 	return 0;
 }
+
+static inline unsigned int hmp_best_little_cpu(struct task_struct *tsk,
+		int cpu) {
+	int lowest_cpu;
+	int lowest_ratio;
+	struct hmp_domain *hmp;
+	struct cpumask allowed_hmp_cpus;
+
+	if (hmp_cpu_is_slowest(cpu))
+		hmp = hmp_cpu_domain(cpu);
+	else
+		hmp = hmp_slower_domain(cpu);
+
+#ifdef CONFIG_SCHED_SKIP_CORE_SELECTION_MASK
+	cpumask_xor(&allowed_hmp_cpus, &hmp->cpus,
+			&hmp->cpumask_skip);
+#else
+	cpumask_copy(&allowed_hmp_cpus, &hmp->cpus);
+#endif
+	cpumask_and(&allowed_hmp_cpus, &allowed_hmp_cpus,
+			tsk_cpus_allowed(tsk));
+
+	lowest_ratio = hmp_domain_min_load(hmp, &lowest_cpu,
+			&allowed_hmp_cpus);
+	if (lowest_ratio < hmp_packing_threshold)
+		return lowest_cpu;
+
+	return hmp_select_slower_cpu(tsk, cpu);
+}
 #else
 int set_hmp_boost(int enable)
 {
@@ -6639,7 +6698,7 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int sd_flag, int wake_f
 	}
 #endif
 	if (hmp_down_migration(prev_cpu, &p->se)) {
-		new_cpu = hmp_select_slower_cpu(p, prev_cpu);
+		new_cpu = hmp_best_little_cpu(p, prev_cpu);
 		/*
 		 * we might have no suitable CPU
 		 * in which case new_cpu == NR_CPUS
@@ -6647,6 +6706,11 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int sd_flag, int wake_f
 		if (new_cpu < NR_CPUS && new_cpu != prev_cpu) {
 			hmp_next_down_delay(&p->se, new_cpu);
 #ifdef CONFIG_SCHED_HMP_TASK_BASED_SOFTLANDING
+			if (hmp_cpu_is_slowest(prev_cpu) && hmp_cpu_is_slowest(new_cpu)) {
+				trace_sched_hmp_migrate(p, new_cpu, HMP_MIGRATE_WAKEUP);
+				return new_cpu;
+			}
+
 			/*
 			 * if load_avg_ratio is higher than hmp_tbsoftlanding.threshold,
 			 * request pm_qos to slower domain for performance compensation
@@ -9165,15 +9229,37 @@ static struct {
 
 static inline int find_new_ilb(int call_cpu)
 {
-	int ilb = cpumask_first(nohz.idle_cpus_mask);
 #ifdef CONFIG_SCHED_HMP
-	/* restrict nohz balancing to occur in the same hmp domain */
-	ilb = cpumask_first_and(nohz.idle_cpus_mask,
-			&((struct hmp_domain *)hmp_cpu_domain(call_cpu))->cpus);
+	int lowest_cpu;
+	int lowest_ratio;
+	struct hmp_domain *hmp;
+	struct cpumask allowed_hmp_cpus;
+	int ilb = cpumask_first(nohz.idle_cpus_mask);
+
+	if (hmp_cpu_is_slowest(call_cpu))
+		hmp = hmp_slower_domain(call_cpu);
+	else
+		hmp = hmp_cpu_domain(call_cpu);
+
+	cpumask_copy(&allowed_hmp_cpus, &hmp->cpus);
+#ifdef CONFIG_SCHED_SKIP_CORE_SELECTION_MASK
+	cpumask_xor(&allowed_hmp_cpus, &hmp->cpus,
+			&hmp->cpumask_skip);
+
 #endif
+	lowest_ratio = hmp_domain_min_load(hmp, &lowest_cpu,
+			&allowed_hmp_cpus);
+	if (lowest_ratio < hmp_packing_threshold) {
+		ilb = cpumask_first_and(nohz.idle_cpus_mask, &allowed_hmp_cpus);
+	} else {
+		/* restrict nohz balancing to occur in the same hmp domain */
+		ilb = cpumask_first_and(nohz.idle_cpus_mask,
+				&((struct hmp_domain *)hmp_cpu_domain(call_cpu))->cpus);
+	}
+
 	if (ilb < nr_cpu_ids && idle_cpu(ilb))
 		return ilb;
-
+#endif
 	return nr_cpu_ids;
 }
 
@@ -9650,7 +9736,7 @@ static unsigned int hmp_up_migration(int cpu, int *target_cpu, struct sched_enti
 		hp_event_update(se);
 
 	/* hmp_domain_min_load only returns 0 for an
-	 * idle CPU.
+	 * idle CPU or 1023 for any partly-busy one.
 	 * Be explicit about requirement for an idle CPU.
 	 * return value is weighted_cpuload (runnable_load_avg of cfs_rq
 	 */
@@ -9680,8 +9766,12 @@ static unsigned int hmp_down_migration(int cpu, struct sched_entity *se)
 	struct task_struct *p = task_of(se);
 	u64 now;
 
-	if (hmp_cpu_is_slowest(cpu))
-		return 0;
+	if (hmp_cpu_is_slowest(cpu)) {
+		if (hmp_packing_enabled)
+			return 1;
+		else
+			return 0;
+	}
 
 	/* Let the task load settle before doing another down migration */
 	now = cpu_rq(cpu)->clock_task;

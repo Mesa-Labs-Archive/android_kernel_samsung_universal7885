@@ -737,7 +737,7 @@ struct scsc_ring_buffer *scsc_ring_get_snapshot(const struct scsc_ring_buffer *r
 		snap_rb->wraps = rb->wraps;
 		/* this is related to reads so must be re-init */
 		snap_rb->oos = 0;
-		strncpy(snap_rb->name, snap_name, RNAME_SZ);
+		strncpy(snap_rb->name, snap_name, RNAME_SZ - 1);
 		/* Link the copies */
 		snap_rb->buf = snap_buf;
 		snap_rb->spare = snap_rb->buf + snap_rb->bsz;

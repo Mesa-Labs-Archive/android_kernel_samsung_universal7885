@@ -250,14 +250,17 @@ static s32 fat_free_cluster(struct super_block *sb, CHAIN_T *p_chain, s32 do_rel
 		}
 
 		prev = clu;
-		if (get_next_clus(sb, &clu))
-			goto out;
-
-		/* FAT validity check */
-		if (IS_CLUS_FREE(clu)) {
-			/* GRACEFUL ERROR HANDLING */
-			/* Broken FAT chain (Already FREE) */
-			sdfat_fs_error(sb, "%s : deleting FAT entry beyond EOF (clu[%u]->0)", __func__, prev);
+		if (get_next_clus_safe(sb, &clu)) {
+			/* print more helpful log */
+			if (IS_CLUS_BAD(clu)) {
+				sdfat_log_msg(sb, KERN_ERR, "%s : "
+					"deleting bad cluster (clu[%u]->BAD)",
+					__func__, prev);
+			} else if (IS_CLUS_FREE(clu)) {
+				sdfat_log_msg(sb, KERN_ERR, "%s : "
+					"deleting free cluster (clu[%u]->FREE)",
+					__func__, prev);
+			}
 			goto out;
 		}
 

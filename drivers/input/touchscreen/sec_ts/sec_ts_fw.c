@@ -799,8 +799,8 @@ int sec_ts_firmware_update_on_probe(struct sec_ts_data *ts, bool force_update)
 	}
 #ifdef TCLM_CONCEPT
 	else {	/* firmup case */
-		ts->tdata->tune_fix_ver = ts->tdata->tclm_read(ts->tdata->client, SEC_TCLM_NVM_OFFSET_IC_FIRMWARE_VER);
-		input_info(true, &ts->client->dev, "%s: tune_fix_ver [%04X] afe_base [%04X]\n",
+		ts->tdata->tune_fix_ver = ts->tdata->tclm_read(ts->tdata->client, SEC_TCLM_NVM_OFFSET_TUNE_VERSION);
+		input_info(true, &ts->client->dev, "%s: tune_fix_ver [01%02X] afe_base [01%02X]\n",
 			__func__, ts->tdata->tune_fix_ver, ts->tdata->afe_base);
 
 		if ((ts->tdata->afe_base > ts->tdata->tune_fix_ver) && (ts->tdata->tclm_level > TCLM_LEVEL_CLEAR_NV)) {

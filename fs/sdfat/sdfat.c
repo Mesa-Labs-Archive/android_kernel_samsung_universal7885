@@ -199,6 +199,19 @@ static inline unsigned long __sdfat_init_name_hash(const struct dentry *unused)
 }
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 21)
+	/* EMPTY */
+#else /* LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 21) */
+static inline void inode_lock(struct inode *inode)
+{
+	mutex_lock(&inode->i_mutex);
+}
+
+static inline void inode_unlock(struct inode *inode)
+{
+	mutex_unlock(&inode->i_mutex);
+}
+#endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
 static void sdfat_writepage_end_io(struct bio *bio)
@@ -1362,7 +1375,7 @@ static void defrag_cleanup_reqs(INOUT struct super_block *sb, IN int error)
  * @return	0 on success, -errno otherwise
  * @param	inode	inode
  * @param	chunk	given chunk
- * @remark	protected by i_mutex and super_lock
+ * @remark	protected by inode_lock and super_lock
  */
 static int
 defrag_validate_pages(
@@ -1523,9 +1536,9 @@ defrag_validate_reqs(
 			i, inode, chunk->i_pos, chunk->f_clus, chunk->d_clus,
 			chunk->nr_clus, chunk->prev_clus, chunk->next_clus);
 		/**
-		 * Lock ordering: i_mutex -> lock_super
+		 * Lock ordering: inode_lock -> lock_super
 		 */
-		mutex_lock(&inode->i_mutex);
+		inode_lock(inode);
 		__lock_super(sb);
 
 		/* Check if enough buffers exist for chunk->new_idx */
@@ -1591,7 +1604,7 @@ unlock:
 		}
 		iput(inode);
 		__unlock_super(sb);
-		mutex_unlock(&inode->i_mutex);
+		inode_unlock(inode);
 	}
 
 	/* Return error if all chunks are invalid */
@@ -1696,7 +1709,7 @@ sdfat_ioctl_defrag_req(
 
 	dfr_debug("IOC_DFR_REQ started (mode %d, nr_req %d)", head.mode, len - 1);
 	if (get_order(len * sizeof(struct defrag_chunk_info)) > MAX_ORDER) {
-		dfr_debug("len %d, sizeof(struct defrag_chunk_info) %d, MAX_ORDER %d",
+		dfr_debug("len %u, sizeof(struct defrag_chunk_info) %lu, MAX_ORDER %d",
 				len, sizeof(struct defrag_chunk_info), MAX_ORDER);
 		err = -EINVAL;
 		goto error;
@@ -1855,11 +1868,11 @@ sdfat_ioctl_defrag_trav(
 	}
 
 	/* Scan given directory and gather info */
-	mutex_lock(&inode->i_mutex);
+	inode_lock(inode);
 	__lock_super(sb);
 	err = fsapi_dfr_scan_dir(sb, (void *)args);
 	__unlock_super(sb);
-	mutex_unlock(&inode->i_mutex);
+	inode_unlock(inode);
 	ERR_HANDLE(err);
 
 	/* Copy the result to user */

@@ -166,7 +166,7 @@ fw-shipped-$(CONFIG_KEYBOARD_TC300K) += coreriver/tc305k_j7topelte.fw coreriver/
 fw-shipped-$(CONFIG_SENSORS_SSP_STM32) += ssp_stmf410_a2018.fw
 fw-shipped-$(CONFIG_SENSORS_SSP_STM32) += ssp_crashed.fw
 
-fw-shipped-$(CONFIG_KEYBOARD_ABOV_TOUCH_3X6) += abov/a96t326_a5y18.fw abov/a96t326_a7y18.fw
+fw-shipped-$(CONFIG_KEYBOARD_ABOV_TOUCH_3X6) += abov/a96t326_a5y18.fw abov/a96t326_a5y18_can.fw abov/a96t326_a7y18.fw
 
 fw-shipped-all := $(fw-shipped-y) $(fw-shipped-m) $(fw-shipped-)
 

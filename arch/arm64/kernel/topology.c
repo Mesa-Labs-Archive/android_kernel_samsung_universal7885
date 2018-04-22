@@ -468,6 +468,11 @@ struct cpumask hmp_fast_cpu_mask;
 void __init arch_get_hmp_domains(struct list_head *hmp_domains_list)
 {
 	struct hmp_domain *domain;
+#ifdef CONFIG_SCHED_SKIP_CORE_SELECTION_MASK
+	struct device_node *cpu_node;
+	unsigned int sched_skip;
+	int ret, cpu_num;
+#endif
 
 	arch_get_fast_and_slow_cpus(&hmp_fast_cpu_mask, &hmp_slow_cpu_mask);
 
@@ -481,12 +486,32 @@ void __init arch_get_hmp_domains(struct list_head *hmp_domains_list)
 			kmalloc(sizeof(struct hmp_domain), GFP_KERNEL);
 		cpumask_copy(&domain->possible_cpus, &hmp_slow_cpu_mask);
 		cpumask_and(&domain->cpus, cpu_online_mask, &domain->possible_cpus);
+#ifdef CONFIG_SCHED_SKIP_CORE_SELECTION_MASK
+		cpu_num = 0;
+		cpumask_clear(&domain->cpumask_skip);
+		for_each_node_by_type(cpu_node, "cpu") {
+			ret = of_property_read_u32(cpu_node, "sched_skip", &sched_skip);
+			if (!ret)
+				cpumask_set_cpu(cpu_num, &domain->cpumask_skip);
+			cpu_num++;
+		}
+#endif
 		list_add(&domain->hmp_domains, hmp_domains_list);
 	}
 	domain = (struct hmp_domain *)
 		kmalloc(sizeof(struct hmp_domain), GFP_KERNEL);
 	cpumask_copy(&domain->possible_cpus, &hmp_fast_cpu_mask);
 	cpumask_and(&domain->cpus, cpu_online_mask, &domain->possible_cpus);
+#ifdef CONFIG_SCHED_SKIP_CORE_SELECTION_MASK
+		cpu_num = 0;
+		cpumask_clear(&domain->cpumask_skip);
+		for_each_node_by_type(cpu_node, "cpu") {
+			ret = of_property_read_u32(cpu_node, "sched_skip", &sched_skip);
+			if (!ret)
+				cpumask_set_cpu(cpu_num, &domain->cpumask_skip);
+			cpu_num++;
+		}
+#endif
 	list_add(&domain->hmp_domains, hmp_domains_list);
 }
 #endif /* CONFIG_SCHED_HMP */

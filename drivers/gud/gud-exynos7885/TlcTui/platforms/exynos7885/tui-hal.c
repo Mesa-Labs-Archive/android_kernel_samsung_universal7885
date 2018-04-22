@@ -33,6 +33,11 @@
 #include "tlcTui.h"
 #include "tui-hal.h"
 
+#if defined(CONFIG_TOUCHSCREEN_SEC_TS)
+extern void trustedui_mode_on(void);
+extern void trustedui_mode_off(void);
+#endif
+
 /* I2C register for reset */
 #define HSI2C7_PA_BASE_ADDRESS	0x14E10000
 #define HSI2C_CTL		0x00
@@ -58,7 +63,7 @@ extern int decon_lpd_block_exit(struct decon_device *decon);
 
 #ifdef CONFIG_TRUSTED_UI_TOUCH_ENABLE
 static int tsp_irq_num = 718; // default value
-/*
+
 static void tui_delay(unsigned int ms)
 {
 	if (ms < 20)
@@ -66,7 +71,7 @@ static void tui_delay(unsigned int ms)
 	else
 		msleep(ms);
 }
-*/
+
 void trustedui_set_tsp_irq(int irq_num)
 {
 	tsp_irq_num = irq_num;
@@ -363,9 +368,17 @@ uint32_t hal_tui_deactivate(void)
 
 	//switch_set_state(&tui_switch, TRUSTEDUI_MODE_VIDEO_SECURED);
 	pr_info(KERN_ERR "Disable touch!\n");
-	//disable_irq(tsp_irq_num);
+	disable_irq(tsp_irq_num);
 
 	//pr_info(KERN_ERR "tsp_irq_num =%d\n",tsp_irq_num);
+
+#if defined(CONFIG_TOUCHSCREEN_SEC_TS)
+	tui_delay(5);
+	trustedui_mode_on();
+	tui_delay(95);
+#else
+	tui_delay(1);
+#endif
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI_FB_BLANK
 	pr_info(KERN_ERR "blanking!\n");
@@ -378,7 +391,15 @@ uint32_t hal_tui_deactivate(void)
 
 		//TSP enable
 		//switch_set_state(&tui_switch, TRUSTEDUI_MODE_OFF);
-		//enable_irq(tsp_irq_num);
+		enable_irq(tsp_irq_num);
+
+#if defined(CONFIG_TOUCHSCREEN_SEC_TS)
+		tui_delay(5);
+		trustedui_mode_off();
+		tui_delay(95);
+#else
+		tui_delay(1);
+#endif
 
 		/* Clear linux TUI flag */
 		trustedui_set_mode(TRUSTEDUI_MODE_OFF);
@@ -416,13 +437,20 @@ uint32_t hal_tui_activate(void)
 	}
 #endif
 
+#if defined(CONFIG_TOUCHSCREEN_SEC_TS)
+	tui_delay(5);
+	trustedui_mode_off();
+	tui_delay(95);
+#else
+	tui_delay(1);
+#endif
 	
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI_FB_BLANK
-		pr_info("Unsetting TUI flag (blank counter=%d)", trustedui_blank_get_counter());
+	pr_info("Unsetting TUI flag (blank counter=%d)", trustedui_blank_get_counter());
 #endif
 
 	//switch_set_state(&tui_switch, TRUSTEDUI_MODE_OFF);
-	//enable_irq(tsp_irq_num);
+	enable_irq(tsp_irq_num);
 	
 	/* Clear linux TUI flag */
 	trustedui_set_mode(TRUSTEDUI_MODE_OFF);

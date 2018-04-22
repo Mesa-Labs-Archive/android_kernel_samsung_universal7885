@@ -459,6 +459,7 @@ void s2mu004_hv_muic_reset_hvcontrol_reg(struct s2mu004_muic_data *muic_data)
 	muic_data->is_afc_muic_prepare = false;
 	s2mu004_muic_set_afc_ready(muic_data, false);
 
+	cancel_delayed_work(&muic_data->prepare_afc_charger);
 	cancel_delayed_work(&muic_data->afc_send_mpnack);
 	cancel_delayed_work(&muic_data->afc_control_ping_retry);
 	cancel_delayed_work(&muic_data->afc_qc_retry);
@@ -646,6 +647,7 @@ static int s2mu004_hv_muic_handle_attach
 		break;
 	case FUNC_PREPARE_DUPLI_TO_AFC_9V:
 		s2mu004_hv_muic_afc_control_ping(muic_data, false);
+		cancel_delayed_work(&muic_data->afc_control_ping_retry);
 		break;
 	case FUNC_AFC_5V_TO_AFC_5V_DUPLI:
 		/*
@@ -742,9 +744,7 @@ static int s2mu004_hv_muic_handle_attach
 		else
 			pr_info("dummy int called [%d]\n", muic_data->afc_count);
 #else
-		muic_data->afc_count++;
-		if (muic_data->afc_count < AFC_CHARGER_WA_PING)
-			s2mu004_hv_muic_afc_control_ping(muic_data, true);
+		cancel_delayed_work(&muic_data->afc_control_ping_retry);
 #endif
 		break;
 	case FUNC_QC_PREPARE_TO_QC_9V:
@@ -1224,20 +1224,39 @@ void s2mu004_muic_afc_send_mpnack(struct work_struct *work)
 }
 
 /* TA setting in s2mu004-muic.c */
-void s2mu004_muic_prepare_afc_charger(struct s2mu004_muic_data *muic_data)
+void s2mu004_muic_prepare_afc_charger(struct work_struct *work)
 {
+	struct s2mu004_muic_data *muic_data =
+		container_of(work, struct s2mu004_muic_data, prepare_afc_charger.work);
 	struct i2c_client *i2c = muic_data->i2c;
+	u8 reg_val = 0, vdnmon = 0;
+	int i = 0;
 
 	pr_info("%s\n", __func__);
-	msleep(200);
-	s2mu004_write_reg(i2c, 0x49, 0xa0);
+
+	reg_val = (HVCONTROL1_AFCEN_MASK | HVCONTROL1_VBUSADCEN_MASK);
+	s2mu004_write_reg(i2c, S2MU004_REG_AFC_CTRL1, reg_val); 
 
 	/* Set TX DATA */
 	muic_data->tx_data = (HVTXBYTE_9V << 4) | HVTXBYTE_1_65A;
-	s2mu004_write_reg(i2c, S2MU004_REG_TX_BYTE1, 0x46);
-	s2mu004_write_reg(i2c, 0x49, 0xa1);
-	s2mu004_write_reg(i2c, 0x4a, 0x06);
-	s2mu004_muic_set_afc_ready(muic_data, true);
+	s2mu004_write_reg(i2c, S2MU004_REG_TX_BYTE1, muic_data->tx_data);
+
+	reg_val = (HVCONTROL1_AFCEN_MASK | HVCONTROL1_VBUSADCEN_MASK |
+			HVCONTROL1_DPDNVDEN_MASK);
+	s2mu004_write_reg(i2c, S2MU004_REG_AFC_CTRL1, reg_val);
+
+	s2mu004_write_reg(i2c,S2MU004_REG_AFC_CTRL2, HVCONTROL2_DNRESEN_MASK);
+	
+	for (i = 0; i < 10; i++) {
+		msleep(130);
+		s2mu004_read_reg(muic_data->i2c, S2MU004_REG_AFC_STATUS, &vdnmon);
+
+		if ((vdnmon & STATUS_VDNMON_MASK) == VDNMON_LOW) {
+			s2mu004_muic_set_afc_ready(muic_data, true);
+			s2mu004_write_reg(i2c,S2MU004_REG_AFC_CTRL2, HVCONTROL2_DP06EN_MASK);
+			return;
+		}
+	}
 }
 
 /* TA setting in s2mu004-muic.c */
@@ -1500,6 +1519,7 @@ void s2mu004_hv_muic_initialize(struct s2mu004_muic_data *muic_data)
 	INIT_DELAYED_WORK(&muic_data->afc_control_ping_retry, s2mu004_muic_afc_control_ping_retry);
 	INIT_DELAYED_WORK(&muic_data->afc_qc_retry, s2mu004_muic_afc_qc_retry);
 	INIT_DELAYED_WORK(&muic_data->afc_after_prepare, s2mu004_muic_afc_after_prepare);
+	INIT_DELAYED_WORK(&muic_data->prepare_afc_charger, s2mu004_muic_prepare_afc_charger);
 
 	mutex_init(&muic_data->afc_mutex);
 }

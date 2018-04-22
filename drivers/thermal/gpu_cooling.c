@@ -270,7 +270,7 @@ static u32 gpufreq_cooling_get_freq(unsigned int gpu, unsigned long level)
 
 	return val;
 }
-EXPORT_SYMBOL_GPL(gpufreq_cooling_get_level);
+EXPORT_SYMBOL_GPL(gpufreq_cooling_get_freq);
 
 /**
  * build_dyn_power_table() - create a dynamic power to frequency table

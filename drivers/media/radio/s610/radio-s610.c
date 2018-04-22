@@ -710,6 +710,7 @@ int fm_rx_seek(struct s610_radio *radio, u32 seek_upward,
 	unsigned long timeleft;
 	int ret;
 	int	bl_1st, bl_2nd, bl_3nd;
+	static u32 pre_freq = 0;
 
 	FUNC_ENTRY(radio);
 
@@ -748,7 +749,20 @@ int fm_rx_seek(struct s610_radio *radio, u32 seek_upward,
 
 	save_freq = freq_low;
 	radio->seek_freq = save_freq;
-	tune_mode = FM_TUNER_AUTONOMOUS_SEARCH_MODE_NEXT;
+
+	if ((((save_freq == region_configs[radio_region].bot_freq)
+		&& (upward == FM_SEARCH_DIRECTION_UP)) ||
+		((save_freq == region_configs[radio_region].top_freq)
+		&& (upward == FM_SEARCH_DIRECTION_DOWN))) &&
+		(pre_freq != save_freq) &&
+		!wrap_around ){
+		FDEBUG(radio, "YSTEST LINE : %d\n", __LINE__);
+		tune_mode = FM_TUNER_AUTONOMOUS_SEARCH_MODE;
+	}
+	else {
+		tune_mode = FM_TUNER_AUTONOMOUS_SEARCH_MODE_NEXT;
+	}
+	pre_freq = save_freq;
 
 	if (radio->low->fm_state.rssi_limit_search == 0)
 		low_set_search_lvl(radio, (u16)FM_DEFAULT_RSSI_THRESHOLD);
@@ -768,12 +782,16 @@ int fm_rx_seek(struct s610_radio *radio, u32 seek_upward,
 again:
 	curr_frq = freq_low;
 	if ((freq_low == region_configs[radio_region].bot_freq)
-		&& (upward == FM_SEARCH_DIRECTION_DOWN))
+		&& (upward == FM_SEARCH_DIRECTION_DOWN)) {
 		curr_frq = region_configs[radio_region].top_freq;
+		tune_mode = FM_TUNER_AUTONOMOUS_SEARCH_MODE;
+		}
 
 	if ((freq_low == region_configs[radio_region].top_freq)
-		&& (upward == FM_SEARCH_DIRECTION_UP))
+		&& (upward == FM_SEARCH_DIRECTION_UP)) {
 		curr_frq = region_configs[radio_region].bot_freq;
+		tune_mode = FM_TUNER_AUTONOMOUS_SEARCH_MODE;
+	}
 
 	payload = curr_frq;
 	low_set_freq(radio, payload);

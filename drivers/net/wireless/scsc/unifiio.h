@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * Copyright (c) 2012 - 2016 Samsung Electronics Co., Ltd and its Licensors.
+ * Copyright (c) 2012 - 2017 Samsung Electronics Co., Ltd and its Licensors.
  * All rights reserved.
  *
  *****************************************************************************/
@@ -90,8 +90,9 @@ extern "C" {
 #define UNIFI_SET_DEBUG         _IO('u',  0x11)
 #define UNIFI_SET_TRACE         _IO('u',  0x12)
 
-#define UNIFI_GET_INIT_STATUS   _IOR('u', 0x15, int)
-#define UNIFI_SET_UDI_LOG_MASK  _IOR('u',  0x18, struct unifiio_filter_t)
+#define UNIFI_GET_INIT_STATUS		_IOR('u', 0x15, int)
+#define UNIFI_SET_UDI_LOG_CONFIG	_IOR('u',  0x16, struct unifiio_udi_config_t)
+#define UNIFI_SET_UDI_LOG_MASK		_IOR('u',  0x18, struct unifiio_filter_t)
 
 #define UNIFI_INIT_HW           _IOR('u', 0x13, unsigned char)
 #define UNIFI_INIT_NETDEV       _IOW('u', 0x14, unsigned char[6])
@@ -229,6 +230,10 @@ struct udi_msg_t {
 #define UDI_DRV_DROPPED_DATA_FRAMES  0x8012
 #define UDI_DRV_SUSPEND_IND          0x8013
 #define UDI_DRV_RESUME_IND           0x8014
+
+struct unifiio_udi_config_t {
+	uint16_t ma_unitdata_size_limit;       /* if non-zero, the MA_UNITDATA_REQ and MA_UNITDATA_IND are capped by this size */
+};
 
 struct unifiio_filter_t {
 	uint16_t log_listed_flag;       /* if non-zero, log listed sigs and ignore others (otherwise vice versa) */

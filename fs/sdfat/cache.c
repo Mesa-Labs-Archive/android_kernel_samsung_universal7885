@@ -252,8 +252,10 @@ s32 fcache_modify(struct super_block *sb, u32 sec)
 	cache_ent_t *bp;
 
 	bp = __fcache_find(sb, sec);
-	if (!bp)
+	if (!bp) {
+		sdfat_fs_error(sb, "Can`t find fcache (sec 0x%08x)", sec);
 		return -EIO;
+	}
 
 	if (!__mark_delayed_dirty(sb, bp))
 		return 0;
@@ -594,17 +596,17 @@ s32 dcache_modify(struct super_block *sb, u32 sec)
 	set_sb_dirty(sb);
 
 	bp = __dcache_find(sb, sec);
-	if (likely(bp)) {
-#ifdef CONFIG_SDFAT_DELAYED_META_DIRTY
-		FS_INFO_T *fsi = &(SDFAT_SB(sb)->fsi);
-
-		if (fsi->vol_type != EXFAT) {
-			bp->flag |= DIRTYBIT;
-			return 0;
-		}
-#endif
-		ret = write_sect(sb, sec, bp->bh, 0);
+	if (unlikely(!bp)) {
+		sdfat_fs_error(sb, "Can`t find dcache (sec 0x%08x)", sec);
+		return -EIO;
 	}
+#ifdef CONFIG_SDFAT_DELAYED_META_DIRTY
+	if (SDFAT_SB(sb)->fsi.vol_type != EXFAT) {
+		bp->flag |= DIRTYBIT;
+		return 0;
+	}
+#endif
+	ret = write_sect(sb, sec, bp->bh, 0);
 
 	if (ret) {
 		DMSG("%s : failed to modify buffer(err:%d, sec:%u, bp:0x%p)\n",

@@ -1256,10 +1256,10 @@ static void etspi_work_func_debug(struct work_struct *work)
 	if (g_data->ldo_pin)
 		ldo_value = gpio_get_value(g_data->ldo_pin);
 
-	pr_info("%s ldo: %d, sleep: %d, tz: %d, type: %s\n",
+	pr_info("%s ldo: %d, sleep: %d, tz: %d, irq: %d, type: %s\n",
 		__func__,
 		ldo_value, gpio_get_value(g_data->sleepPin),
-		g_data->tz_mode,
+		g_data->tz_mode, g_data->drdy_irq_flag,
 		sensor_status[g_data->sensortype + 1]);
 }
 
@@ -1417,10 +1417,8 @@ static int etspi_probe(struct spi_device *spi)
 			, __func__, etspi->sensortype, retry);
 	} while (!etspi->sensortype && ++retry < 3);
 
-	if (status == -1) {
+	if (status == -1)
 		pr_info("%s type check fail\n" , __func__);
-		goto etspi_type_check_failed;
-	}
 #endif
 
 #if defined(DISABLED_GPIO_PROTECTION)
@@ -1480,9 +1478,6 @@ etspi_register_failed:
 	class_destroy(etspi_class);
 etspi_create_failed:
 	etspi_platformUninit(etspi);
-#ifndef ENABLE_SENSORS_FPRINT_SECURE
-etspi_type_check_failed:
-#endif
 etspi_probe_platformInit_failed:
 etspi_probe_parse_dt_failed:
 	kfree(etspi);

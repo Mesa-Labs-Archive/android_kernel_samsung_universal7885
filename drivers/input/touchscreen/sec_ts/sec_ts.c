@@ -1139,7 +1139,7 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 
 #if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 						input_info(true, &ts->client->dev,
-								"%s[R] tID:%d mc:%d tc:%d lx:%d ly:%d v:%02X%02X cal:%02X(%02X) id(%d,%d) p:%d noise:%x lp:(%x/%d)F%02X%02X D%05X, C%02XT%04X.%4s%s\n",
+								"%s[R] tID:%d mc:%d tc:%d lx:%d ly:%d v:%02X%02X cal:%02X(%02X) id(%d,%d) p:%d noise:%x lp:(%x/%d)F%02X%02X D%05X, C%02XT01%02X.%4s%s\n",
 								ts->dex_name,
 								t_id, ts->coord[t_id].mcount, ts->touch_count,
 								ts->coord[t_id].x, ts->coord[t_id].y,
@@ -1155,7 +1155,7 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 								(ts->tdata->tclm_level == TCLM_LEVEL_LOCKDOWN) ? ".L" : " ");
 #else
 						input_info(true, &ts->client->dev,
-								"%s[R] tID:%d mc:%d tc:%d v:%02X%02X cal:%02X(%02X) id(%d,%d) p:%d noise:%x lp:(%x/%d) F%02X%02X D%05X, C%02XT%04X.%4s%s\n",
+								"%s[R] tID:%d mc:%d tc:%d v:%02X%02X cal:%02X(%02X) id(%d,%d) p:%d noise:%x lp:(%x/%d) F%02X%02X D%05X, C%02XT01%02X.%4s%s\n",
 								ts->dex_name,
 								t_id, ts->coord[t_id].mcount, ts->touch_count,
 								ts->plat_data->img_version_of_ic[2],
@@ -1852,7 +1852,7 @@ static void sec_tclm_parse_dt(struct i2c_client *client, struct sec_tclm_data *t
 		input_err(true, dev, "%s: Failed to get afe_base property\n", __func__);
 	}
 
-	input_err(true, &client->dev, "%s: tclm_level %d, sec_afe_base %d\n", __func__, tdata->tclm_level, tdata->afe_base);
+	input_err(true, &client->dev, "%s: tclm_level %d, sec_afe_base 01%02X\n", __func__, tdata->tclm_level, tdata->afe_base);
 
 }
 
@@ -2436,7 +2436,7 @@ void sec_ts_unlocked_release_all_finger(struct sec_ts_data *ts)
 
 			ts->coord[i].action = SEC_TS_COORDINATE_ACTION_RELEASE;
 			input_info(true, &ts->client->dev,
-					"%s: [RA] tID:%d mc:%d tc:%d v:%02X%02X, id(%d,%d) p:%d, D%05X, C%02XT%04X.%4s%s\n",
+					"%s: [RA] tID:%d mc:%d tc:%d v:%02X%02X, id(%d,%d) p:%d, D%05X, C%02XT01%02X.%4s%s\n",
 					__func__, i, ts->coord[i].mcount, ts->touch_count,
 					ts->plat_data->img_version_of_ic[2],
 					ts->plat_data->img_version_of_ic[3],
@@ -2492,7 +2492,7 @@ void sec_ts_locked_release_all_finger(struct sec_ts_data *ts)
 
 			ts->coord[i].action = SEC_TS_COORDINATE_ACTION_RELEASE;
 			input_info(true, &ts->client->dev,
-					"%s: [RA] tID:%d mc: %d tc:%d, v:%02X%02X, cal:%X(%X) C%02XT%04X.%4s%s id(%d,%d), p:%d, D%05X\n",
+					"%s: [RA] tID:%d mc: %d tc:%d, v:%02X%02X, cal:%X(%X) C%02XT01%02X.%4s%s id(%d,%d), p:%d, D%05X\n",
 					__func__, i, ts->coord[i].mcount, ts->touch_count,
 					ts->plat_data->img_version_of_ic[2],
 					ts->plat_data->img_version_of_ic[3],
@@ -2608,8 +2608,8 @@ static void sec_ts_read_info_work(struct work_struct *work)
 		ret = sec_tclm_get_nvm_all(ts->tdata);
 
 	if (ret) {
-		ts->tdata->tune_fix_ver = ts->tdata->tclm_read(ts->tdata->client, SEC_TCLM_NVM_OFFSET_IC_FIRMWARE_VER);
-		input_info(true, &ts->client->dev, "%s: tune_fix_ver [%04X]\n",
+		ts->tdata->tune_fix_ver = ts->tdata->tclm_read(ts->tdata->client, SEC_TCLM_NVM_OFFSET_TUNE_VERSION);
+		input_info(true, &ts->client->dev, "%s: tune_fix_ver [01%02X]\n",
 			__func__, ts->tdata->tune_fix_ver);
 
 		sec_tclm_position_history(ts->tdata);

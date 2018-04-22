@@ -643,6 +643,13 @@ config SCHED_HMP_SELECTIVE_BOOST_WITH_NITP
 	  of waiting time of important task. The thing is logical boost CPUs 
 	  don't need to be composed of physical big cores.
 
+config SCHED_SKIP_CORE_SELECTION_MASK
+	bool "(EXPERIMENTAL) Skip core selection while scheduling select cores"
+	depends on SCHED_HMP
+	help
+	  Enables skip core selection while scheduling select cores.
+          for Idle pulling, calculation of min_load, job starting cores.
+
 config NR_CPUS
 	int "Maximum number of CPUs (2-4096)"
 	range 2 4096

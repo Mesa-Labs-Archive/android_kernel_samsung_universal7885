@@ -1,6 +1,6 @@
 /*****************************************************************************
  *
- * Copyright (c) 2012 - 2017 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright (c) 2012 - 2018 Samsung Electronics Co., Ltd. All rights reserved
  *
  ****************************************************************************/
 
@@ -52,7 +52,7 @@ MODULE_PARM_DESC(missing_cfm_ind_panic, "Panic on missing confirm or indication 
  * rate units 100kbps
  * This table for single stream Nss=1and does not include 160MHz BW and 80+80MHz BW.
  */
-static const u16 slsi_mlme_vht_rates_table[3][2][10] = {
+static const u16 slsi_rates_table[3][2][10] = {
 	{         /* BW20 */
 		{ /* no SGI */
 			65, 130, 195, 260, 390, 520, 585, 650, 780, 0
@@ -665,19 +665,30 @@ int slsi_mlme_set_ipv6_address(struct slsi_dev *sdev, struct net_device *dev)
 
 	WARN_ON(!SLSI_MUTEX_IS_LOCKED(ndev_vif->vif_mutex));
 
-	slsi_spinlock_lock(&ndev_vif->ipv6addr_lock);
-	memcpy(&solicited_node_addr[3], &ndev_vif->ipv6address.s6_addr[13], 3);
-	slsi_spinlock_unlock(&ndev_vif->ipv6addr_lock);
-
 	req = fapi_alloc(mlme_set_ip_address_req, MLME_SET_IP_ADDRESS_REQ, ndev_vif->ifnum, 16);
 	if (!req)
 		return -ENOMEM;
 
 	fapi_set_u16(req, u.mlme_set_ip_address_req.ip_version, 6);
-	fapi_set_memcpy(req, u.mlme_set_ip_address_req.multicast_address, solicited_node_addr);
-	fapi_append_data(req, ndev_vif->ipv6address.s6_addr, 16);
 
-	SLSI_DBG2(sdev, SLSI_MLME, "mlme_set_ip_address_req(vif: %d, IP: %pI6)\n", ndev_vif->ifnum, &ndev_vif->ipv6address);
+	if (ndev_vif->sta.nd_offload_enabled == 1) {
+		slsi_spinlock_lock(&ndev_vif->ipv6addr_lock);
+		memcpy(&solicited_node_addr[3], &ndev_vif->ipv6address.s6_addr[13], 3);
+		slsi_spinlock_unlock(&ndev_vif->ipv6addr_lock);
+
+		fapi_set_memcpy(req, u.mlme_set_ip_address_req.multicast_address, solicited_node_addr);
+		fapi_append_data(req, ndev_vif->ipv6address.s6_addr, 16);
+		SLSI_DBG2(sdev, SLSI_MLME, "mlme_set_ip_address_req(vif: %d, IP: %pI6)\n", ndev_vif->ifnum,
+			  &ndev_vif->ipv6address);
+	} else {
+		u8  node_addr_nd_disable[16];
+
+		memset(&node_addr_nd_disable, 0, sizeof(node_addr_nd_disable));
+		fapi_append_data(req, node_addr_nd_disable, 16);
+		SLSI_DBG2(sdev, SLSI_MLME, "mlme_set_ip_address_req(vif: %d, IP-setting ip address to all zeros)\n",
+			  ndev_vif->ifnum);
+	}
+
 	cfm = slsi_mlme_req_cfm(sdev, dev, req, MLME_SET_IP_ADDRESS_CFM);
 	if (!cfm)
 		return -EIO;
@@ -794,7 +805,6 @@ int slsi_mlme_add_vif(struct slsi_dev *sdev, struct net_device *dev, u8 *interfa
 
 	WARN_ON(!SLSI_MUTEX_IS_LOCKED(ndev_vif->vif_mutex));
 
-	SLSI_NET_DBG2(dev, SLSI_MLME, "mlme_add_vif_req(vif:%d)\n", ndev_vif->ifnum);
 	/* reset host stats */
 	for (i = 0; i < SLSI_LLS_AC_MAX; i++) {
 		ndev_vif->tx_no_ack[i] = 0;
@@ -807,7 +817,7 @@ int slsi_mlme_add_vif(struct slsi_dev *sdev, struct net_device *dev, u8 *interfa
 	fapi_set_u16(req, u.mlme_add_vif_req.virtual_interface_type, ndev_vif->vif_type);
 	fapi_set_memcpy(req, u.mlme_add_vif_req.interface_address, interface_address);
 	fapi_set_memcpy(req, u.mlme_add_vif_req.device_address, device_address);
-
+	SLSI_NET_DBG2(dev, SLSI_MLME, "mlme_add_vif_req(vif:%d)\n", ndev_vif->ifnum);
 	cfm = slsi_mlme_req_cfm(sdev, dev, req, MLME_ADD_VIF_CFM);
 	if (!cfm)
 		return -EIO;
@@ -1183,11 +1193,16 @@ static inline int slsi_set_scan_params(
 	u8			*p = NULL;
 	u8			i;
 	struct cfg80211_ssid	*pssid = ssids;
-
+	struct netdev_vif        *netdev_vif = netdev_priv(dev);
+	struct slsi_dev            *sdev = netdev_vif->sdev;
 	fapi_set_u16(req, u.mlme_add_scan_req.scan_id, scan_id);
 	fapi_set_u16(req, u.mlme_add_scan_req.scan_type, scan_type);
 	fapi_set_u16(req, u.mlme_add_scan_req.report_mode_bitmap, report_mode);
-	fapi_set_memcpy(req, u.mlme_add_scan_req.device_address, dev->dev_addr);
+
+	if (scan_type == FAPI_SCANTYPE_GSCAN && sdev->scan_oui_active)
+		fapi_set_memcpy(req, u.mlme_add_scan_req.device_address, sdev->scan_oui);
+	else
+		fapi_set_memcpy(req, u.mlme_add_scan_req.device_address, dev->dev_addr);
 
 	for (i = 0; i < num_ssids; i++, pssid++) {
 		p = fapi_append_data(req, NULL, 2 + pssid->ssid_len);
@@ -1572,10 +1587,16 @@ int slsi_modify_ies(struct net_device *dev, u8 eid, u8 *ies, int ies_len, u8 ie_
 	ie = (u8 *)cfg80211_find_ie(eid, ies, ies_len);
 	if (ie) {
 		switch (eid) {
-		case WLAN_EID_HT_OPERATION:
 		case WLAN_EID_HT_CAPABILITY:
 		case WLAN_EID_VHT_CAPABILITY:
 			ie[ie_index] |= ie_value;
+			break;
+		case WLAN_EID_DS_PARAMS:
+		case WLAN_EID_HT_OPERATION:
+			if (ie_index == 2)
+				ie[ie_index] = ie_value;
+			else
+				ie[ie_index] |= ie_value;
 			break;
 		default:
 			SLSI_NET_WARN(dev, "slsi_modify_ies: IE type mismatch : %d\n", eid);
@@ -1833,6 +1854,7 @@ int slsi_mlme_start(struct slsi_dev *sdev, struct net_device *dev, u8 *bssid, st
 
 	fapi_set_u16(req, u.mlme_start_req.channel_frequency, (2 * fw_freq));
 	fapi_set_u16(req, u.mlme_start_req.channel_information, chan_info);
+	ndev_vif->ap.channel_freq = fw_freq;
 
 	/* Addition of SSID IE in mlme_start_req for hiddenSSID case */
 	if (settings->hidden_ssid != 0) {
@@ -1868,7 +1890,6 @@ int slsi_mlme_start(struct slsi_dev *sdev, struct net_device *dev, u8 *bssid, st
 	cfm = slsi_mlme_req_cfm(sdev, dev, req, MLME_START_CFM);
 	if (!cfm)
 		return -EIO;
-
 	if (fapi_get_u16(cfm, u.mlme_start_cfm.result_code) != FAPI_RESULTCODE_SUCCESS) {
 		SLSI_NET_ERR(dev, "mlme_start_cfm(result:%u) ERROR\n", fapi_get_u16(cfm, u.mlme_start_cfm.result_code));
 		r = -EINVAL;
@@ -2304,13 +2325,14 @@ int slsi_mlme_set_key(struct slsi_dev *sdev, struct net_device *dev, u16 key_id,
 
 		SLSI_NET_DBG3(dev, SLSI_MLME, "mlme_setkeys_req(key->seq_len:%d)\n", key->seq_len);
 
-		/* Sequence would be in little endian format (sent as part of get_key_sequence).
-		 * If sequence is say 0x01 0x02 0x03 0x04 with 0x01 as MSB and 0x04 as LSB then
-		 * it would be encoded as: 0x0304 0x0102 for firmware
+		/* Sequence would be in little endian format
+		 * If sequence is say key->seq is
+		 * 04 03 02 01 00 00 00 00, it would be encoded as :
+		 * 0x0304 0x0102 0x0000 0x0000 for firmware
 		 */
 		for (i = 0; i < key->seq_len; i += 2) {
 			temp_seq = (u16)(key->seq[i + 1] << 8) | (u16)(key->seq[i]);
-			fapi_set_u16(req, u.mlme_setkeys_req.sequence_number[i], temp_seq);
+			fapi_set_u16(req, u.mlme_setkeys_req.sequence_number[i / 2], temp_seq);
 		}
 	}
 
@@ -2389,32 +2411,66 @@ int slsi_mlme_get_key(struct slsi_dev *sdev, struct net_device *dev, u16 key_id,
 	return r;
 }
 
-void slsi_mlme_fw_tx_rate_calc(u16 fw_rate, struct rate_info *tx_rate)
+void slsi_fw_tx_rate_calc(u16 fw_rate, struct rate_info *tx_rate, unsigned long *data_rate_mbps)
 {
 	const int fw_rate_idx_to_80211_rate[] = { 0, 10, 20, 55, 60, 90, 110, 120, 180, 240, 360, 480, 540 };
 
-	tx_rate->flags = 0;
-	tx_rate->legacy = 0;
+	if (tx_rate) {
+		tx_rate->flags = 0;
+		tx_rate->legacy = 0;
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 0, 0))
-	tx_rate->bw = 0;
+		tx_rate->bw = 0;
 #endif
+	}
 	if ((fw_rate & SLSI_FW_API_RATE_HT_SELECTOR_FIELD) == SLSI_FW_API_RATE_NON_HT_SELECTED) {
 		u16 fw_rate_idx = fw_rate & SLSI_FW_API_RATE_INDEX_FIELD;
 
-		if (fw_rate > 0 && fw_rate_idx < sizeof(fw_rate_idx_to_80211_rate) / sizeof(fw_rate_idx_to_80211_rate[0]))
-			tx_rate->legacy = fw_rate_idx_to_80211_rate[fw_rate_idx];
-	} else if ((fw_rate & SLSI_FW_API_RATE_HT_SELECTOR_FIELD) == SLSI_FW_API_RATE_HT_SELECTED) {
-		tx_rate->flags |= RATE_INFO_FLAGS_MCS;
-		tx_rate->mcs = SLSI_FW_API_RATE_MCS_FIELD & fw_rate;
+		if (fw_rate > 0 && fw_rate_idx < ARRAY_SIZE(fw_rate_idx_to_80211_rate)) {
+			if (tx_rate)
+				tx_rate->legacy = fw_rate_idx_to_80211_rate[fw_rate_idx];
+			if (data_rate_mbps)
+				*data_rate_mbps = fw_rate_idx_to_80211_rate[fw_rate_idx] / 10;
+		}
 
-		if ((fw_rate & SLSI_FW_API_RATE_BW_FIELD) == SLSI_FW_API_RATE_BW_40MHZ)
+	} else if ((fw_rate & SLSI_FW_API_RATE_HT_SELECTOR_FIELD) == SLSI_FW_API_RATE_HT_SELECTED) {
+		u8 mcs = SLSI_FW_API_RATE_MCS_FIELD & fw_rate;
+
+		if (tx_rate) {
+			tx_rate->flags |= RATE_INFO_FLAGS_MCS;
+			tx_rate->mcs = mcs;
+
+			if ((fw_rate & SLSI_FW_API_RATE_BW_FIELD) == SLSI_FW_API_RATE_BW_40MHZ)
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 0, 0))
-			tx_rate->bw |= RATE_INFO_BW_40;
+				tx_rate->bw |= RATE_INFO_BW_40;
 #else
-			tx_rate->flags |= RATE_INFO_FLAGS_40_MHZ_WIDTH;
+				tx_rate->flags |= RATE_INFO_FLAGS_40_MHZ_WIDTH;
 #endif
-		if (fw_rate & SLSI_FW_API_RATE_SGI)
-			tx_rate->flags |= RATE_INFO_FLAGS_SHORT_GI;
+			if (fw_rate & SLSI_FW_API_RATE_SGI)
+				tx_rate->flags |= RATE_INFO_FLAGS_SHORT_GI;
+		}
+
+		if (data_rate_mbps) {
+			int chan_bw_idx;
+			int gi_idx;
+			int mcs_idx;
+
+			chan_bw_idx = (fw_rate & SLSI_FW_API_RATE_BW_FIELD) >> 9;
+			gi_idx = ((fw_rate & SLSI_FW_API_RATE_SGI) == SLSI_FW_API_RATE_SGI) ? 1 : 0;
+			mcs_idx = SLSI_FW_API_RATE_MCS_FIELD & fw_rate;
+
+			if ((chan_bw_idx < 2) && (mcs_idx <= 7)) {
+				*data_rate_mbps = slsi_rates_table[chan_bw_idx][gi_idx][mcs_idx] / 10;
+			} else if (mcs == 32 && chan_bw_idx == 1) {
+				if (gi_idx == 1)
+					*data_rate_mbps = 6.7;
+				else
+					*data_rate_mbps = 6;
+			} else {
+				SLSI_WARN_NODEV("FW DATA RATE decode error fw_rate:%x, bw:%x, mcs_idx:%x\n",
+						fw_rate, chan_bw_idx, mcs_idx);
+			}
+		}
+
 	} else if ((fw_rate & SLSI_FW_API_RATE_HT_SELECTOR_FIELD) == SLSI_FW_API_RATE_VHT_SELECTED) {
 		int chan_bw_idx;
 		int gi_idx;
@@ -2427,11 +2483,16 @@ void slsi_mlme_fw_tx_rate_calc(u16 fw_rate, struct rate_info *tx_rate)
 		gi_idx = ((fw_rate & SLSI_FW_API_RATE_SGI) == SLSI_FW_API_RATE_SGI) ? 1 : 0;
 		/* Ignore NSS. Only one stream is supported*/
 		mcs_idx = SLSI_FW_API_RATE_MCS_FIELD & fw_rate;
+
 		/* Bandwidth (BW): 0x0= 20 MHz, 0x1= 40 MHz, 0x2= 80 MHz, 0x3= 160/ 80+80 MHz. 0x3 is not supported */
-		if ((chan_bw_idx <= 2) && (mcs_idx <= 9))
-			tx_rate->legacy = slsi_mlme_vht_rates_table[chan_bw_idx][gi_idx][mcs_idx];
-		else
+		if ((chan_bw_idx <= 2) && (mcs_idx <= 9)) {
+			if (tx_rate)
+				tx_rate->legacy = slsi_rates_table[chan_bw_idx][gi_idx][mcs_idx];
+			if (data_rate_mbps)
+				*data_rate_mbps = slsi_rates_table[chan_bw_idx][gi_idx][mcs_idx] / 10;
+		} else {
 			SLSI_WARN_NODEV("FW DATA RATE decode error fw_rate:%x, bw:%x, mcs_idx:%x\n", fw_rate, chan_bw_idx, mcs_idx);
+		}
 	}
 }
 
@@ -2493,7 +2554,7 @@ int slsi_mlme_get_sinfo_mib(struct slsi_dev *sdev, struct net_device *dev,
 
 		if (values[0].type != SLSI_MIB_TYPE_NONE) {
 			WARN_ON(values[0].type != SLSI_MIB_TYPE_UINT);
-			slsi_mlme_fw_tx_rate_calc((u16)values[0].u.uintValue, &peer->sinfo.txrate);
+			slsi_fw_tx_rate_calc((u16)values[0].u.uintValue, &peer->sinfo.txrate, NULL);
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 0, 0))
 			peer->sinfo.filled |= BIT(NL80211_STA_INFO_TX_BITRATE);
 #else

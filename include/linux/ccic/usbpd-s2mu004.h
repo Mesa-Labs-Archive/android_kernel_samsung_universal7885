@@ -40,9 +40,11 @@
 #define S2MU004_WATER_CHK_INTERVAL_TIME		(300)
 #define S2MU004_ATTACH_STATE_CHECK_TIME		(1000)
 
-#define WATER_CHK_RETRY_CNT	5
+#define WATER_CHK_RETRY_CNT	2
 #define IS_CC_RP(cc1, cc2)	((cc1 == USBPD_Rp) && (cc2 == USBPD_Rp))
 #define IS_CC_WATER(cc1, cc2)	((cc1 != USBPD_Rp) && (cc2 != USBPD_Rp))
+#define IS_ONLY_CC1_WATER(cc1, cc2)	((cc1 != USBPD_Rp) && (cc2 == USBPD_Rp))
+#define IS_ONLY_CC2_WATER(cc1, cc2)	((cc1 == USBPD_Rp) && (cc2 != USBPD_Rp))
 
 /*****************************************/
 /***********DEFINITION REGISTER***********/
@@ -375,6 +377,7 @@ typedef enum {
 	S2MU004_THRESHOLD_621MV = 18,
 	S2MU004_THRESHOLD_642MV = 19,
 	S2MU004_THRESHOLD_685MV = 20,
+	S2MU004_THRESHOLD_1000MV = 27,
 
 	S2MU004_THRESHOLD_1328MV = 35,
 	S2MU004_THRESHOLD_1371MV = 36,
@@ -525,7 +528,6 @@ struct s2mu004_usbpd_data {
 	bool is_muic_attached;
 	bool vbus_short_check;
 	bool vbus_short;
-	bool abnormal_state;
 #ifndef CONFIG_SEC_FACTORY
 	bool lpcharge_water;
 #endif
@@ -538,8 +540,6 @@ struct s2mu004_usbpd_data {
 	int data_role_dual; /* data_role for dual role swap */
 	int power_role_dual; /* power_role for dual role swap */
 	int is_attached;
-	int abnormal_detach_cnt;
-	unsigned long attach_time;
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)
 	struct dual_role_phy_instance *dual_role;
 	struct dual_role_phy_desc *desc;

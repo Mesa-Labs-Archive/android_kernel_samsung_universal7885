@@ -102,6 +102,9 @@ int slsi_tx_data(struct slsi_dev *sdev, struct net_device *dev, struct sk_buff *
 	u16                 len = skb->len;
 	int                 ret = 0;
 	enum slsi_traffic_q tq;
+#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+	int vif;
+#endif
 
 	if (slsi_is_test_mode_enabled()) {
 		/* This signals is in XML file because parts of the Firmware need the symbols defined by them
@@ -110,6 +113,18 @@ int slsi_tx_data(struct slsi_dev *sdev, struct net_device *dev, struct sk_buff *
 		SLSI_NET_INFO(dev, "Skip sending signal, WlanLite FW does not support MA_UNITDATA.request\n");
 		return -EOPNOTSUPP;
 	}
+#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+	vif = fapi_get_vif(skb);
+	if (dev) {
+		if (strcmp(dev->name, "swlan0") == 0) {
+			if (ndev_vif->is_available) {
+				/*firmware doesn't support vif index 4, so using P2PX for firmware interactions*/
+				if (vif == SLSI_NET_INDEX_SWLAN)
+					fapi_set_vif(skb, SLSI_NET_INDEX_P2PX);
+			}
+		}
+	}
+#endif
 
 	SLSI_NET_DBG3(dev, SLSI_TX, "queue_mapping:%d\n", skb->queue_mapping);
 	SLSI_NET_DBG_HEX(dev, SLSI_TX, skb->data, skb->len < 64 ? skb->len : 64, "\n");
@@ -464,12 +479,28 @@ int slsi_tx_control(struct slsi_dev *sdev, struct net_device *dev, struct sk_buf
 	struct slsi_skb_cb *cb;
 	int res = 0;
 	struct fapi_signal_header *hdr;
+#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+	int vif;
+	struct netdev_vif *ndev_ap_vif;
+#endif
 
 	if (WARN_ON(!skb)) {
 		res = -EINVAL;
 		goto exit;
 	}
-
+#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+	vif = fapi_get_vif(skb);
+	if (dev) {
+		if (strcmp(dev->name, "swlan0") == 0) {
+			ndev_ap_vif = netdev_priv(dev);
+			if (ndev_ap_vif->is_available) {
+				/*firmware doesn't support vif index 4, so using P2PX for firmware interactions*/
+				if (vif == SLSI_NET_INDEX_SWLAN)
+					fapi_set_vif(skb, SLSI_NET_INDEX_P2PX);
+			}
+		}
+	}
+#endif
 	slsi_debug_frame(sdev, dev, skb, "TX");
 
 	/**

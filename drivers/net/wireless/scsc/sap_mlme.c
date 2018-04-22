@@ -145,6 +145,9 @@ static int slsi_rx_netdev_mlme(struct slsi_dev *sdev, struct net_device *dev, st
 	case MLME_LISTEN_END_IND:
 		slsi_rx_listen_end_ind(dev, skb);
 		break;
+	case MLME_CHANNEL_SWITCHED_IND:
+		slsi_rx_channel_switched_ind(sdev, dev, skb);
+		break;
 	case MLME_AC_PRIORITY_UPDATE_IND:
 		SLSI_DBG1(sdev, SLSI_MLME, "Unexpected MLME_AC_PRIORITY_UPDATE_IND\n");
 		slsi_kfree_skb(skb);

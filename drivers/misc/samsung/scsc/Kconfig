@@ -10,7 +10,19 @@ config SCSC_CORE_FW_LOCATION
 	string "SCSC FW location"
 	default "/system/etc/wifi"
 	---help---
-	  Select the FW location.
+	  Select the FW location, when CONFIG_SCSC_CORE_FW_LOCATION_AUTO=n
+
+config SCSC_CORE_FW_LOCATION_AUTO
+	string "SCSC FW location auto select"
+	default y
+	---help---
+	  Select the FW location (Android N/O) automatically
+
+config SCSC_CORE_TOOL_LOCATION
+	string "SCSC tool location"
+	default "/system/bin"
+	---help---
+	  Select the moredump tool location, when CONFIG_SCSC_CORE_FW_LOCATION_AUTO=n
 
 config SCSC_PCIE
 	tristate "Samsung SCSC MIF PCIE implementation"

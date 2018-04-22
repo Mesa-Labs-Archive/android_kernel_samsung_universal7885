@@ -13,6 +13,7 @@
 #include "cac.h"
 #include "hip.h"
 #include "netif.h"
+#include "ioctl.h"
 
 #include "mib.h"
 
@@ -150,6 +151,29 @@ static ssize_t slsi_procfs_sta_bss_read(struct file *file,  char __user *user_bu
 exit:
 	pos = scnprintf(buf, bufsz, "%pM,%s,%d,%d,%d", mac_ptr, ssid, channel, center_freq, signal);
 	return simple_read_from_buffer(user_buf, count, ppos, buf, pos);
+}
+
+static ssize_t slsi_procfs_big_data_read(struct file *file,  char __user *user_buf, size_t count, loff_t *ppos)
+{
+	char              buf[100];
+	int               pos;
+	const size_t      bufsz = sizeof(buf);
+	struct slsi_dev   *sdev = (struct slsi_dev *)file->private_data;
+	struct net_device *dev;
+	struct netdev_vif *ndev_vif;
+
+	SLSI_UNUSED_PARAMETER(file);
+	dev = slsi_get_netdev(sdev, 1);
+	if (!dev)
+		goto exit;
+
+	ndev_vif = netdev_priv(dev);
+
+exit:
+	pos = slsi_get_sta_info(dev, buf, bufsz);
+	if (pos >= 0)
+		return simple_read_from_buffer(user_buf, count, ppos, buf, pos);
+	return 0;
 }
 
 static int slsi_procfs_status_show(struct seq_file *m, void *v)
@@ -935,7 +959,7 @@ SLSI_PROCFS_SEQ_FILE_OPS(offline_dbg_dump_klog);
 SLSI_PROCFS_READ_FILE_OPS(mutex_stats);
 #endif
 SLSI_PROCFS_READ_FILE_OPS(sta_bss);
-
+SLSI_PROCFS_READ_FILE_OPS(big_data);
 SLSI_PROCFS_SEQ_FILE_OPS(tcp_ack_suppression);
 
 int slsi_create_proc_dir(struct slsi_dev *sdev)
@@ -974,6 +998,7 @@ int slsi_create_proc_dir(struct slsi_dev *sdev)
 		SLSI_PROCFS_ADD_FILE(sdev, mutex_stats, parent, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 #endif
 		SLSI_PROCFS_ADD_FILE(sdev, sta_bss, parent, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+		SLSI_PROCFS_ADD_FILE(sdev, big_data, parent, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 		SLSI_PROCFS_SEQ_ADD_FILE(sdev, tcp_ack_suppression, sdev->procfs_dir, S_IRUSR | S_IRGRP);
 	}
 
@@ -1010,6 +1035,7 @@ void slsi_remove_proc_dir(struct slsi_dev *sdev)
 		SLSI_PROCFS_REMOVE_FILE(mutex_stats, sdev->procfs_dir);
 #endif
 		SLSI_PROCFS_REMOVE_FILE(sta_bss, sdev->procfs_dir);
+		SLSI_PROCFS_REMOVE_FILE(big_data, sdev->procfs_dir);
 		SLSI_PROCFS_REMOVE_FILE(tcp_ack_suppression, sdev->procfs_dir);
 
 		(void)snprintf(dir, sizeof(dir), "driver/unifi%d", sdev->procfs_instance);

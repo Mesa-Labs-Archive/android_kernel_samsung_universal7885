@@ -5,7 +5,9 @@
 #include <linux/pm_qos.h>
 #include <linux/of.h>
 
-#ifdef CONFIG_SCHED_HMP
+#ifdef CONFIG_SCHED_HMP_SELECTIVE_BOOST_WITH_NITP
+#define USE_HMP_SELECTIVE_BOOST
+#elif defined CONFIG_SCHED_HMP
 #define USE_HMP_BOOST
 #endif
 
@@ -38,7 +40,17 @@
 		pm_qos_remove_request(req); \
 }
 
-#ifdef USE_HMP_BOOST
+#ifdef USE_HMP_SELECTIVE_BOOST
+#define set_hmp(enable) { \
+	if(enable != current_hmp_boost) { \
+		pr_debug("[Input Booster2] ******      set_hmp_selective : %d ( %s )\n", enable, __FUNCTION__); \
+		if (set_hmp_selective_boost(enable) < 0) {\
+			pr_debug("[Input Booster2] ******            !!! fail to HMP_Selective !!!\n"); \
+		} \
+		current_hmp_boost = enable; \
+	} \
+}
+#elif defined USE_HMP_BOOST
 #define set_hmp(enable)	 { \
 	if(enable != current_hmp_boost) { \
 		pr_debug("[Input Booster2] ******      set_hmp : %d ( %s )\n", enable, __FUNCTION__); \

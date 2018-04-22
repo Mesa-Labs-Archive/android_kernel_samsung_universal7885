@@ -147,7 +147,7 @@ static unsigned char SEQ_TE_ON[] = {
 
 static unsigned char SEQ_PCD_SET_DET_LOW[] = {
 	0xCC,
-	0x5C
+	0x5C	/* 80H detection duration : about 590us. default */
 };
 
 static unsigned char SEQ_ERR_FG_SETTING[] = {

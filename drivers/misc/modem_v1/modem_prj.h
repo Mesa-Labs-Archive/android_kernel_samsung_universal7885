@@ -686,6 +686,9 @@ struct modem_ctl {
 	unsigned int sbi_uart_noti_mask;
 	unsigned int sbi_uart_noti_pos;
 
+	unsigned int sbi_crash_type_mask;
+	unsigned int sbi_crash_type_pos;
+
 	unsigned int airplane_mode;
 #endif
 

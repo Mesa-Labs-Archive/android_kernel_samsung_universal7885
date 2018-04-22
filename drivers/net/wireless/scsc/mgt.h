@@ -416,6 +416,21 @@ int  slsi_clear_packet_filters(struct slsi_dev *sdev, struct net_device *dev);
 int slsi_ap_prepare_add_info_ies(struct netdev_vif *ndev_vif, const u8 *ies, size_t ies_len);
 int slsi_set_mib_roam(struct slsi_dev *dev, struct net_device *ndev, u16 psid, int value);
 int slsi_set_mib_rssi_boost(struct slsi_dev *sdev, struct net_device *dev, u16 psid, int index, int boost);
+#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+bool slsi_if_valid_wifi_sharing_channel(int freq);
+void slsi_extract_valid_wifi_sharing_channels(struct slsi_dev *sdev);
+void slsi_select_wifi_sharing_ap_channel(struct wiphy *wiphy, struct net_device *dev,
+					 struct cfg80211_ap_settings *settings, struct slsi_dev *sdev,
+					 int *channel_switched_flag);
+int slsi_set_mib_wifi_sharing_allowed(struct slsi_dev *sdev, struct net_device *dev, u16 psid,
+				      int index, bool sharing_allowed);
+int slsi_new_interface_create(struct wiphy        *wiphy,
+			      char                *name,
+			      enum nl80211_iftype type,
+			      u32                 *flags,
+			      struct vif_params   *params);
+int slsi_interface_delete(struct wiphy *wiphy, struct net_device *dev);
+#endif
 int slsi_get_mib_roam(struct slsi_dev *sdev, u16 psid, int *mib_value);
 void slsi_roam_channel_cache_add(struct slsi_dev *sdev, struct net_device *dev, struct sk_buff *skb);
 void slsi_roam_channel_cache_prune(struct net_device *dev, int seconds);

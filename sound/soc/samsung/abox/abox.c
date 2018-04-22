@@ -2179,6 +2179,8 @@ static const char * const abox_sound_type_enum_texts[] = {
 	"SPEAKER",
 	"HEADSET",
 	"BTVOICE",
+	"USB",
+	"CALLFWD",
 	"DEFAULT",
 };
 static const unsigned int abox_sound_type_enum_values[] = {
@@ -2186,6 +2188,8 @@ static const unsigned int abox_sound_type_enum_values[] = {
     SOUND_TYPE_SPEAKER,
     SOUND_TYPE_HEADSET,
     SOUND_TYPE_BTVOICE,
+    SOUND_TYPE_USB,
+    SOUND_TYPE_CALLFWD,
     SOUND_TYPE_DEFAULT,
 };
 SOC_VALUE_ENUM_SINGLE_DECL(abox_sound_type_enum, SND_SOC_NOPM, 0, 0,
@@ -3085,6 +3089,7 @@ static bool abox_volatile_reg(struct device *dev, unsigned int reg)
 	switch (reg) {
 	case ABOX_SYSPOWER_CTRL:
 	case ABOX_SYSPOWER_STATUS:
+	case ABOX_SPUS_CTRL1:
 	case ABOX_SPUS_CTRL2:
 	case ABOX_SPUS_CTRL3:
 	case ABOX_SPUM_CTRL1:
@@ -4837,8 +4842,15 @@ static int abox_cpu_enable(bool enable)
 
 static void abox_save_register(struct abox_data *data)
 {
-	if (data->iommu_domain)
-		data->save_recp = readl(data->sfr_base + ABOX_SPUM_CTRL1) & ABOX_RECP_SRC_VALID_MASK;
+	struct platform_device *pdev = data->pdev;
+	struct device *dev = &pdev->dev;
+
+	if (data->iommu_domain) {
+		data->save_recp = snd_soc_read(data->codec, ABOX_SPUM_CTRL1) & ABOX_RECP_SRC_VALID_MASK;
+		data->save_spus_ctrl1 = snd_soc_read(data->codec, ABOX_SPUS_CTRL1);
+		dev_info(dev, "%s: save register(recp:0x%x, spus_ctrl1:0x%x)\n",
+			__func__, data->save_recp, data->save_spus_ctrl1);
+	}
 
 	regcache_cache_only(data->regmap, true);
 	regcache_mark_dirty(data->regmap);
@@ -4846,11 +4858,20 @@ static void abox_save_register(struct abox_data *data)
 
 static void abox_restore_register(struct abox_data *data)
 {
+	struct platform_device *pdev = data->pdev;
+	struct device *dev = &pdev->dev;
+
 	regcache_cache_only(data->regmap, false);
 	regcache_sync(data->regmap);
 
-	if (data->save_recp && data->iommu_domain)
-		writel(data->save_recp | readl(data->sfr_base + ABOX_SPUM_CTRL1), data->sfr_base + ABOX_SPUM_CTRL1);
+	if (data->iommu_domain) {
+		if (data->save_recp)
+			snd_soc_write(data->codec, ABOX_SPUM_CTRL1, data->save_recp);
+		if (data->save_spus_ctrl1)
+			snd_soc_write(data->codec, ABOX_SPUS_CTRL1, data->save_spus_ctrl1);
+		dev_info(dev, "%s: restore register(recp:0x%x, spus_ctrl1:0x%x)\n",
+			__func__, data->save_recp, data->save_spus_ctrl1);
+	}
 }
 
 static void abox_reload_extra_firmware(struct abox_data *data, const char *name)
@@ -5353,6 +5374,8 @@ static int abox_disable(struct device *dev)
 	clk_disable(data->clk_ca7);
 
 	abox_gic_disable_irq(&data->pdev_gic->dev);
+
+	cancel_work_sync(&data->change_cpu_gear_work);
 
 	return 0;
 }

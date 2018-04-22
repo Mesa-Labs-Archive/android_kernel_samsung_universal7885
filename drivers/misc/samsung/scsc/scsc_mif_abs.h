@@ -161,7 +161,6 @@ struct scsc_mif_abs {
 	void (*mif_dump_registers)(struct scsc_mif_abs *interface);
 	void (*mif_cleanup)(struct scsc_mif_abs *interface);
 	void (*mif_restart)(struct scsc_mif_abs *interface);
-
 /**
  * Return scsc_btabox_data structure with physical address & size of the DTB region
  * exposed by the platform driver. The platform driver uses it to configure BAAW1.

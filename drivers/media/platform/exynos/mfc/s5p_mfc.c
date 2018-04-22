@@ -56,6 +56,7 @@
 
 struct _mfc_trace g_mfc_trace[MFC_TRACE_COUNT_MAX];
 struct _mfc_trace g_mfc_trace_hwlock[MFC_TRACE_COUNT_MAX];
+struct _mfc_trace_logging g_mfc_trace_logging[MFC_TRACE_LOG_COUNT_MAX];
 struct s5p_mfc_dev *g_mfc_dev;
 
 #ifdef CONFIG_EXYNOS_CONTENT_PATH_PROTECTION
@@ -969,8 +970,10 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 
 	atomic_set(&dev->trace_ref, 0);
 	atomic_set(&dev->trace_ref_hwlock, 0);
+	atomic_set(&dev->trace_ref_log, 0);
 	dev->mfc_trace = g_mfc_trace;
 	dev->mfc_trace_hwlock = g_mfc_trace_hwlock;
+	dev->mfc_trace_logging = g_mfc_trace_logging;
 
 	s5p_mfc_pm_init(dev);
 

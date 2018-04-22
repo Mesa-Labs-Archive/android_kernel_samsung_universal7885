@@ -49,6 +49,13 @@
 
 #include "nl80211_vendor.h"
 
+/* Modes for CMDGETBSSINFO and CMDGETSTAINFO */
+#define SLSI_80211_MODE_11B 0
+#define SLSI_80211_MODE_11G 1
+#define SLSI_80211_MODE_11N 2
+#define SLSI_80211_MODE_11A 3
+#define SLSI_80211_MODE_11AC 4
+
 #define SLSI_TX_PROCESS_ID_MIN       (0xC001)
 #define SLSI_TX_PROCESS_ID_MAX       (0xCF00)
 #define SLSI_TX_PROCESS_ID_UDI_MIN   (0xCF01)
@@ -406,6 +413,24 @@ enum slsi_filter_id {
 /*From wifi_offload.h (N_AVAIL_ID=3)*/
 #define SLSI_MAX_KEEPALIVE_ID 3
 
+struct slsi_last_connected_bss {
+	u8                                           address[ETH_ALEN];
+	int                                           antenna_mode;
+	int                                           rssi;
+	int                                           mode;
+	int                                           passpoint_version;
+	int                                           snr;
+	int                                           noise_level;
+	u16                                          bandwidth;
+	u16                                          roaming_count;
+	u16                                          channel_freq;
+	u16                                          tx_data_rate;
+	u8                                            roaming_akm;
+	u8                                            kv;
+	u32                                          kvie;
+	bool                                         mimo_used;
+};
+
 struct slsi_vif_sta {
 	/* Only valid when the VIF is activated */
 	u8                      vif_status;
@@ -413,7 +438,6 @@ struct slsi_vif_sta {
 	u16                     eap_hosttag;
 	u16                     m4_host_tag;
 	u16                     keepalive_host_tag[SLSI_MAX_KEEPALIVE_ID];
-	u8                      mac_addr[ETH_ALEN];
 
 	struct sk_buff          *roam_mlme_procedure_started_ind;
 
@@ -439,6 +463,9 @@ struct slsi_vif_sta {
 	struct list_head        network_map;
 
 	struct slsi_wmm_ac wmm_ac[4];
+	/*This structure is used to store last disconnected bss info and valid even when vif is deactivated. */
+	struct slsi_last_connected_bss last_connected_bss;
+	bool                      nd_offload_enabled;
 };
 
 struct slsi_vif_unsync {
@@ -452,8 +479,20 @@ struct slsi_vif_unsync {
 	bool                listen_offload;    /* To indicate if Listen Offload is started */
 };
 
+struct slsi_last_disconnected_sta {
+	u8 address[ETH_ALEN];
+	int bandwidth;
+	int antenna_mode;
+	int rssi;
+	int mode;
+	u16 tx_data_rate;
+	bool mimo_used;
+	u16 reason;
+};
+
 struct slsi_vif_ap {
 	struct slsi_wmm_parameter_element wmm_ie;
+	struct slsi_last_disconnected_sta last_disconnected_sta;
 	u8                                *cache_wmm_ie;
 	u8                                *cache_wpa_ie;
 	u8                                *add_info_ies;
@@ -464,9 +503,11 @@ struct slsi_vif_ap {
 	bool                              privacy;               /* Used for port enabling based on the open/secured AP configuration */
 	bool                              qos_enabled;
 	int                               beacon_interval;       /* Beacon interval in AP/GO mode */
+	int                               mode;
 	bool                              non_ht_bss_present;    /* Non HT BSS observed in HT20 OBSS scan */
 	struct scsc_wifi_fcq_data_qset    group_data_qs;
 	u32                               cipher;
+	u16                               channel_freq;
 	u8                                ssid[IEEE80211_MAX_SSID_LEN];
 	u8                                ssid_len;
 };
@@ -706,6 +747,7 @@ struct slsi_dev_config {
 #define SLSI_NET_INDEX_WLAN 1
 #define SLSI_NET_INDEX_P2P  2
 #define SLSI_NET_INDEX_P2PX 3
+#define SLSI_NET_INDEX_SWLAN 4
 
 /* States used during P2P operations */
 enum slsi_p2p_states {
@@ -875,6 +917,8 @@ struct slsi_dev {
 	struct slsi_bucket         bucket[SLSI_GSCAN_MAX_BUCKETS];
 	struct list_head           hotlist_results;
 	bool                       epno_active;
+	u8                         scan_oui[6];
+	bool                       scan_oui_active;
 #endif
 #ifdef CONFIG_SCSC_WLAN_HIP4_PROFILING
 	int                        minor_prof;
@@ -899,6 +943,7 @@ struct slsi_dev {
 	u8                         fw_ht_cap[4]; /* HT capabilities is 21 bytes but host is never intersted in last 17 bytes*/
 	bool                       fw_vht_enabled;
 	u8                         fw_vht_cap[4];
+	u8                         wifi_sharing_5ghz_channel[8];
 	bool                       fw_2g_40mhz_enabled;
 	u16                        assoc_result_code; /* Status of latest association in STA mode */
 	bool                       allow_switch_40_mhz; /* Used in AP cert to disable HT40 when not configured */
@@ -1013,6 +1058,23 @@ static inline struct net_device *slsi_get_netdev(struct slsi_dev *sdev, u16 ifnu
 	SLSI_MUTEX_UNLOCK(sdev->netdev_add_remove_mutex);
 
 	return dev;
+}
+
+static inline int slsi_get_supported_mode(const u8 *peer_ie)
+{
+	const u8             *peer_ie_data;
+	u8                   peer_ie_len;
+	int                  i;
+	int                  supported_rate;
+
+	peer_ie_len = peer_ie[1];
+	peer_ie_data = &peer_ie[2];
+	for (i = 0; i < peer_ie_len; i++) {
+		supported_rate = ((peer_ie_data[i] & 0x7F) / 2);
+		if (supported_rate > 11)
+			return SLSI_80211_MODE_11G;
+	}
+	return SLSI_80211_MODE_11B;
 }
 
 #endif

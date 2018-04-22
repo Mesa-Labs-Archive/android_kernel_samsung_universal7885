@@ -4038,13 +4038,7 @@ static int kbase_platform_device_probe(struct platform_device *pdev)
  * @return A standard Linux error code
  */
 /* MALI_SEC_INTEGRATION */
-static int kbase_device_suspend_dummy(struct device *dev)
-{
-	return 0;
-}
-
-/* MALI_SEC_INTEGRATION */
-int kbase_device_suspend(struct kbase_device *kbdev)
+int kbase_device_suspend_kbdev(struct kbase_device *kbdev)
 {
 	if (!kbdev)
 		return -ENODEV;
@@ -4058,6 +4052,11 @@ int kbase_device_suspend(struct kbase_device *kbdev)
 	return 0;
 }
 
+int kbase_device_suspend(struct device *dev)
+{
+	return kbase_device_suspend_kbdev(to_kbase_device(dev));
+}
+
 /** Resume callback from the OS.
  *
  * This is called by Linux when the device should resume from suspension.
@@ -4067,13 +4066,7 @@ int kbase_device_suspend(struct kbase_device *kbdev)
  * @return A standard Linux error code
  */
 /* MALI_SEC_INTEGRATION */
-static int kbase_device_resume_dummy(struct device *dev)
-{
-	return 0;
-}
-
-/* MALI_SEC_INTEGRATION */
-int kbase_device_resume(struct kbase_device *kbdev)
+int kbase_device_resume_kbdev(struct kbase_device *kbdev)
 {
 	if (!kbdev)
 		return -ENODEV;
@@ -4085,6 +4078,11 @@ int kbase_device_resume(struct kbase_device *kbdev)
 	devfreq_resume_device(kbdev->devfreq);
 #endif
 	return 0;
+}
+
+int kbase_device_resume(struct device *dev)
+{
+	return kbase_device_resume_kbdev(to_kbase_device(dev));
 }
 
 /* MALI_SEC_INTEGRATION */
@@ -4210,9 +4208,8 @@ static int kbase_device_runtime_idle(struct device *dev)
 /** The power management operations for the platform driver.
  */
 static const struct dev_pm_ops kbase_pm_ops = {
-	/* MALI_SEC_INTEGRATION */
-	.suspend = kbase_device_suspend_dummy,
-	.resume = kbase_device_resume_dummy,
+	.suspend = kbase_device_suspend,
+	.resume = kbase_device_resume,
 #ifdef KBASE_PM_RUNTIME
 	.runtime_suspend = kbase_device_runtime_suspend,
 	.runtime_resume = kbase_device_runtime_resume,

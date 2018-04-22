@@ -111,11 +111,15 @@ static int read_from_firmware_version(int position)
 
 	fimc_is_vender_check_hw_init_running();
 
-	if (((position == SENSOR_POSITION_REAR) && (!finfo->is_caldata_read))
+	if (force_caldata_dump ||
+		((position == SENSOR_POSITION_REAR) && (!finfo->is_caldata_read))
 #if defined(CONFIG_CAMERA_EEPROM_SUPPORT_FRONT)
 		|| ((position == SENSOR_POSITION_FRONT || position == SENSOR_POSITION_FRONT2) && (!front_finfo->is_caldata_read))
 #endif
 	) {
+		if (force_caldata_dump)
+			info("read_from_firmware_version : forced caldata dump!!\n");
+
 		ret = fimc_is_sec_run_fw_sel(is_dev, position);
 		if (ret) {
 			err("fimc_is_sec_run_fw_sel is fail(%d)", ret);
@@ -399,6 +403,23 @@ static ssize_t camera_front_camtype_show(struct device *dev,
 		return sprintf(buf, "%s_%s_FIMC_IS\n", sensor_maker, sensor_name);
 }
 
+#ifdef CAMERA_FRONT2
+static ssize_t camera_front2_camtype_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	char sensor_maker[50];
+	char sensor_name[50];
+	int ret;
+
+	ret = fimc_is_get_sensor_data(dev, sensor_maker, sensor_name, SENSOR_POSITION_FRONT2);
+
+	if (ret < 0)
+		return sprintf(buf, "UNKNOWN_UNKNOWN_FIMC_IS\n");
+	else
+		return sprintf(buf, "%s_%s_FIMC_IS\n", sensor_maker, sensor_name);
+}
+#endif
+
 #ifdef EEP_XTALK_CAL_START_ADDR_FRONT
 static ssize_t camera_front_xtalkcal_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -621,6 +642,7 @@ static DEVICE_ATTR(front_xtalkcal, S_IRUGO, camera_front_xtalkcal_show, NULL);
 #ifdef CAMERA_FRONT2
 static DEVICE_ATTR(front2_sensorid, S_IRUGO, camera_front2_sensorid_show, NULL);
 static DEVICE_ATTR(front2_camfw, S_IRUGO, camera_front2_camfw_show, NULL);
+static DEVICE_ATTR(front2_camtype, S_IRUGO, camera_front2_camtype_show, NULL);
 static DEVICE_ATTR(front_dualcal, S_IRUGO, camera_front_dualcal_show, NULL);
 static DEVICE_ATTR(front_dualcal_size, S_IRUGO, camera_front_dualcal_size_show, NULL);
 static DEVICE_ATTR(front2_tilt, S_IRUGO, camera_front2_tilt_show, NULL);
@@ -2318,6 +2340,10 @@ int fimc_is_create_sysfs(struct fimc_is_core *core)
 			printk(KERN_ERR "failed to create front device file, %s\n",
 					dev_attr_front2_sensorid.attr.name);
 		}
+		if (device_create_file(camera_front_dev, &dev_attr_front2_camtype) < 0) {
+			printk(KERN_ERR "failed to create front device file, %s\n",
+				dev_attr_front2_camtype.attr.name);
+		}
 		if (device_create_file(camera_front_dev, &dev_attr_front2_camfw) < 0) {
 			printk(KERN_ERR "failed to create front device file, %s\n",
 				dev_attr_front2_camfw.attr.name);
@@ -2570,6 +2596,7 @@ int fimc_is_destroy_sysfs(struct fimc_is_core *core)
 #ifdef CAMERA_FRONT2
 		device_remove_file(camera_front_dev, &dev_attr_front2_sensorid);
 		device_remove_file(camera_front_dev, &dev_attr_front2_camfw);
+		device_remove_file(camera_front_dev, &dev_attr_front2_camtype);
 		device_remove_file(camera_front_dev, &dev_attr_front_dualcal);
 		device_remove_file(camera_front_dev, &dev_attr_front_dualcal_size);
 		device_remove_file(camera_front_dev, &dev_attr_front2_tilt);

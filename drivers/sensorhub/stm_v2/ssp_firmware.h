@@ -18,7 +18,7 @@
 
 #include "ssp.h"
 
-#define SSP_FIRMWARE_REVISION_STM       17112200
+#define SSP_FIRMWARE_REVISION_STM       18040900
 
 #define SSP_INVALID_REVISION            99999
 #define SSP_INVALID_REVISION2           0xFFFFFF
