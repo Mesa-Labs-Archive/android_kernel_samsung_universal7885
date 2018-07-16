@@ -23,6 +23,9 @@
 #include <asm/processor.h>
 #include <asm/cacheflush.h>
 #include <asm/tlbflush.h>
+#ifndef CONFIG_UH_RKP
+#include <linux/rkp.h>
+#endif
 
 #define check_pgt_cache()		do { } while (0)
 
@@ -31,17 +34,50 @@
 
 #if CONFIG_PGTABLE_LEVELS > 2
 
+#ifndef CONFIG_UH_RKP
 static inline pmd_t *pmd_alloc_one(struct mm_struct *mm, unsigned long addr)
 {
 	return (pmd_t *)__get_free_page(PGALLOC_GFP);
 }
-
+#else
+static inline pmd_t *pmd_alloc_one(struct mm_struct *mm, unsigned long addr)
+{
+	/* FIXME not zeroing the page */
+	int rkp_do = 0;
+	pmd_t *rkp_ropage = NULL;
+#ifdef CONFIG_KNOX_KAP
+	if (boot_mode_security)
+#endif
+		rkp_do = 1;
+	if (rkp_do) rkp_ropage = (pmd_t *)rkp_ro_alloc();
+	if (rkp_ropage)
+		return rkp_ropage;
+	else
+		return (pmd_t *)__get_free_page(PGALLOC_GFP);
+}
+#endif
+#ifndef CONFIG_UH_RKP
 static inline void pmd_free(struct mm_struct *mm, pmd_t *pmd)
 {
 	BUG_ON((unsigned long)pmd & (PAGE_SIZE-1));
 	free_page((unsigned long)pmd);
 }
-
+#else
+static inline void pmd_free(struct mm_struct *mm, pmd_t *pmd)
+{
+	int rkp_do = 0;
+	BUG_ON((unsigned long)pmd & (PAGE_SIZE-1));
+#ifdef CONFIG_KNOX_KAP
+	if (boot_mode_security)
+#endif
+		rkp_do = 1;
+	if (rkp_do && (unsigned long)pmd >= (unsigned long)RKP_RBUF_VA &&
+		(unsigned long)pmd < ((unsigned long)RKP_RBUF_VA + RKP_ROBUF_SIZE))
+		rkp_ro_free((void*)pmd);
+	else
+		free_page((unsigned long)pmd);
+}
+#endif
 static inline void pud_populate(struct mm_struct *mm, pud_t *pud, pmd_t *pmd)
 {
 	set_pud(pud, __pud(__pa(pmd) | PMD_TYPE_TABLE));
@@ -51,17 +87,50 @@ static inline void pud_populate(struct mm_struct *mm, pud_t *pud, pmd_t *pmd)
 
 #if CONFIG_PGTABLE_LEVELS > 3
 
+#ifndef CONFIG_UH_RKP
 static inline pud_t *pud_alloc_one(struct mm_struct *mm, unsigned long addr)
 {
 	return (pud_t *)__get_free_page(PGALLOC_GFP);
 }
-
+#else
+static inline pud_t *pud_alloc_one(struct mm_struct *mm, unsigned long addr)
+{
+	int rkp_do = 0;
+	pmd_t *rkp_ropage = NULL;
+#ifdef CONFIG_KNOX_KAP
+	if (boot_mode_security)
+#endif
+		rkp_do = 1;
+	if (rkp_do) rkp_ropage = (pud_t *)rkp_ro_alloc();
+	if (rkp_ropage)
+		return rkp_ropage;
+	else
+		return (pud_t *)__get_free_page(PGALLOC_GFP);
+}
+#endif
+#ifndef CONFIG_UH_RKP
 static inline void pud_free(struct mm_struct *mm, pud_t *pud)
 {
 	BUG_ON((unsigned long)pud & (PAGE_SIZE-1));
 	free_page((unsigned long)pud);
 }
+#else
+static inline void pud_free(struct mm_struct *mm, pud_t *pud)
+{
+	int rkp_do = 0;
+#ifdef CONFIG_KNOX_KAP
+	if (boot_mode_security)
+#endif	//CONFIG_KNOX_KAP
+		rkp_do = 1;
+	BUG_ON((unsigned long)pud & (PAGE_SIZE-1));
 
+	if (rkp_do && (unsigned long)pud >= (unsigned long)RKP_RBUF_VA &&
+		(unsigned long)pud < ((unsigned long)RKP_RBUF_VA + RKP_ROBUF_SIZE))
+		rkp_ro_free((void*)pud);
+	else
+		free_page((unsigned long)pud);
+}
+#endif
 static inline void pgd_populate(struct mm_struct *mm, pgd_t *pgd, pud_t *pud)
 {
 	set_pgd(pgd, __pgd(__pa(pud) | PUD_TYPE_TABLE));

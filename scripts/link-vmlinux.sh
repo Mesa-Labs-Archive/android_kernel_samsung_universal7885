@@ -248,5 +248,17 @@ if [ -n "${CONFIG_KALLSYMS}" ]; then
 	fi
 fi
 
+if [ -n "${CONFIG_RELOCATABLE_KERNEL}" ]; then
+    if [ -n "${CONFIG_EXYNOS_FMP_FIPS}" ]; then
+	echo '  FIPS with KALSR : Generating hmac of fmp, then update vmlinux... '
+	${CONFIG_SHELL} "${srctree}/scripts/fips_kaslr_fmp_hmac.sh" "${objtree}/vmlinux" "${objtree}/System.map"
+    fi
+else
+	if [ -n "${CONFIG_EXYNOS_FMP_FIPS}" ]; then
+	    echo '  FIPS : Generating hmac of fmp and updating vmlinux... '
+	    ${CONFIG_SHELL} "${srctree}/scripts/fips_fmp_hmac.sh" "${objtree}/vmlinux" "${objtree}/System.map"
+	fi
+fi
+
 # We made a new kernel - delete old version file
 rm -f .old_version

@@ -357,6 +357,11 @@ PERL		= perl
 PYTHON		= python
 CHECK		= sparse
 
+ifeq ($(CONFIG_FIPS_FMP),)
+    READELF        = $(CROSS_COMPILE)readelf
+    export READELF
+endif
+
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
 CFLAGS_MODULE   =
@@ -391,6 +396,7 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
+		   -Werror \
 		   -std=gnu89
 
 KBUILD_AFLAGS_KERNEL :=
@@ -461,6 +467,26 @@ asm-generic:
 	$(Q)$(MAKE) -f $(srctree)/scripts/Makefile.asm-generic \
 	            src=uapi/asm obj=arch/$(SRCARCH)/include/generated/uapi/asm
 
+ifneq ($(PLATFORM_VERSION), )
+PLATFORM_VERSION_NUMBER=$(shell $(CONFIG_SHELL) $(srctree)/scripts/android-version.sh $(PLATFORM_VERSION))
+MAJOR_VERSION=$(shell $(CONFIG_SHELL) $(srctree)/scripts/android-major-version.sh $(PLATFORM_VERSION))
+export ANDROID_VERSION=$(PLATFORM_VERSION_NUMBER)
+export ANDROID_MAJOR_VERSION=$(MAJOR_VERSION)
+KBUILD_CFLAGS += -DANDROID_VERSION=$(PLATFORM_VERSION_NUMBER)
+KBUILD_CFLAGS += -DANDROID_MAJOR_VERSION=$(MAJOR_VERSION)
+# Example
+# SELINUX_DIR=$(shell $(CONFIG_SHELL) $(srctree)/scripts/find_matching_major.sh "$(srctree)" "security/selinux" "$(ANDROID_MAJOR_VERSION)")
+else
+export ANDROID_VERSION=990000
+KBUILD_CFLAGS += -DANDROID_VERSION=990000
+endif
+PHONY += replace_dirs
+replace_dirs:
+ifneq ($(PLATFORM_VERSION), )
+# Example
+	#@echo "replace selinux from $(SELINUX_DIR)"
+	#$(Q)$(CONFIG_SHELL) $(srctree)/scripts/replace_dir.sh "$(srctree)" "security/selinux" "$(SELINUX_DIR)"
+endif
 # To make sure we do not include .config for any of the *config targets
 # catch them early, and hand them over to scripts/kconfig/Makefile
 # It is allowed to specify more targets when calling make, including
@@ -780,6 +806,13 @@ endif
 include scripts/Makefile.kasan
 include scripts/Makefile.extrawarn
 
+#Disable the whole of the following block to disable LKM AUTH
+ifeq ($(CONFIG_TIMA_LKMAUTH),y)
+ifeq ($(CONFIG_TIMA),y)
+    KBUILD_CFLAGS += -Idrivers/gud/gud-exynos7885/MobiCoreDriver/mci/
+endif
+endif
+
 # Add any arch overrides and user supplied CPPFLAGS, AFLAGS and CFLAGS as the
 # last assignments
 KBUILD_CPPFLAGS += $(ARCH_CPPFLAGS) $(KCPPFLAGS)
@@ -794,6 +827,14 @@ LDFLAGS_vmlinux += $(LDFLAGS_BUILD_ID)
 
 ifeq ($(CONFIG_STRIP_ASM_SYMS),y)
 LDFLAGS_vmlinux	+= $(call ld-option, -X,)
+endif
+
+ifneq ($(SEC_BUILD_CONF_USE_FINGERPRINT_TZ), false)
+  ifeq ($(CONFIG_SENSORS_FINGERPRINT), y)
+    ifneq ($(CONFIG_SEC_FACTORY), y)
+      export KBUILD_FP_SENSOR_CFLAGS := -DENABLE_SENSORS_FPRINT_SECURE
+    endif
+  endif
 endif
 
 # Default kernel image to build when no specific target is given.

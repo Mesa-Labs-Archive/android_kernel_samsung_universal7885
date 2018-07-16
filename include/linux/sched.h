@@ -173,6 +173,11 @@ extern bool single_task_running(void);
 extern unsigned long nr_iowait(void);
 extern unsigned long nr_iowait_cpu(int cpu);
 extern void get_iowait_load(unsigned long *nr_waiters, unsigned long *load);
+#ifdef CONFIG_SCHED_HMP
+extern int register_hmp_task_migration_notifier(struct notifier_block *nb);
+#define HMP_UP_MIGRATION       0
+#define HMP_DOWN_MIGRATION     1
+#endif
 
 extern void calc_global_load(unsigned long ticks);
 
@@ -930,6 +935,12 @@ enum cpu_idle_type {
 #define SCHED_CAPACITY_SCALE	(1L << SCHED_CAPACITY_SHIFT)
 
 /*
+ * Increase resolution of cpu_power calculations
+ */
+#define SCHED_POWER_SHIFT	10
+#define SCHED_POWER_SCALE	(1L << SCHED_POWER_SHIFT)
+
+/*
  * Wake-queues are lists of tasks with a pending wakeup, whose
  * callers have already marked the task as woken internally,
  * and can thus carry on. A common use case is being able to
@@ -991,6 +1002,7 @@ extern void wake_up_q(struct wake_q_head *head);
 #define SD_PREFER_SIBLING	0x1000	/* Prefer to place tasks in a sibling domain */
 #define SD_OVERLAP		0x2000	/* sched_domains of this level overlap */
 #define SD_NUMA			0x4000	/* cross-node balancing */
+#define SD_NO_LOAD_BALANCE	0x8000	/* flag for hmp scheduler */
 
 #ifdef CONFIG_SCHED_SMT
 static inline int cpu_smt_flags(void)
@@ -1150,6 +1162,34 @@ extern void wake_up_if_idle(int cpu);
 # define SD_INIT_NAME(type)
 #endif
 
+#ifdef CONFIG_SCHED_HMP
+struct hmp_domain {
+	struct cpumask cpus;
+	struct cpumask possible_cpus;
+#ifdef CONFIG_SCHED_SKIP_CORE_SELECTION_MASK
+	struct cpumask cpumask_skip;
+#endif
+	struct list_head hmp_domains;
+};
+
+extern int set_hmp_boost(int enable);
+extern int set_hmp_semiboost(int enable);
+extern int set_hmp_boostpulse(int duration);
+extern int get_hmp_boost(void);
+extern int get_hmp_semiboost(void);
+extern int set_hmp_up_threshold(int value);
+extern int set_hmp_down_threshold(int value);
+extern int set_active_down_migration(int enable);
+extern int set_hmp_aggressive_up_migration(int enable);
+extern int set_hmp_aggressive_yield(int enable);
+#ifdef CONFIG_SCHED_HMP_SELECTIVE_BOOST_WITH_NITP
+extern int set_hmp_selective_boost(int enable);
+extern int get_hmp_selective_boost(void);
+#endif
+#else
+extern int set_hmp_boost(int enable);
+#endif /* CONFIG_SCHED_HMP */
+
 #else /* CONFIG_SMP */
 
 struct sched_domain_attr;
@@ -1205,6 +1245,11 @@ struct sched_avg {
 	u64 last_update_time, load_sum;
 	u32 util_sum, period_contrib;
 	unsigned long load_avg, util_avg;
+#ifdef CONFIG_SCHED_HMP
+	u64 hmp_load_sum, hmp_load_avg;
+	u64 hmp_last_up_migration;
+	u64 hmp_last_down_migration;
+#endif
 };
 
 #ifdef CONFIG_SCHEDSTATS
@@ -1350,6 +1395,10 @@ union rcu_special {
 	u32 s; /* Set of bits. */
 };
 struct rcu_node;
+
+#ifdef CONFIG_FIVE
+struct task_integrity;
+#endif
 
 enum perf_event_task_context {
 	perf_invalid_context = -1,
@@ -1811,8 +1860,14 @@ struct task_struct {
 	unsigned int	sequential_io;
 	unsigned int	sequential_io_avg;
 #endif
+#ifdef CONFIG_SDP
+	unsigned int sensitive;
+#endif
 #ifdef CONFIG_DEBUG_ATOMIC_SLEEP
 	unsigned long	task_state_change;
+#endif
+#ifdef CONFIG_FIVE
+	struct task_integrity *integrity;
 #endif
 	int pagefault_disabled;
 /* CPU-specific state of this task */
@@ -1934,13 +1989,7 @@ static inline pid_t task_tgid_nr(struct task_struct *tsk)
 	return tsk->tgid;
 }
 
-pid_t task_tgid_nr_ns(struct task_struct *tsk, struct pid_namespace *ns);
-
-static inline pid_t task_tgid_vnr(struct task_struct *tsk)
-{
-	return pid_vnr(task_tgid(tsk));
-}
-
+static pid_t task_tgid_nr_ns(struct task_struct *tsk, struct pid_namespace *ns);
 
 static inline int pid_alive(const struct task_struct *p);
 static inline pid_t task_ppid_nr_ns(const struct task_struct *tsk, struct pid_namespace *ns)
@@ -1981,6 +2030,16 @@ static inline pid_t task_session_nr_ns(struct task_struct *tsk,
 static inline pid_t task_session_vnr(struct task_struct *tsk)
 {
 	return __task_pid_nr_ns(tsk, PIDTYPE_SID, NULL);
+}
+
+static inline pid_t task_tgid_nr_ns(struct task_struct *tsk, struct pid_namespace *ns)
+{
+	return __task_pid_nr_ns(tsk, __PIDTYPE_TGID, ns);
+}
+
+static inline pid_t task_tgid_vnr(struct task_struct *tsk)
+{
+	return __task_pid_nr_ns(tsk, __PIDTYPE_TGID, NULL);
 }
 
 /* obsolete, do not use */
@@ -3140,6 +3199,11 @@ static inline void inc_syscw(struct task_struct *tsk)
 {
 	tsk->ioac.syscw++;
 }
+
+static inline void inc_syscfs(struct task_struct *tsk)
+{
+	tsk->ioac.syscfs++;
+}
 #else
 static inline void add_rchar(struct task_struct *tsk, ssize_t amt)
 {
@@ -3154,6 +3218,9 @@ static inline void inc_syscr(struct task_struct *tsk)
 }
 
 static inline void inc_syscw(struct task_struct *tsk)
+{
+}
+static inline void inc_syscfs(struct task_struct *tsk)
 {
 }
 #endif
@@ -3191,5 +3258,11 @@ static inline unsigned long rlimit_max(unsigned int limit)
 {
 	return task_rlimit_max(current, limit);
 }
+
+#ifdef CONFIG_SCHED_HP_EVENT
+void hp_event_update(struct sched_entity *se);
+#else
+static inline void hp_event_update(struct sched_entity *se) { }
+#endif
 
 #endif

@@ -207,6 +207,8 @@ config CRYPTO_AUTHENC
 	select CRYPTO_MANAGER
 	select CRYPTO_HASH
 	select CRYPTO_NULL
+	select CRYPTO_ECHAINIV
+	select CRYPTO_SEQIV
 	help
 	  Authenc: Combined mode wrapper for IPsec.
 	  This is required for IPSec.

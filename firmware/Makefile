@@ -105,6 +105,15 @@ fw-shipped-$(CONFIG_USB_KAWETH) += kaweth/new_code.bin kaweth/trigger_code.bin \
 				   kaweth/new_code_fix.bin \
 				   kaweth/trigger_code_fix.bin
 ifdef CONFIG_FIRMWARE_IN_KERNEL
+fw-shipped-$(CONFIG_EXYNOS8890_APM) += apm_8890_evt1.h
+ifdef CONFIG_SOC_EMULATOR8895
+fw-shipped-$(CONFIG_EXYNOS8895_ACPM) += emulator8895_acpm_dvfs.fw
+else
+fw-shipped-$(CONFIG_EXYNOS8895_ACPM) += exynos8895_acpm_dvfs.fw
+endif
+fw-shipped-$(CONFIG_EXYNOS7872_ACPM) += exynos7872_acpm_dvfs.fw
+fw-shipped-$(CONFIG_EXYNOS7872_ACPM) += exynos7872_acpm_fvp.fw
+fw-shipped-$(CONFIG_EXYNOS7885_ACPM) += exynos7885_acpm_fvp.fw
 fw-shipped-$(CONFIG_USB_SERIAL_KEYSPAN_MPR) += keyspan/mpr.fw
 fw-shipped-$(CONFIG_USB_SERIAL_KEYSPAN_USA18X) += keyspan/usa18x.fw
 fw-shipped-$(CONFIG_USB_SERIAL_KEYSPAN_USA19) += keyspan/usa19.fw
@@ -135,6 +144,43 @@ fw-shipped-$(CONFIG_USB_SERIAL_XIRCOM) += keyspan_pda/xircom_pgs.fw
 fw-shipped-$(CONFIG_USB_VICAM) += vicam/firmware.fw
 fw-shipped-$(CONFIG_VIDEO_CPIA2) += cpia2/stv0672_vp4.bin
 fw-shipped-$(CONFIG_YAM) += yam/1200.bin yam/9600.bin
+
+# Touchscreen Firmware
+fw-shipped-$(CONFIG_TOUCHSCREEN_MXT540E) += tsp_atmel/mXT540E.fw
+fw-shipped-$(CONFIG_TOUCHSCREEN_SYNAPTICS_I2C_DSX) += tsp_synaptics/synaptics_b0_h.fw
+fw-shipped-$(CONFIG_TOUCHSCREEN_FTS) += tsp_stm/fts8cd56_dream2.fw tsp_stm/fts9cd56_dream1.fw
+fw-shipped-$(CONFIG_TOUCHSCREEN_MELFAS_MMS449) += tsp_melfas/mms449_s5neo.fw
+fw-shipped-$(CONFIG_TOUCHSCREEN_MELFAS_MMS438) += tsp_melfas/mms438_j7duo.fw
+fw-shipped-$(CONFIG_TOUCHSCREEN_MMS144) += tsp_melfas/DIABLO_CoreV54_V35_master.fw
+fw-shipped-$(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5) += cyttsp5_csp.fw
+fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_TS_A552) += tsp_sec/hero2la.bin
+fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_TS) += tsp_sec/y661_a5y18.fw tsp_sec/y661_a7y18.fw
+fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_INCELL_TS) += tsp_sec/s6d7at01a01_j7topelte.fw
+fw-shipped-$(CONFIG_TOUCHSCREEN_SYNAPTICS_I2C_TD4X00) += tsp_synaptics/td4100_j3poplte.fw tsp_synaptics/td4100_j3poplte_recovery.fw \
+														tsp_synaptics/td4100_j7pop.fw tsp_synaptics/td4100_j7pop_recovery.fw \
+														tsp_synaptics/td4100_j3top.fw tsp_synaptics/td4100_j3top_recovery.fw
+
+TSPFIRMWARE_DIRECTORY = firmware/tsp_zinitix
+ifeq ($(shell test -d $(TSPFIRMWARE_DIRECTORY) && echo yes),yes)
+fw-shipped-$(CONFIG_TOUCHSCREEN_ZINITIX_ZT75XX_TCLM) += tsp_zinitix/zt7548_a6.fw
+else
+$(warning '$(TSPFIRMWARE_DIRECTORY)' directory dose not exist)
+endif
+
+# TouchKey Firmware
+fw-shipped-$(CONFIG_KEYBOARD_TC300K) += coreriver/tc305k_j7topelte.fw coreriver/tc350k_j3top.fw \
+										coreriver/tc350k_j7duo.fw coreriver/tc350k_j7duo_rev04.fw
+#touch based grip sensor
+fw-shipped-$(CONFIG_SENSORS_A96T3X6) += abov/a96t346_a6elte.fw abov/a96t326_a5y18.fw
+
+#Sensor Hub
+fw-shipped-$(CONFIG_SENSORS_SSP_STM32) += ssp_stmf410_a2018.fw
+fw-shipped-$(CONFIG_SENSORS_SSP_STM32) += ssp_stmf410_a2018_O.fw
+fw-shipped-$(CONFIG_SENSORS_SSP_STM32) += ssp_crashed.fw
+
+fw-shipped-$(CONFIG_KEYBOARD_ABOV_TOUCH_3X6) += abov/a96t326_a5y18.fw abov/a96t326_a5y18_can.fw abov/a96t326_a7y18.fw
+
+fw-shipped-$(CONFIG_FIVE_TEE_DRIVER) += five/ffffffff000000000000000000000072.tlbin
 
 fw-shipped-all := $(fw-shipped-y) $(fw-shipped-m) $(fw-shipped-)
 

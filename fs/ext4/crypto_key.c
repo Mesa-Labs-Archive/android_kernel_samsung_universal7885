@@ -14,6 +14,8 @@
 #include <linux/scatterlist.h>
 #include <uapi/linux/keyctl.h>
 
+#include <crypto/fmp.h>
+
 #include "ext4.h"
 #include "xattr.h"
 
@@ -90,7 +92,8 @@ void ext4_free_crypt_info(struct ext4_crypt_info *ci)
 
 	if (ci->ci_keyring_key)
 		key_put(ci->ci_keyring_key);
-	crypto_free_ablkcipher(ci->ci_ctfm);
+	if (!ci->private_enc_mode)
+		crypto_free_ablkcipher(ci->ci_ctfm);
 	kmem_cache_free(ext4_crypt_info_cachep, ci);
 }
 
@@ -165,6 +168,14 @@ retry:
 	crypt_info->ci_flags = ctx.flags;
 	crypt_info->ci_data_mode = ctx.contents_encryption_mode;
 	crypt_info->ci_filename_mode = ctx.filenames_encryption_mode;
+#ifdef CONFIG_EXT4_PRIVATE_ENCRYPTION
+	if (ctx.filenames_encryption_mode == EXT4_PRIVATE_ENCRYPTION_MODE_AES_256_XTS ||
+			ctx.filenames_encryption_mode == EXT4_PRIVATE_ENCRYPTION_MODE_AES_256_CBC) {
+		printk(KERN_WARNING "Private encryption doesn't support filename encryption mode. \
+				Forcely, change it to AES_256_CTS mode\n");
+		ctx.filenames_encryption_mode = EXT4_ENCRYPTION_MODE_AES_256_CTS;
+	}
+#endif /* CONFIG_EXT4_PRIVATE_ENCRYPTION */
 	crypt_info->ci_ctfm = NULL;
 	crypt_info->ci_keyring_key = NULL;
 	memcpy(crypt_info->ci_master_key, ctx.master_key_descriptor,
@@ -182,6 +193,16 @@ retry:
 	case EXT4_ENCRYPTION_MODE_AES_256_CTS:
 		cipher_str = "cts(cbc(aes))";
 		break;
+#ifdef CONFIG_EXT4_PRIVATE_ENCRYPTION
+	case EXT4_PRIVATE_ENCRYPTION_MODE_AES_256_XTS:
+		cipher_str = "xts(aes)";
+		inode->i_mapping->private_algo_mode = EXYNOS_FMP_ALGO_MODE_AES_XTS;
+		break;
+	case EXT4_PRIVATE_ENCRYPTION_MODE_AES_256_CBC:
+		cipher_str = "cbc(aes)";
+		inode->i_mapping->private_algo_mode = EXYNOS_FMP_ALGO_MODE_AES_CBC;
+		break;
+#endif /* CONFIG_EXT4_PRIVATE_ENCRYPTION */
 	default:
 		printk_once(KERN_WARNING
 			    "ext4: unsupported key mode %d (ino %u)\n",
@@ -237,22 +258,34 @@ retry:
 	if (res)
 		goto out;
 got_key:
-	ctfm = crypto_alloc_ablkcipher(cipher_str, 0, 0);
-	if (!ctfm || IS_ERR(ctfm)) {
-		res = ctfm ? PTR_ERR(ctfm) : -ENOMEM;
-		printk(KERN_DEBUG
-		       "%s: error %d (inode %u) allocating crypto tfm\n",
-		       __func__, res, (unsigned) inode->i_ino);
-		goto out;
+	memset(crypt_info->raw_key, 0, EXT4_MAX_KEY_SIZE);
+	if (mode == EXT4_PRIVATE_ENCRYPTION_MODE_AES_256_XTS ||
+			mode == EXT4_PRIVATE_ENCRYPTION_MODE_AES_256_CBC) {
+		crypt_info->private_enc_mode = EXYNOS_FMP_FILE_ENC;
+		memcpy(crypt_info->raw_key, raw_key, ext4_encryption_key_size(mode));
+		memcpy(inode->i_mapping->key, crypt_info->raw_key, ext4_encryption_key_size(mode));
+		inode->i_mapping->key_length = ext4_encryption_key_size(mode);
+	} else {
+		crypt_info->private_enc_mode = 0;
+		inode->i_mapping->private_algo_mode = EXYNOS_FMP_BYPASS_MODE;
+		ctfm = crypto_alloc_ablkcipher(cipher_str, 0, 0);
+		if (!ctfm || IS_ERR(ctfm)) {
+			res = ctfm ? PTR_ERR(ctfm) : -ENOMEM;
+			printk(KERN_DEBUG
+			       "%s: error %d (inode %u) allocating crypto tfm\n",
+			       __func__, res, (unsigned) inode->i_ino);
+			goto out;
+		}
+		crypt_info->ci_ctfm = ctfm;
+		crypto_ablkcipher_clear_flags(ctfm, ~0);
+		crypto_tfm_set_flags(crypto_ablkcipher_tfm(ctfm),
+				     CRYPTO_TFM_REQ_WEAK_KEY);
+		res = crypto_ablkcipher_setkey(ctfm, raw_key,
+					       ext4_encryption_key_size(mode));
+		if (res)
+			goto out;
 	}
-	crypt_info->ci_ctfm = ctfm;
-	crypto_ablkcipher_clear_flags(ctfm, ~0);
-	crypto_tfm_set_flags(crypto_ablkcipher_tfm(ctfm),
-			     CRYPTO_TFM_REQ_WEAK_KEY);
-	res = crypto_ablkcipher_setkey(ctfm, raw_key,
-				       ext4_encryption_key_size(mode));
-	if (res)
-		goto out;
+	inode->i_mapping->private_enc_mode = crypt_info->private_enc_mode;
 	memzero_explicit(raw_key, sizeof(raw_key));
 	if (cmpxchg(&ei->i_crypt_info, NULL, crypt_info) != NULL) {
 		ext4_free_crypt_info(crypt_info);

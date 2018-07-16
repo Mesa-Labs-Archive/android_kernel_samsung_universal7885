@@ -70,7 +70,36 @@
 	.if	\regsize == 32
 	mov	w0, w0				// zero upper 32 bits of x0
 	.endif
+
+#ifdef CONFIG_SOC_EXYNOS8895
+	.if     \regsize == 32
+	.if     \el == 0
+	msr     cntp_cval_el0, x0
+	mov     x0, sp
+	lsr     x0, x0, #12
+	tlbi    vaae1, x0
+	dsb     nsh
+	mrs     x0, cntp_cval_el0
+	.endif
+	.endif
+#endif
+
+	msr	daifclr, #4			// unmask A bit
 	stp	x0, x1, [sp, #16 * 0]
+#if 1
+	/*
+	 * This is workaround code to stop infinite exception problem:
+	 * Check low bits of sp if sp is too low enough to reach the bottom of stack area
+	 * If it is under stack bottom + 0x200, loop forever and wait for watchdog reset
+	 */
+	mov	x0, sp
+	and	x0, x0, #(THREAD_SIZE - 1)
+	cmp	x0, #0x200 // 0x200 - 0x120 is rough estimation of stack safety area (including thread_info)
+	b.ge	1f
+	b	.
+1:
+	ldr	x0, [sp]
+#endif
 	stp	x2, x3, [sp, #16 * 1]
 	stp	x4, x5, [sp, #16 * 2]
 	stp	x6, x7, [sp, #16 * 3]
@@ -304,7 +333,16 @@ el1_da:
 	 * Data abort handling
 	 */
 	mrs	x0, far_el1
+
 	enable_dbg
+
+	/*
+	 * tlb conflict handling
+	*/
+	and	x24, x1, #ESR_EL1_ISS_DFSC_MASK
+	cmp	x24, #ESR_EL1_ISS_DFSC_TLB_CONFLICT
+	b.eq	el1_da_tlb_conflict
+
 	// re-enable interrupts if they were enabled in the aborted context
 	tbnz	x23, #7, 1f			// PSR_I_BIT
 	enable_irq
@@ -314,6 +352,10 @@ el1_da:
 
 	// disable interrupts before pulling preserved data off the stack
 	disable_irq
+	kernel_exit 1
+el1_da_tlb_conflict:
+	tlbi vmalle1
+	dsb nsh
 	kernel_exit 1
 el1_sp_pc:
 	/*
@@ -329,6 +371,7 @@ el1_undef:
 	 */
 	enable_dbg
 	mov	x0, sp
+	mrs	x1, esr_el1			// read the syndrome register
 	b	do_undefinstr
 el1_dbg:
 	/*
@@ -403,7 +446,7 @@ el0_sync:
 	cmp	x24, #ESR_ELx_EC_FP_EXC64	// FP/ASIMD exception
 	b.eq	el0_fpsimd_exc
 	cmp	x24, #ESR_ELx_EC_SYS64		// configurable trap
-	b.eq	el0_undef
+	b.eq	el0_sys
 	cmp	x24, #ESR_ELx_EC_SP_ALIGN	// stack alignment exception
 	b.eq	el0_sp_pc
 	cmp	x24, #ESR_ELx_EC_PC_ALIGN	// pc alignment exception
@@ -529,7 +572,18 @@ el0_undef:
 	enable_dbg_and_irq
 	ct_user_exit
 	mov	x0, sp
+	mrs	x1, esr_el1			// read the syndrome register
 	bl	do_undefinstr
+	b	ret_to_user
+el0_sys:
+	/*
+	 * System instructions, for trapped cache maintenance instructions
+	 */
+	enable_dbg_and_irq
+	ct_user_exit
+	mov	x0, x25
+	mov	x1, sp
+	bl	do_sysinstr
 	b	ret_to_user
 el0_dbg:
 	/*
@@ -679,6 +733,29 @@ el0_svc_naked:					// compat entry point
 	b.ne	__sys_trace
 	cmp     scno, sc_nr                     // check upper syscall limit
 	b.hs	ni_sys
+#ifdef CONFIG_SECURITY_DEFEX
+/*
+ * Defex enter hook
+ */
+
+	ldr	x16, =defex_syscall_catch_enter
+	ldr	x16, [x16]
+	cmp	x16, xzr
+	b.eq	2f
+	mov	x0, scno
+	mov	x1, sp
+	blr	x16
+
+	cbnz	w0, ret_fast_syscall		// block this syscall?
+#	adr	lr, ret_fast_syscall		// return address (not needed here)
+
+	ldp	x0, x1, [sp]			// restore the syscall args
+	ldp	x2, x3, [sp, #S_X2]
+	ldp	x4, x5, [sp, #S_X4]
+	ldp	x6, x7, [sp, #S_X6]
+
+2:
+#endif
 	ldr	x16, [stbl, scno, lsl #3]	// address in the syscall table
 	blr	x16				// call sys_* routine
 	b	ret_fast_syscall
@@ -706,6 +783,23 @@ __sys_trace:
 	mov	x1, sp				// pointer to regs
 	cmp	scno, sc_nr			// check upper syscall limit
 	b.hs	__ni_sys_trace
+#ifdef CONFIG_SECURITY_DEFEX
+/*
+ * Defex enter hook
+ */
+
+	ldr	x16, =defex_syscall_catch_enter
+	ldr	x16, [x16]
+	cmp	x16, xzr
+	b.eq	3f
+	mov	x0, scno
+	mov	x1, sp
+	blr	x16
+
+	cbnz	w0, __sys_trace_return		// block this syscall?
+#	adr	lr, __sys_trace_return		// return address (not neede here)
+3:
+#endif
 	ldp	x0, x1, [sp]			// restore the syscall args
 	ldp	x2, x3, [sp, #S_X2]
 	ldp	x4, x5, [sp, #S_X4]

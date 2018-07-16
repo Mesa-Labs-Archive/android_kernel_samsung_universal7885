@@ -121,6 +121,13 @@ config EXT4_FS_ENCRYPTION
 	default y
 	depends on EXT4_ENCRYPTION
 
+
+config EXT4_PRIVATE_ENCRYPTION
+	tristate "Ext4 Private Encryption"
+	depends on EXT4_FS_ENCRYPTION && EXYNOS_FMP
+	help
+	  Enable private encryption of ext4 files and difectories.
+
 config EXT4_DEBUG
 	bool "EXT4 debugging support"
 	depends on EXT4_FS

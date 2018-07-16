@@ -1,0 +1,53 @@
+config EXYNOS_DECON_LCD
+	depends on EXYNOS_DECON_7885
+	bool "Select LCD panel driver"
+
+config DISPLAY_USE_INFO
+	depends on EXYNOS_DECON_LCD
+	tristate "Support display use info logging"
+	default n
+
+config EXYNOS_DECON_MDNIE_LITE
+	depends on EXYNOS_DECON_LCD
+	tristate "Support MDNIE LITE"
+	default n
+
+config EXYNOS_DECON_LCD_S6E3FA0
+	depends on EXYNOS_DECON_LCD && EXYNOS_MIPI_DSIM
+	tristate "S6E3FA0 AMOLED FHD LCD driver"
+
+config EXYNOS_DECON_LCD_S6E3FA3
+	depends on EXYNOS_DECON_LCD && EXYNOS_MIPI_DSIM
+	tristate "S6E3FA3 AMOLED FHD LCD driver"
+
+config EXYNOS_DECON_LCD_S6E3FA7
+	depends on EXYNOS_DECON_LCD && EXYNOS_MIPI_DSIM
+	tristate "S6E3FA7 AMOLED FHD+ LCD driver"
+
+config EXYNOS_DECON_LCD_S6E3FA7_A5Y18
+	depends on EXYNOS_DECON_LCD && EXYNOS_MIPI_DSIM
+	tristate "S6E3FA7 AMOLED FHD+ LCD driver"
+
+config EXYNOS_DECON_LCD_S6E3FA7_A7Y18
+	depends on EXYNOS_DECON_LCD && EXYNOS_MIPI_DSIM
+	tristate "S6E3FA7 AMOLED FHD+ LCD driver"
+
+config EXYNOS_DECON_LCD_TD4100_J3TOPE
+	depends on EXYNOS_DECON_LCD
+	bool "TD4100_J3TOPE TFT INCELL HD LCD driver"
+
+config EXYNOS_DECON_LCD_S6D7AT0B_J7TOPE
+	depends on EXYNOS_DECON_LCD
+	bool "S6D7AT0B_J7TOPE TFT INCELL HD LCD driver"
+
+config EXYNOS_DECON_LCD_EA8061S_J7DUO
+	depends on EXYNOS_DECON_LCD
+	bool "EA8061S_J7DUO AMOLED HD driver"
+
+config EXYNOS_DECON_LCD_S6E8AA5_A6ELTE
+	depends on EXYNOS_DECON_LCD
+	bool "S6E8AA5_A6ELTE AMOLED HDP driver"
+
+config EXYNOS_DECON_LCD_S6E8AA5_FEEL2
+	depends on EXYNOS_DECON_LCD
+	bool "S6E8AA5_FEEL2 AMOLED HDP driver"
