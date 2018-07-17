@@ -171,7 +171,7 @@ endif
 fw-shipped-$(CONFIG_KEYBOARD_TC300K) += coreriver/tc305k_j7topelte.fw coreriver/tc350k_j3top.fw \
 										coreriver/tc350k_j7duo.fw coreriver/tc350k_j7duo_rev04.fw
 #touch based grip sensor
-fw-shipped-$(CONFIG_SENSORS_A96T3X6) += abov/a96t346_a6elte.fw abov/a96t326_a5y18.fw
+fw-shipped-$(CONFIG_SENSORS_A96T3X6) += abov/a96t346_a6elte.fw
 
 #Sensor Hub
 fw-shipped-$(CONFIG_SENSORS_SSP_STM32) += ssp_stmf410_a2018.fw
