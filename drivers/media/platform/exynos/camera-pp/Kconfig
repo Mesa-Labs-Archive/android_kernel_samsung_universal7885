@@ -1,7 +1,7 @@
 #
 # Exynos Camera PostProcessing IP device drivers
 #
-config VIDEO_EXYNOS_CAMREA_POSTPROCESS
+config VIDEO_EXYNOS_CAMERA_POSTPROCESS
 		bool "Exynos Camera PostProcessing Devices"
 		depends on VIDEO_EXYNOS
 		select V4L2_MEM2MEM_DEV
