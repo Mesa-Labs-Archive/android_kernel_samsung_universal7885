@@ -60,8 +60,10 @@ struct page *selinux_kernel_status_page(void)
 			status->sequence = 0;
 // [ SEC_SELINUX_PORTING_COMMON
 #ifdef CONFIG_SECURITY_SEC_SELINUX
-#ifdef CONFIG_ALWAYS_ENFORCE
+#ifdef CONFIG_SECURITY_SELINUX_ALWAYS_ENFORCE
 			status->enforcing = 1;
+#elif defined(CONFIG_SECURITY_SELINUX_NEVER_ENFORCE)
+			status->enforcing = 0;
 #else
 			status->enforcing = selinux_enforcing;
 #endif
