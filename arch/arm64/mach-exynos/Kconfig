@@ -11,6 +11,23 @@ if ARCH_EXYNOS
 
 menu "SAMSUNG EXYNOS SoCs Support"
 
+choice
+	prompt "Exynos device target"
+	default MACH_EXYNOS7885_NONE
+
+config MACH_EXYNOS7885_NONE
+	bool "None"
+
+config MACH_EXYNOS7885_JACKPOTLTE_EUR_OPEN
+	bool "Galaxy A8 (SM-A530F)"
+	select EXYNOS_DTBTOOL
+
+config MACH_EXYNOS7885_JACKPOT2LTE_EUR_OPEN
+	bool "Galaxy A8+ (SM-A730F)"
+	select EXYNOS_DTBTOOL
+
+endchoice
+
 menuconfig EXYNOS_DTBTOOL
 	bool "Build dtbtool for Exynos"
 	select DTC
