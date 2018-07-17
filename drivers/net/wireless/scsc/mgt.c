@@ -1621,7 +1621,7 @@ static int slsi_sta_ieee80211_mode(struct net_device *dev, u16 current_bss_chann
 static int slsi_get_sta_mode(struct net_device *dev, const u8 *last_peer_mac)
 {
 	struct netdev_vif    *ndev_vif = netdev_priv(dev);
-	struct slsi_dev *sdev;
+	struct slsi_dev *sdev = NULL;
 	struct slsi_peer    *last_peer;
 	const u8             *peer_ie;
 
