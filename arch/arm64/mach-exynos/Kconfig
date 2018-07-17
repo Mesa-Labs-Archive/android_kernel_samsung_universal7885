@@ -1,0 +1,45 @@
+# arch/arm64/mach-exynos/Kconfig
+#
+# Copyright (c) 2016 Samsung Electronics Co., Ltd.
+#		http://www.samsung.com/
+#
+# Licensed under GPLv2
+
+# Configuration options for the EXYNOS7
+
+if ARCH_EXYNOS
+
+menu "SAMSUNG EXYNOS SoCs Support"
+
+choice
+	prompt "Exynos device target"
+	default MACH_EXYNOS7885_NONE
+
+config MACH_EXYNOS7885_NONE
+	bool "None"
+
+config MACH_EXYNOS7885_JACKPOTLTE_CAN_OPEN
+	bool "Galaxy A8 (SM-A530W)"
+	select SOC_EXYNOS7885
+
+config MACH_EXYNOS7885_JACKPOTLTE_EUR_OPEN
+	bool "Galaxy A8 (SM-A530F)"
+	select SOC_EXYNOS7885
+
+config MACH_EXYNOS7885_JACKPOTLTE_JPN_DCM
+	bool "Galaxy A8 (SM-A530J)"
+	select SOC_EXYNOS7885
+
+config MACH_EXYNOS7885_JACKPOTLTE_KOR
+	bool "Galaxy A8 (SM-A530N)"
+	select SOC_EXYNOS7885
+
+config MACH_EXYNOS7885_JACKPOT2LTE_EUR_OPEN
+	bool "Galaxy A8+ (SM-A730F)"
+	select SOC_EXYNOS7885
+
+endchoice
+
+endmenu
+
+endif
