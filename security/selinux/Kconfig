@@ -8,6 +8,13 @@ config SECURITY_SELINUX
 	  You will also need a policy configuration and a labeled filesystem.
 	  If you are unsure how to answer this question, answer N.
 
+config SECURITY_SEC_SELINUX
+	bool "NSA Samsung SELinux"
+	depends on SECURITY_SELINUX
+	default n
+	help
+	  This option will enable Samsung SELinux code.
+
 config SECURITY_SELINUX_BOOTPARAM
 	bool "NSA SELinux boot parameter"
 	depends on SECURITY_SELINUX

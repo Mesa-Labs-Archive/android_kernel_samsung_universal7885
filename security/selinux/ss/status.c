@@ -59,8 +59,12 @@ struct page *selinux_kernel_status_page(void)
 			status->version = SELINUX_KERNEL_STATUS_VERSION;
 			status->sequence = 0;
 // [ SEC_SELINUX_PORTING_COMMON
+#ifdef CONFIG_SECURITY_SEC_SELINUX
 #ifdef CONFIG_ALWAYS_ENFORCE
 			status->enforcing = 1;
+#else
+			status->enforcing = selinux_enforcing;
+#endif
 #else
 			status->enforcing = selinux_enforcing;
 #endif
