@@ -36,6 +36,9 @@
 #include <soc/samsung/cal-if.h>
 #include <soc/samsung/exynos-pd.h>
 #include <dt-bindings/clock/exynos7885.h>
+#ifdef CONFIG_STATE_NOTIFIER
+#include <linux/state_notifier.h>
+#endif
 
 #include "decon.h"
 #include "dsim.h"
@@ -645,6 +648,9 @@ static int decon_blank(int blank_mode, struct fb_info *info)
 			decon_err("skipped to disable decon\n");
 			goto blank_exit;
 		}
+#ifdef CONFIG_STATE_NOTIFIER
+		state_suspend();
+#endif
 		break;
 	case FB_BLANK_UNBLANK:
 		DPU_EVENT_LOG(DPU_EVT_UNBLANK, &decon->sd, ktime_set(0, 0));
@@ -655,6 +661,9 @@ static int decon_blank(int blank_mode, struct fb_info *info)
 		}
 		if (!ret)
 			atomic_set(&decon->win_config, 1);
+#ifdef CONFIG_STATE_NOTIFIER
+		state_resume();
+#endif
 		break;
 	case FB_BLANK_VSYNC_SUSPEND:
 	case FB_BLANK_HSYNC_SUSPEND:
