@@ -15,7 +15,7 @@
 #include <linux/reboot.h>
 #include <linux/writeback.h>
 #include <linux/dyn_sync_cntrl.h>
-#include <linux/lcd_notify.h>
+#include <linux/state_notifier.h>
 
 // fsync_mutex protects dyn_fsync_active during suspend / late resume transitions
 static DEFINE_MUTEX(fsync_mutex);
@@ -118,7 +118,7 @@ static int lcd_notifier_callback(struct notifier_block *this,
 {
 	switch (event) 
 	{
-		case LCD_EVENT_OFF_START:
+		case STATE_NOTIFIER_ACTIVE:
 			mutex_lock(&fsync_mutex);
 			
 			suspend_active = false;
@@ -131,7 +131,7 @@ static int lcd_notifier_callback(struct notifier_block *this,
 			mutex_unlock(&fsync_mutex);
 			break;
 			
-		case LCD_EVENT_ON_END:
+		case STATE_NOTIFIER_SUSPEND:
 			mutex_lock(&fsync_mutex);
 			suspend_active = true;
 			mutex_unlock(&fsync_mutex);
@@ -213,7 +213,7 @@ static int dyn_fsync_init(void)
 	}
 
 	lcd_notif.notifier_call = lcd_notifier_callback;
-	if (lcd_register_client(&lcd_notif) != 0) 
+	if (state_register_client(&lcd_notif) != 0) 
 	{
 		pr_err("%s: Failed to register lcd callback\n", __func__);
 
@@ -244,7 +244,7 @@ static void dyn_fsync_exit(void)
 	if (dyn_fsync_kobj != NULL)
 		kobject_put(dyn_fsync_kobj);
 	
-	lcd_unregister_client(&lcd_notif);
+	state_unregister_client(&lcd_notif);
 		
 	pr_info("%s dynamic fsync unregistration complete\n", __FUNCTION__);
 }
