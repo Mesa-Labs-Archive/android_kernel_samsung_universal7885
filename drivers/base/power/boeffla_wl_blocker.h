@@ -18,6 +18,6 @@
 
 #define LIST_WL_DEFAULT				"wlan_rx_wake;wlan_wake;wlan_ctrl_wake;NETLINK;wlan_txfl_wake;bluetooth_timer;BT_bt_wake;BT_host_wake;mmc0_detect"
 
-#define LENGTH_LIST_WL				255
+#define LENGTH_LIST_WL				2048
 #define LENGTH_LIST_WL_DEFAULT		112
 #define LENGTH_LIST_WL_SEARCH		LENGTH_LIST_WL + LENGTH_LIST_WL_DEFAULT + 5
