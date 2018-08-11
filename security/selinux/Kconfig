@@ -86,12 +86,26 @@ config SECURITY_SELINUX_ALWAYS_ENFORCE
 	help
 	  This option will prevent anything from setting SELinux to permissive.
 
-config SECURITY_SELINUX_NEVER_ENFORCE
-	bool "NSA SELinux Never Enforcing"
+config SECURITY_SELINUX_DEFAULT_ENFORCE
+	bool "NSA SELinux Default Enforcing"
+	depends on SECURITY_SEC_SELINUX
+	default n
+	help
+	  This option will set SELinux to enforcing at boot.
+
+config SECURITY_SELINUX_ALWAYS_PERMISSIVE
+	bool "NSA SELinux Always Permissive"
 	depends on SECURITY_SEC_SELINUX
 	default n
 	help
 	  This option will prevent anything from setting SELinux to enforcing.
+
+config SECURITY_SELINUX_DEFAULT_PERMISSIVE
+	bool "NSA SELinux Default Permissive"
+	depends on SECURITY_SEC_SELINUX
+	default n
+	help
+	  This option will set SELinux to permissive at boot.
 
 config SECURITY_SELINUX_AVC_STATS
 	bool "NSA SELinux AVC Statistics"
