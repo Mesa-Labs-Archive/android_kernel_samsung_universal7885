@@ -212,6 +212,10 @@ static int __vb2_queue_alloc(struct vb2_queue *q, enum vb2_memory memory,
 		return 0;
 	}
 
+	/* Ensure that q->num_buffers+num_buffers is below VB2_MAX_FRAME */
+	num_buffers = min_t(unsigned int, num_buffers,
+			    VB2_MAX_FRAME - q->num_buffers);
+
 	for (buffer = 0; buffer < num_buffers; ++buffer) {
 		/* Allocate videobuf buffer structures */
 		vb = kzalloc(q->buf_struct_size, GFP_KERNEL);
@@ -806,7 +810,7 @@ EXPORT_SYMBOL_GPL(vb2_core_create_bufs);
  */
 void *vb2_plane_vaddr(struct vb2_buffer *vb, unsigned int plane_no)
 {
-	if (plane_no > vb->num_planes || !vb->planes[plane_no].mem_priv)
+	if (plane_no >= vb->num_planes || !vb->planes[plane_no].mem_priv)
 		return NULL;
 
 	return call_ptr_memop(vb, vaddr, vb->planes[plane_no].mem_priv);
@@ -879,9 +883,12 @@ void vb2_buffer_done(struct vb2_buffer *vb, enum vb2_buffer_state state)
 	dprintk(4, "done processing on buffer %d, state: %d\n",
 			vb->index, state);
 
-	/* sync buffers */
-	for (plane = 0; plane < vb->num_planes; ++plane)
-		call_void_memop(vb, finish, vb->planes[plane].mem_priv);
+	if (state != VB2_BUF_STATE_QUEUED &&
+	    state != VB2_BUF_STATE_REQUEUEING) {
+		/* sync buffers */
+		for (plane = 0; plane < vb->num_planes; ++plane)
+			call_void_memop(vb, finish, vb->planes[plane].mem_priv);
+	}
 
 	spin_lock_irqsave(&q->done_lock, flags);
 	if (state == VB2_BUF_STATE_QUEUED ||
@@ -1515,7 +1522,7 @@ static int __vb2_get_done_vb(struct vb2_queue *q, struct vb2_buffer **vb,
 			     void *pb, int nonblocking)
 {
 	unsigned long flags;
-	int ret;
+	int ret = 0;
 
 	/*
 	 * Wait for at least one buffer to become available on the done_list.
@@ -1531,10 +1538,12 @@ static int __vb2_get_done_vb(struct vb2_queue *q, struct vb2_buffer **vb,
 	spin_lock_irqsave(&q->done_lock, flags);
 	*vb = list_first_entry(&q->done_list, struct vb2_buffer, done_entry);
 	/*
-	 * Only remove the buffer from done_list if v4l2_buffer can handle all
-	 * the planes.
+	 * Only remove the buffer from done_list if all planes can be
+	 * handled. Some cases such as V4L2 file I/O and DVB have pb
+	 * == NULL; skip the check then as there's nothing to verify.
 	 */
-	ret = call_bufop(q, verify_planes_array, *vb, pb);
+	if (pb)
+		ret = call_bufop(q, verify_planes_array, *vb, pb);
 	if (!ret)
 		list_del(&(*vb)->done_entry);
 	spin_unlock_irqrestore(&q->done_lock, flags);

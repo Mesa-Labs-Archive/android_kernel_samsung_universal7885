@@ -568,8 +568,10 @@ static int atmel_pctl_dt_node_to_map(struct pinctrl_dev *pctldev,
 		for_each_child_of_node(np_config, np) {
 			ret = atmel_pctl_dt_subnode_to_map(pctldev, np, map,
 						    &reserved_maps, num_maps);
-			if (ret < 0)
+			if (ret < 0) {
+				of_node_put(np);
 				break;
+			}
 		}
 	}
 
@@ -1002,7 +1004,7 @@ static int atmel_pinctrl_probe(struct platform_device *pdev)
 		atmel_pioctrl->irqs[i] = res->start;
 		irq_set_chained_handler(res->start, atmel_gpio_irq_handler);
 		irq_set_handler_data(res->start, atmel_pioctrl);
-		dev_dbg(dev, "bank %i: hwirq=%u\n", i, res->start);
+		dev_dbg(dev, "bank %i: irq=%pr\n", i, res);
 	}
 
 	atmel_pioctrl->irq_domain = irq_domain_add_linear(dev->of_node,

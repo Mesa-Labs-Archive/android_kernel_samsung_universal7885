@@ -923,7 +923,7 @@ static int check_async_write(struct inode *inode, unsigned long bio_flags)
 	if (bio_flags & EXTENT_BIO_TREE_LOG)
 		return 0;
 #ifdef CONFIG_X86
-	if (cpu_has_xmm4_2)
+	if (static_cpu_has(X86_FEATURE_XMM4_2))
 		return 0;
 #endif
 	return 1;
@@ -1196,7 +1196,7 @@ static struct btrfs_subvolume_writers *btrfs_alloc_subvolume_writers(void)
 	if (!writers)
 		return ERR_PTR(-ENOMEM);
 
-	ret = percpu_counter_init(&writers->counter, 0, GFP_KERNEL);
+	ret = percpu_counter_init(&writers->counter, 0, GFP_NOFS);
 	if (ret < 0) {
 		kfree(writers);
 		return ERR_PTR(ret);
@@ -2276,6 +2276,7 @@ static void btrfs_init_qgroup(struct btrfs_fs_info *fs_info)
 	fs_info->quota_enabled = 0;
 	fs_info->pending_quota_state = 0;
 	fs_info->qgroup_ulist = NULL;
+	fs_info->qgroup_rescan_running = false;
 	mutex_init(&fs_info->qgroup_rescan_lock);
 }
 
@@ -3811,7 +3812,7 @@ void close_ctree(struct btrfs_root *root)
 	smp_mb();
 
 	/* wait for the qgroup rescan worker to stop */
-	btrfs_qgroup_wait_for_completion(fs_info);
+	btrfs_qgroup_wait_for_completion(fs_info, false);
 
 	/* wait for the uuid_scan task to finish */
 	down(&fs_info->uuid_tree_rescan_sem);

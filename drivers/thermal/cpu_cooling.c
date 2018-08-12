@@ -162,17 +162,13 @@ static unsigned long get_level(struct cpufreq_cooling_device *cpufreq_dev,
 unsigned long cpufreq_cooling_get_level(unsigned int cpu, unsigned int freq)
 {
 	struct cpufreq_cooling_device *cpufreq_dev;
-	unsigned long level = 0;
 
 	mutex_lock(&cooling_list_lock);
 	list_for_each_entry(cpufreq_dev, &cpufreq_dev_list, node) {
 		if (cpumask_test_cpu(cpu, &cpufreq_dev->allowed_cpus)) {
+			unsigned long level = get_level(cpufreq_dev, freq);
+
 			mutex_unlock(&cooling_list_lock);
-			level = get_level(cpufreq_dev, freq);
-
-			if (level == THERMAL_CSTATE_INVALID && freq > cpufreq_dev->freq_table[0])
-				level = 0;
-
 			return level;
 		}
 	}
@@ -880,30 +876,6 @@ static int cpufreq_power2state(struct thermal_cooling_device *cdev,
 	return 0;
 }
 
-static int cpufreq_set_cur_temp(struct thermal_cooling_device *cdev,
-				bool suspended, int temp)
-{
-	enum tmu_noti_state_t tstate;
-	unsigned int on;
-
-	if (suspended || temp < EXYNOS_COLD_TEMP) {
-		tstate = TMU_COLD;
-		on = 1;
-	} else {
-		tstate = TMU_NORMAL;
-		on = 0;
-	}
-
-	if (cpu_tstate == tstate)
-		return 0;
-
-	cpu_tstate = tstate;
-
-	blocking_notifier_call_chain(&cpu_notifier, TMU_COLD, &on);
-
-	return 0;
-}
-
 /* Bind cpufreq callbacks to thermal cooling device ops */
 static struct thermal_cooling_device_ops cpufreq_cooling_ops = {
 	.get_max_state = cpufreq_get_max_state,
@@ -1033,17 +1005,6 @@ __cpufreq_cooling_register(struct device_node *np,
 		goto free_power_table;
 	}
 
-	if (cpufreq_dev->id == 0)
-		cpufreq_cooling_ops.set_cur_temp = cpufreq_set_cur_temp;
-
-	snprintf(dev_name, sizeof(dev_name), "thermal-cpufreq-%d",
-		 cpufreq_dev->id);
-
-	cool_dev = thermal_of_cooling_device_register(np, dev_name, cpufreq_dev,
-						      &cpufreq_cooling_ops);
-	if (IS_ERR(cool_dev))
-		goto remove_idr;
-
 	/* Fill freq-table in descending order of frequencies */
 	for (i = 0, freq = -1; i <= cpufreq_dev->max_level; i++) {
 		freq = find_next_max(table, freq);
@@ -1055,6 +1016,14 @@ __cpufreq_cooling_register(struct device_node *np,
 		else
 			pr_debug("%s: freq:%u KHz\n", __func__, freq);
 	}
+
+	snprintf(dev_name, sizeof(dev_name), "thermal-cpufreq-%d",
+		 cpufreq_dev->id);
+
+	cool_dev = thermal_of_cooling_device_register(np, dev_name, cpufreq_dev,
+						      &cpufreq_cooling_ops);
+	if (IS_ERR(cool_dev))
+		goto remove_idr;
 
 	cpufreq_dev->clipped_freq = cpufreq_dev->freq_table[0];
 	cpufreq_dev->cool_dev = cool_dev;

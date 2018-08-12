@@ -562,7 +562,7 @@ static inline void cpumask_copy(struct cpumask *dstp,
 static inline int cpumask_parse_user(const char __user *buf, int len,
 				     struct cpumask *dstp)
 {
-	return bitmap_parse_user(buf, len, cpumask_bits(dstp), nr_cpu_ids);
+	return bitmap_parse_user(buf, len, cpumask_bits(dstp), nr_cpumask_bits);
 }
 
 /**
@@ -577,7 +577,7 @@ static inline int cpumask_parselist_user(const char __user *buf, int len,
 				     struct cpumask *dstp)
 {
 	return bitmap_parselist_user(buf, len, cpumask_bits(dstp),
-				     nr_cpu_ids);
+				     nr_cpumask_bits);
 }
 
 /**
@@ -592,7 +592,7 @@ static inline int cpumask_parse(const char *buf, struct cpumask *dstp)
 	char *nl = strchr(buf, '\n');
 	unsigned int len = nl ? (unsigned int)(nl - buf) : strlen(buf);
 
-	return bitmap_parse(buf, len, cpumask_bits(dstp), nr_cpu_ids);
+	return bitmap_parse(buf, len, cpumask_bits(dstp), nr_cpumask_bits);
 }
 
 /**
@@ -604,7 +604,7 @@ static inline int cpumask_parse(const char *buf, struct cpumask *dstp)
  */
 static inline int cpulist_parse(const char *buf, struct cpumask *dstp)
 {
-	return bitmap_parselist(buf, cpumask_bits(dstp), nr_cpu_ids);
+	return bitmap_parselist(buf, cpumask_bits(dstp), nr_cpumask_bits);
 }
 
 /**
@@ -667,6 +667,11 @@ void alloc_bootmem_cpumask_var(cpumask_var_t *mask);
 void free_cpumask_var(cpumask_var_t mask);
 void free_bootmem_cpumask_var(cpumask_var_t mask);
 
+static inline bool cpumask_available(cpumask_var_t mask)
+{
+	return mask != NULL;
+}
+
 #else
 typedef struct cpumask cpumask_var_t[1];
 
@@ -706,6 +711,11 @@ static inline void free_cpumask_var(cpumask_var_t mask)
 
 static inline void free_bootmem_cpumask_var(cpumask_var_t mask)
 {
+}
+
+static inline bool cpumask_available(cpumask_var_t mask)
+{
+	return true;
 }
 #endif /* CONFIG_CPUMASK_OFFSTACK */
 

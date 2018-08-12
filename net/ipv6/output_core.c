@@ -113,9 +113,10 @@ int ip6_find_1stfragopt(struct sk_buff *skb, u8 **nexthdr)
 		exthdr = (struct ipv6_opt_hdr *)(skb_network_header(skb) +
 						 offset);
 		len = ipv6_optlen(exthdr);
+		offset += len;
 		if (len + offset >= IPV6_MAXPLEN)
 			return -EINVAL;
-		offset += len;
+
 		*nexthdr = &exthdr->nexthdr;
 	}
 
@@ -153,6 +154,8 @@ int __ip6_local_out(struct net *net, struct sock *sk, struct sk_buff *skb)
 		len = 0;
 	ipv6_hdr(skb)->payload_len = htons(len);
 	IP6CB(skb)->nhoff = offsetof(struct ipv6hdr, nexthdr);
+
+	skb->protocol = htons(ETH_P_IPV6);
 
 	return nf_hook(NFPROTO_IPV6, NF_INET_LOCAL_OUT,
 		       net, sk, skb, NULL, skb_dst(skb)->dev,
