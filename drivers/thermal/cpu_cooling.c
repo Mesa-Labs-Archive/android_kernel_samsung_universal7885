@@ -85,8 +85,6 @@ static LIST_HEAD(cpufreq_dev_list);
 
 static BLOCKING_NOTIFIER_HEAD(cpu_notifier);
 
-static enum tmu_noti_state_t cpu_tstate = TMU_NORMAL;
-
 /**
  * get_idr - function to get a unique id.
  * @idr: struct idr * handle used to create a id.
