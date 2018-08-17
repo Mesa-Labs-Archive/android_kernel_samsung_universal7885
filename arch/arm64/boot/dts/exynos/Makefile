@@ -8,7 +8,7 @@ dtb-$(CONFIG_MACH_EXYNOS7885_JACKPOTLTE_EUR_OPEN) := \
 	exynos7885-jackpotlte_eur_open_06.dtb \
 	exynos7885-jackpotlte_eur_open_07.dtb 
 
-dtb-$(CONFIG_MACH_EXYNOS7885_JACKPOTLTE_KOR_OPEN) := \
+dtb-$(CONFIG_MACH_EXYNOS7885_JACKPOTLTE_KOR) := \
 	exynos7885-jackpotlte_kor_00.dtb \
 	exynos7885-jackpotlte_kor_01.dtb \
 	exynos7885-jackpotlte_kor_02.dtb \
