@@ -131,12 +131,12 @@ static unsigned long sel_last_ino = SEL_INO_NEXT - 1;
 static ssize_t sel_read_enforce(struct file *filp, char __user *buf,
 				size_t count, loff_t *ppos)
 {
-    int display_status = selinux_enforcing;
+	int display_status = selinux_enforcing;
 	char tmpbuf[TMPBUFLEN];
 	ssize_t length;
 
 #ifdef CONFIG_SECURITY_SELINUX_FAKE_ENFORCE
-    display_status = 1;
+	display_status = 1;
 #endif
 
 	length = scnprintf(tmpbuf, TMPBUFLEN, "%d", display_status);
@@ -191,7 +191,7 @@ static ssize_t sel_write_enforce(struct file *file, const char __user *buf,
 	selnl_notify_setenforce(new_value);
 	selinux_status_update_setenforce(new_value);
 #elif defined(CONFIG_SECURITY_SELINUX_ALWAYS_PERMISSIVE)
-	// If never enforce option is set, selinux is always permissive
+	// If always permissive option is set, selinux is always permissive
 	new_value = 0;
 	length = task_has_security(current, SECURITY__SETENFORCE);
 	audit_log(current->audit_context, GFP_KERNEL, AUDIT_MAC_STATUS,
