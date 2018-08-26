@@ -644,6 +644,7 @@
 			sec,tclm_level = <2>;
 			sec,afe_base = <0x05>;
 			status = "okay";
+			support_dex_mode;
 		};
 	};
 
