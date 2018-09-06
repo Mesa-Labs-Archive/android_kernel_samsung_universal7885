@@ -68,7 +68,7 @@ static int s2mu004_usbpd_reg_init(struct s2mu004_usbpd_data *_data);
 static void s2mu004_dfp(struct i2c_client *i2c);
 static void s2mu004_ufp(struct i2c_client *i2c);
 #ifdef CONFIG_CCIC_VDM
-static int s2mu004_usbpd_check_vdm_msg(void *_data, int *val);
+static int s2mu004_usbpd_check_vdm_msg(void *_data, u64 *val);
 #endif
 static void s2mu004_src(struct i2c_client *i2c);
 static void s2mu004_snk(struct i2c_client *i2c);
@@ -557,7 +557,7 @@ static bool s2mu004_poll_status(void *_data)
 	struct i2c_client *i2c = pdic_data->i2c;
 	struct device *dev = &i2c->dev;
 	u8 intr[S2MU004_MAX_NUM_INT_STATUS] = {0};
-	int ret = 0;
+	int ret = 0, retry = 0;
 	u64 status_reg_val = 0;
 
 	ret = s2mu004_usbpd_bulk_read(i2c, S2MU004_REG_INT_STATUS0,
@@ -585,7 +585,20 @@ static bool s2mu004_poll_status(void *_data)
 	if ((intr[4] & S2MU004_REG_INT_STATUS4_PLUG_IRQ) &&
 			!pdic_data->lpm_mode && !pdic_data->is_water_detect)
 		status_reg_val |= PLUG_ATTACH;
+	else if (pdic_data->lpm_mode &&
+				(intr[4] & S2MU004_REG_INT_STATUS4_PLUG_IRQ) &&
+									!pdic_data->is_water_detect)
+		retry = 1;
 	mutex_unlock(&pdic_data->lpm_mutex);
+
+	if (retry) {
+		msleep(40);
+		mutex_lock(&pdic_data->lpm_mutex);
+		if ((intr[4] & S2MU004_REG_INT_STATUS4_PLUG_IRQ) &&
+				!pdic_data->lpm_mode && !pdic_data->is_water_detect)
+			status_reg_val |= PLUG_ATTACH;
+		mutex_unlock(&pdic_data->lpm_mutex);
+	}
 
 #ifdef CONFIG_CCIC_VDM
 	/* function that support dp control */
@@ -674,12 +687,12 @@ static bool s2mu004_poll_status(void *_data)
 #ifdef CONFIG_CCIC_VDM
 	/* read message if data object message */
 	if (status_reg_val &
-			(MSG_REQUEST | MSG_SNK_CAP | MSG_SRC_CAP
+			(MSG_REQUEST | MSG_SNK_CAP
 			| VDM_DISCOVER_IDENTITY | VDM_DISCOVER_SVID
 			| VDM_DISCOVER_MODE | VDM_ENTER_MODE | VDM_EXIT_MODE
-			| VDM_ATTENTION | MSG_SOFTRESET | MSG_PASS)) {
+			| VDM_ATTENTION | MSG_PASS)) {
 		usbpd_protocol_rx(data);
-		if (status_reg_val == MSG_PASS && (pdic_data->data_role == USBPD_UFP))
+		if (status_reg_val & MSG_PASS)
 			s2mu004_usbpd_check_vdm_msg(data, &status_reg_val);
 	}
 #else
@@ -688,7 +701,7 @@ static bool s2mu004_poll_status(void *_data)
 			(MSG_REQUEST | MSG_SNK_CAP
 			| VDM_DISCOVER_IDENTITY | VDM_DISCOVER_SVID
 			| VDM_DISCOVER_MODE | VDM_ENTER_MODE | VDM_EXIT_MODE
-			| VDM_ATTENTION | MSG_SOFTRESET)) {
+			| VDM_ATTENTION)) {
 		usbpd_protocol_rx(data);
 	}
 #endif
@@ -949,6 +962,7 @@ static int s2mu004_set_power_role(void *_data, int val)
 	} else if (val == USBPD_DRP) {
 		pdic_data->is_pr_swap = false;
 		s2mu004_assert_drp(data);
+		return 0;
 	} else
 		return(-1);
 
@@ -1075,19 +1089,32 @@ static void s2mu004_usbpd_set_rp_scr_sel(struct s2mu004_usbpd_data *pdic_data,
 #endif
 
 #ifdef CONFIG_CCIC_VDM
-int s2mu004_usbpd_check_vdm_msg(void *_data, int *val)
+int s2mu004_usbpd_check_vdm_msg(void *_data, u64 *val)
 {
 	struct usbpd_data *data = (struct usbpd_data *) _data;
-	int vdm_command = 0;
+	int vdm_command = 0, vdm_type = 0;
 
-	if (data->protocol_rx.msg_header.num_data_objs == 0)
+	dev_info(data->dev, "%s ++\n", __func__);
+	if (data->protocol_rx.msg_header.num_data_objs == 0) {
+		dev_info(data->dev, "%s data_obj null\n", __func__);
 		return 0;
+	}
 
-	if (data->protocol_rx.msg_header.msg_type != USBPD_Vendor_Defined)
+	if (data->protocol_rx.msg_header.msg_type != USBPD_Vendor_Defined) {
+		dev_info(data->dev, "%s msg type is wrong\n", __func__);
 		return 0;
+	}
 
 	vdm_command = data->protocol_rx.data_obj[0].structured_vdm.command;
+	vdm_type = data->protocol_rx.data_obj[0].structured_vdm.vdm_type;
 
+	if (vdm_type == Unstructured_VDM) {
+		dev_info(data->dev, "%s : uvdm msg received!\n", __func__);
+		*val |=  UVDM_MSG;
+		return 0;
+	}
+
+#if 0
 	switch (vdm_command) {
 	case DisplayPort_Status_Update:
 		*val |= VDM_DP_STATUS_UPDATE;
@@ -1098,7 +1125,7 @@ int s2mu004_usbpd_check_vdm_msg(void *_data, int *val)
 	default:
 		return 0;
 	}
-
+#endif
 	dev_info(data->dev, "%s: check vdm mag val(%d)\n", __func__, vdm_command);
 
 	return 0;
@@ -2085,8 +2112,8 @@ static void s2mu004_usbpd_notify_detach(struct s2mu004_usbpd_data *pdic_data)
 			pdic_data->power_role_dual == DUAL_ROLE_PROP_PR_SRC) {
 			vbus_turn_on_ctrl(pdic_data, VBUS_OFF);
 			muic_disable_otg_detect();
-			usbpd_manager_acc_detach(dev);
 		}
+		usbpd_manager_acc_detach(dev);
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)
 		pr_info("%s, data_role (%d)\n", __func__, pdic_data->data_role_dual);
 		if (pdic_data->data_role_dual == USB_STATUS_NOTIFY_ATTACH_DFP &&
@@ -2334,6 +2361,9 @@ static irqreturn_t s2mu004_irq_thread(int irq, void *data)
 		usbpd_kick_policy_work(dev);
 		goto out;
 	}
+
+	if (s2mu004_get_status(pd_data, MSG_SOFTRESET))
+		usbpd_rx_soft_reset(pd_data);
 
 	if (s2mu004_get_status(pd_data, PLUG_DETACH)) {
 #if defined(CONFIG_SEC_FACTORY)

@@ -33,7 +33,7 @@
 #define tVDMWaitModeExit	(50)    /* 40~50  ms */
 #define tDiscoverIdentity	(50)	/* 40~50  ms */
 #define tSwapSourceStart        (20)	/* 20  ms */
-#define tTypeCSinkWaitCap       (600)	/* 310~620 ms */
+#define tTypeCSinkWaitCap       (310)	/* 310~620 ms */
 
 /* Protocol States */
 typedef enum {
@@ -184,25 +184,31 @@ typedef enum {
 	PE_VCS_Send_Swap		= 0xC6,
 	PE_VCS_Reject_VCONN_Swap	= 0xC7,
 
+	/* UVDM Message */
+	PE_DFP_UVDM_Send_Message	= 0xD0,
+	PE_DFP_UVDM_Receive_Message	= 0xD1,
+
 	Error_Recovery			= 0xFF
 } policy_state;
 
 typedef enum usbpd_manager_command {
 	MANAGER_REQ_GET_SNKCAP			= 1,
-	MANAGER_REQ_GOTOMIN			= 2,
-	MANAGER_REQ_SRCCAP_CHANGE		= 3,
-	MANAGER_REQ_PR_SWAP			= 4,
-	MANAGER_REQ_DR_SWAP			= 5,
-	MANAGER_REQ_VCONN_SWAP			= 6,
-	MANAGER_REQ_VDM_DISCOVER_IDENTITY	= 7,
-	MANAGER_REQ_VDM_DISCOVER_SVID		= 8,
-	MANAGER_REQ_VDM_DISCOVER_MODE		= 9,
-	MANAGER_REQ_VDM_ENTER_MODE		= 10,
-	MANAGER_REQ_VDM_EXIT_MODE		= 11,
-	MANAGER_REQ_VDM_ATTENTION		= 12,
-	MANAGER_REQ_VDM_STATUS_UPDATE		= 13,
-	MANAGER_REQ_VDM_DisplayPort_Configure	= 14,
-	MANAGER_REQ_NEW_POWER_SRC		= 15,
+	MANAGER_REQ_GOTOMIN			= 1 << 2,
+	MANAGER_REQ_SRCCAP_CHANGE		= 1 << 3,
+	MANAGER_REQ_PR_SWAP			= 1 << 4,
+	MANAGER_REQ_DR_SWAP			= 1 << 5,
+	MANAGER_REQ_VCONN_SWAP			= 1 << 6,
+	MANAGER_REQ_VDM_DISCOVER_IDENTITY	= 1 << 7,
+	MANAGER_REQ_VDM_DISCOVER_SVID		= 1 << 8,
+	MANAGER_REQ_VDM_DISCOVER_MODE		= 1 << 9,
+	MANAGER_REQ_VDM_ENTER_MODE		= 1 << 10,
+	MANAGER_REQ_VDM_EXIT_MODE		= 1 << 11,
+	MANAGER_REQ_VDM_ATTENTION		= 1 << 12,
+	MANAGER_REQ_VDM_STATUS_UPDATE		= 1 << 13,
+	MANAGER_REQ_VDM_DisplayPort_Configure	= 1 << 14,
+	MANAGER_REQ_NEW_POWER_SRC		= 1 << 15,
+	MANAGER_REQ_UVDM_SEND_MESSAGE		= 1 << 16,
+	MANAGER_REQ_UVDM_RECEIVE_MESSAGE		= 1 << 17,
 } usbpd_manager_command_type;
 
 typedef enum usbpd_manager_event {
@@ -222,6 +228,9 @@ typedef enum usbpd_manager_event {
 	MANAGER_DisplayPort_Configure_ACKED	= 13,
 	MANAGER_DisplayPort_Configure_NACKED	= 14,
 	MANAGER_NEW_POWER_SRC		= 15,
+	MANAGER_UVDM_SEND_MESSAGE		= 16,
+	MANAGER_UVDM_RECEIVE_MESSAGE		= 17,
+	MANAGER_START_DISCOVER_IDENTITY	= 18,
 } usbpd_manager_event_type;
 
 enum usbpd_msg_status {
@@ -253,7 +262,7 @@ enum usbpd_msg_status {
 	PLUG_ATTACH		= 1<<25,
 	MSG_HARDRESET		= 1<<26,
 	CC_DETECT		= 1<<27,
-	PLUG_WAKEUP		= 1<<28,
+	UVDM_MSG		= 1<<28,
 	MSG_PASS		= 1<<29,
 	MSG_RID			= 1<<30,
 	MSG_NONE		= 1<<31,
@@ -355,7 +364,11 @@ struct usbpd_manager_data {
 	usbpd_manager_command_type cmd;  /* request to policy engine */
 	usbpd_manager_event_type   event;    /* policy engine infromed */
 
+	msg_header_type		uvdm_msg_header;
+	data_obj_type		uvdm_data_obj[USBPD_MAX_COUNT_MSG_OBJECT];
+
 	int alt_sended;
+	int vdm_en;
 	/* request */
 	int	max_power;
 	int	op_power;
@@ -386,6 +399,12 @@ struct usbpd_manager_data {
 	bool vconn_source_swap;
 	bool vbus_short;
 
+	bool is_samsung_accessory_enter_mode;
+	bool uvdm_first_req;
+	bool uvdm_dir;
+	struct completion uvdm_out_wait;
+	struct completion uvdm_in_wait;
+
 	uint16_t Vendor_ID;
 	uint16_t Product_ID;
 	uint16_t Device_Version;
@@ -394,8 +413,12 @@ struct usbpd_manager_data {
 	uint16_t SVID_1;
 	uint16_t Standard_Vendor_ID;
 
+	struct mutex vdm_mutex;
+
 	struct usbpd_data *pd_data;
 	struct delayed_work	acc_detach_handler;
+	struct delayed_work select_pdo_handler;
+	struct delayed_work start_discover_msg_handler;
 	muic_attached_dev_t	attached_dev;
 };
 
