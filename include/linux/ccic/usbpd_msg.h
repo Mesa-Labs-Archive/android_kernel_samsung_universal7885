@@ -6,6 +6,26 @@
 #define PD_SID		(0xFF00)
 #define PD_SID_1	(0xFF01)
 
+#define MAX_INPUT_DATA (255)
+#define SEC_UVDM_ALIGN (4)
+#define SEC_UVDM_WAIT_MS (5000)
+#define SEC_UVDM_MAXDATA_FIRST (12)
+#define SEC_UVDM_MAXDATA_NORMAL (16)
+#define SEC_UVDM_CHECKSUM_COUNT (20)
+
+enum uvdm_res_type {
+	RES_INIT = 0,
+	RES_ACK,
+	RES_NAK,
+	RES_BUSY,
+};
+
+enum uvdm_rx_type {
+	RX_ACK = 0,
+	RX_NAK,
+	RX_BUSY,
+};
+
 typedef union {
 	u16 word;
 	u8  byte[2];
@@ -169,6 +189,69 @@ typedef union {
 		unsigned svid_0:16;
 	} vdm_svid;
 } data_obj_type;
+
+typedef union {
+	u32 object;
+	u16 word[2];
+	u8  byte[4];
+	struct {
+		unsigned vendor_defined:15;
+		unsigned vdm_type:1;
+		unsigned vendor_id:16;
+	};
+} uvdm_header;
+
+typedef union {
+	u32 object;
+	u16 word[2];
+	u8  byte[4];
+
+	struct{
+		unsigned data:8;
+		unsigned total_set_num:4;
+		unsigned direction:1;
+		unsigned cmd_type:2;
+		unsigned data_type:1;
+		unsigned pid:16;
+	};
+} s_uvdm_header;
+	
+typedef union {
+	u32 object;
+	u16 word[2];
+	u8  byte[4];
+
+	struct{
+		unsigned cur_size:8;
+		unsigned total_size:8;
+		unsigned reserved:12;
+		unsigned order_cur_set:4;
+	};
+} s_tx_header;
+
+typedef union {
+	u32 object;
+	u16 word[2];
+	u8  byte[4];
+
+	struct{
+		unsigned checksum:16;
+		unsigned reserved:16;
+	};
+} s_tx_tailer;
+
+typedef union {
+	u32 object;
+	u16 word[2];
+	u8  byte[4];
+
+	struct{
+		unsigned reserved:18;
+		unsigned result_value:2;
+		unsigned rcv_data_size:8;
+		unsigned order_cur_set:4;
+	};
+} s_rx_header;
 
 typedef enum {
 	POWER_TYPE_FIXED = 0,

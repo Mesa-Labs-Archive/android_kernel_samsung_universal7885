@@ -21,7 +21,6 @@
 	initial0: initial-state {
 		PIN_IN(gpa1-2, NONE, LV1);	/* SSP_MCU_INT1 */
 		PIN_IN(gpa1-3, NONE, LV1);	/* SSP_MCU_INT2 */
-		PIN_IN(gpa1-4, NONE, LV1);	/* BIXVY_KEY */
 		PIN_IN(gpq0-1, DOWN, LV1);	/* NC */
 	};
 };
@@ -92,14 +91,13 @@
 	initial3: initial-state {
 		PIN_IN(gpp4-4, DOWN, LV1);	/* NC */
 		PIN_IN(gpp4-5, DOWN, LV1);	/* NC */
-		PIN_IN(gpg0-2, DOWN, LV1);	/* NC(FM_LNA_EN) */
 		PIN_OUT_SET(gpg1-6, 1, LV1);	/* SSP_AP_INT */
-		PIN_IN(gpg2-5, DOWN, LV1);	/* NC(GRIP_LDO_EN) */
 		PIN_OUT_SET(gpg3-0, 1, LV1);	/* TSP_LDO_EN */
 		PIN_OUT_SET(gpg3-5, 1, LV1);	/* SSP_RST */
 		PIN_IN(gpg3-7, NONE, LV1);	/* HW_REV0 */
 		PIN_IN(gpg4-0, NONE, LV1);	/* HW_REV1 */
 		PIN_IN(gpg4-1, NONE, LV1);	/* HW_REV2 */
+
 	};
 	sleep3: sleep-state {
 		PIN_SLP(gpg0-1, PREV, NONE);	/* MOT_PWM */
@@ -135,17 +133,14 @@
 		PIN_SLP(gpp8-0, OUT1, UP);	/* SSP_SPI_SS_N */
 		PIN_SLP(gpp8-1, OUT1, UP);	/* SSP_SPI_CLK */
 
-		PIN_SLP(gpg0-2, INPUT, DOWN);	/* NC(FM_LNA_EN) */
-
-		PIN_SLP(gpg1-0, PREV, NONE);	/* ESE_1P8_EN */
+		PIN_SLP(gpg1-0, INPUT, DOWN);	/* NC */
 		PIN_SLP(gpg1-1, PREV, NONE);	/* PMIC_WRSTBI */
 		PIN_SLP(gpg1-2, PREV, NONE);	/* CAM_FLASH_EN */
 		PIN_SLP(gpg1-3, PREV, NONE);	/* SSP_BOOT0 */
 		PIN_SLP(gpg1-6, PREV, NONE);	/* SSP_AP_INT */
 		PIN_SLP(gpg1-7, PREV, NONE);	/* MLCD_RST */
 
-		PIN_SLP(gpg2-5, INPUT, DOWN);	/* NC(GRIP_LDO_EN) */
-		PIN_SLP(gpg2-6, PREV, NONE);	/* LCD_LDO_1P8 */
+		PIN_SLP(gpg2-6, PREV, NONE);	/* LCD_PWR_EN */
 		PIN_SLP(gpg2-7, PREV, NONE);	/* LCD_LDO_3P0 */
 
 		PIN_SLP(gpg3-0, PREV, NONE);	/* TSP_LDO_EN */

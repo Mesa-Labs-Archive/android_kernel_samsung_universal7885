@@ -21,6 +21,7 @@
 	initial0: initial-state {
 		PIN_IN(gpa1-2, NONE, LV1);	/* SSP_MCU_INT1 */
 		PIN_IN(gpa1-3, NONE, LV1);	/* SSP_MCU_INT2 */
+		PIN_IN(gpa1-4, NONE, LV1);	/* BIXVY_KEY */
 		PIN_IN(gpq0-1, DOWN, LV1);	/* NC */
 	};
 };

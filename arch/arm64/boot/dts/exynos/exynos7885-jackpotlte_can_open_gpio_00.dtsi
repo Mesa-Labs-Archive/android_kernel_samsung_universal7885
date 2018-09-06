@@ -21,8 +21,6 @@
 	initial0: initial-state {
 		PIN_IN(gpa1-2, NONE, LV1);	/* SSP_MCU_INT1 */
 		PIN_IN(gpa1-3, NONE, LV1);	/* SSP_MCU_INT2 */
-		PIN_IN(gpa1-4, NONE, LV1);	/* BIXVY_KEY */
-		PIN_IN(gpq0-1, DOWN, LV1);	/* NC */
 	};
 };
 
@@ -52,12 +50,8 @@
 
 /* 0x1343_0000(FSYS): gpf0,2~4 */
 &pinctrl_2 {
-	pinctrl-names = "default","sleep";
-	pinctrl-0 = <&initial2>;
-	pinctrl-1 = <&sleep2>;
-	initial2: initial-state {
-		PIN_IN(gpf3-4, DOWN, LV1);	/* NC */
-	};
+	pinctrl-names = "sleep";
+	pinctrl-0 = <&sleep2>;
 	sleep2: sleep-state {
 		PIN_SLP(gpf0-0, OUT0, NONE);	/* SD_0_CLK */
 		PIN_SLP(gpf0-1, OUT1, NONE);	/* SD_0_CMD */
@@ -80,7 +74,7 @@
 		PIN_SLP(gpf4-4, OUT0, NONE);	/* SD_2_DATA_2 */
 		PIN_SLP(gpf4-5, OUT0, NONE);	/* SD_2_DATA_3 */
 
- 		PIN_SLP(gpf3-4, INPUT, DOWN);	/* NC */
+ 		PIN_SLP(gpf3-4, OUT0, DOWN);	/* MOTOR_BOOST_EN */
 	};
 };
 
@@ -90,20 +84,23 @@
 	pinctrl-0 = <&initial3>;
 	pinctrl-1 = <&sleep3>;
 	initial3: initial-state {
-		PIN_IN(gpp4-4, DOWN, LV1);	/* NC */
-		PIN_IN(gpp4-5, DOWN, LV1);	/* NC */
-		PIN_IN(gpg0-2, DOWN, LV1);	/* NC(FM_LNA_EN) */
+		PIN_OUT_SET(gpg0-1, 0, LV1); /* MOT_PWM */
+		PIN_IN(gpg0-2, DOWN, LV1);	/* FM_LNA_EN */
 		PIN_OUT_SET(gpg1-6, 1, LV1);	/* SSP_AP_INT */
-		PIN_IN(gpg2-5, DOWN, LV1);	/* NC(GRIP_LDO_EN) */
+		PIN_IN(gpg2-4, DOWN, LV1);	/* NC(TDMB_PWR_EN) */
 		PIN_OUT_SET(gpg3-0, 1, LV1);	/* TSP_LDO_EN */
 		PIN_OUT_SET(gpg3-5, 1, LV1);	/* SSP_RST */
 		PIN_IN(gpg3-7, NONE, LV1);	/* HW_REV0 */
 		PIN_IN(gpg4-0, NONE, LV1);	/* HW_REV1 */
 		PIN_IN(gpg4-1, NONE, LV1);	/* HW_REV2 */
+
+		PIN_IN(gpc2-4, DOWN, LV1);	/* NC(TDMB) */
+		PIN_IN(gpc2-5, DOWN, LV1);	/* NC(TDMB) */
+		PIN_IN(gpc2-6, DOWN, LV1);	/* NC(TDMB) */
+		PIN_IN(gpc2-7, DOWN, LV1);	/* NC(TDMB) */
 	};
 	sleep3: sleep-state {
-		PIN_SLP(gpg0-1, PREV, NONE);	/* MOT_PWM */
-
+		PIN_SLP(gpg0-1, OUT0, NONE);   /*MOT_PWM*/
 		PIN_SLP(gpp1-0, INPUT, NONE);	/* FG_I2C_SCL */
 		PIN_SLP(gpp1-1, INPUT, NONE);	/* FG_I2C_SDA */
 		PIN_SLP(gpp1-2, PREV, NONE);	/* IF_PMIC_I2C_SCL */
@@ -120,8 +117,8 @@
 		PIN_SLP(gpp4-1, INPUT, NONE);	/* TSP_I2C_SCL */
 		PIN_SLP(gpp4-2, INPUT, NONE);	/* GRIP_I2C_SDA */
 		PIN_SLP(gpp4-3, INPUT, NONE);	/* GRIP_I2C_SCL */
-		PIN_SLP(gpp4-4, INPUT, DOWN);	/* NC */
-		PIN_SLP(gpp4-5, INPUT, DOWN);	/* NC */
+		PIN_SLP(gpp4-4, PREV, UP);	/* PMIC_I2C_SDA */
+		PIN_SLP(gpp4-5, PREV, UP);	/* PMIC_I2C_SDA */
 
 		PIN_SLP(gpp6-0, OUT0, NONE);	/* BTP_SPI_CLK */
 		PIN_SLP(gpp6-1, OUT0, NONE);	/* BTP_SPI_CS_N */
@@ -135,8 +132,6 @@
 		PIN_SLP(gpp8-0, OUT1, UP);	/* SSP_SPI_SS_N */
 		PIN_SLP(gpp8-1, OUT1, UP);	/* SSP_SPI_CLK */
 
-		PIN_SLP(gpg0-2, INPUT, DOWN);	/* NC(FM_LNA_EN) */
-
 		PIN_SLP(gpg1-0, PREV, NONE);	/* ESE_1P8_EN */
 		PIN_SLP(gpg1-1, PREV, NONE);	/* PMIC_WRSTBI */
 		PIN_SLP(gpg1-2, PREV, NONE);	/* CAM_FLASH_EN */
@@ -144,7 +139,7 @@
 		PIN_SLP(gpg1-6, PREV, NONE);	/* SSP_AP_INT */
 		PIN_SLP(gpg1-7, PREV, NONE);	/* MLCD_RST */
 
-		PIN_SLP(gpg2-5, INPUT, DOWN);	/* NC(GRIP_LDO_EN) */
+		PIN_SLP(gpg2-4, INPUT, DOWN);	/* NC(TDMB_PWR_EN) */
 		PIN_SLP(gpg2-6, PREV, NONE);	/* LCD_LDO_1P8 */
 		PIN_SLP(gpg2-7, PREV, NONE);	/* LCD_LDO_3P0 */
 
@@ -167,5 +162,10 @@
 		PIN_SLP(gpc1-5, INPUT, DOWN);	/* RCAM_AF_EEP_I2C_SDA */
 		PIN_SLP(gpc1-6, INPUT, DOWN);	/* FCAM2_I2C_SCL */
 		PIN_SLP(gpc1-7, INPUT, DOWN);	/* FCAM2_I2C_SDA */
+
+		PIN_SLP(gpc2-4, INPUT, DOWN);	/* NC(TDMB) */
+		PIN_SLP(gpc2-5, INPUT, DOWN);	/* NC(TDMB) */
+		PIN_SLP(gpc2-6, INPUT, DOWN);	/* NC(TDMB) */
+		PIN_SLP(gpc2-7, INPUT, DOWN);	/* NC(TDMB) */
 	};
 };
