@@ -2354,6 +2354,7 @@ static void reg_todo(struct work_struct *work)
 
 static void queue_regulatory_request(struct regulatory_request *request)
 {
+#ifdef CONFIG_CFG80211_REG_NOT_UPDATED
 	/*
 	* SAMSUNG FIX : Regulatory Configuration was update
 	* via WIPHY_FLAG_CUSTOM_REGULATORY of Wi-Fi Driver.
@@ -2361,10 +2362,8 @@ static void queue_regulatory_request(struct regulatory_request *request)
 	* since device should find around other Access Points.
 	* 2014.1.8 Convergence Wi-Fi Core
 	*/
-
-#ifdef CONFIG_CFG80211_REG_NOT_UPDATED
 	printk("regulatory is not upadted via %s.\n", __func__);
-	if(!request)
+	if (request)
 		kfree(request);
 	return;
 #endif
@@ -2641,6 +2640,7 @@ static void restore_regulatory_settings(bool reset_user)
 	LIST_HEAD(tmp_reg_req_list);
 	struct cfg80211_registered_device *rdev;
 
+#ifdef CONFIG_CFG80211_REG_NOT_UPDATED
 	/*
 	* SAMSUNG FIX : Regulatory Configuration was update
 	* via WIPHY_FLAG_CUSTOM_REGULATORY of Wi-Fi Driver.
@@ -2648,8 +2648,6 @@ static void restore_regulatory_settings(bool reset_user)
 	* since device should find around other Access Points.
 	* 2014.1.8 Convergence Wi-Fi Core
 	*/
-
-#ifdef CONFIG_CFG80211_REG_NOT_UPDATED
 	printk("regulatory is not upadted via %s.\n", __func__);
 	return;
 #endif
@@ -2757,6 +2755,7 @@ int regulatory_hint_found_beacon(struct wiphy *wiphy,
 	struct reg_beacon *reg_beacon;
 	bool processing;
 
+#ifdef CONFIG_CFG80211_REG_NOT_UPDATED
 	/*
 	* SAMSUNG FIX : Regulatory Configuration was update
 	* via WIPHY_FLAG_CUSTOM_REGULATORY of Wi-Fi Driver.
@@ -2764,9 +2763,6 @@ int regulatory_hint_found_beacon(struct wiphy *wiphy,
 	* since device should find around other Access Points.
 	* 2014.1.8 Convergence Wi-Fi Core
 	*/
-
-#ifdef CONFIG_CFG80211_REG_NOT_UPDATED
-//	printk("regulatory is not upadted via %s.\n",__func__);
 	return 0;
 #endif
 
