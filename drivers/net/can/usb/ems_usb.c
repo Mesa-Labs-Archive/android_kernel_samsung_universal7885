@@ -290,8 +290,6 @@ static void ems_usb_read_interrupt_callback(struct urb *urb)
 
 	case -ECONNRESET: /* unlink */
 	case -ENOENT:
-	case -EPIPE:
-	case -EPROTO:
 	case -ESHUTDOWN:
 		return;
 
@@ -1078,7 +1076,6 @@ static void ems_usb_disconnect(struct usb_interface *intf)
 		usb_free_urb(dev->intr_urb);
 
 		kfree(dev->intr_in_buffer);
-		kfree(dev->tx_msg_buffer);
 	}
 }
 

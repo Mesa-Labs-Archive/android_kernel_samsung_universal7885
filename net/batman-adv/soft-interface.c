@@ -430,7 +430,13 @@ void batadv_interface_rx(struct net_device *soft_iface,
 
 	/* skb->dev & skb->pkt_type are set here */
 	skb->protocol = eth_type_trans(skb, soft_iface);
-	skb_postpull_rcsum(skb, eth_hdr(skb), ETH_HLEN);
+
+	/* should not be necessary anymore as we use skb_pull_rcsum()
+	 * TODO: please verify this and remove this TODO
+	 * -- Dec 21st 2009, Simon Wunderlich
+	 */
+
+	/* skb->ip_summed = CHECKSUM_UNNECESSARY; */
 
 	batadv_inc_counter(bat_priv, BATADV_CNT_RX);
 	batadv_add_counter(bat_priv, BATADV_CNT_RX_BYTES,

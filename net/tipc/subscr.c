@@ -296,8 +296,7 @@ static void tipc_subscrb_rcv_cb(struct net *net, int conid,
 	if (tipc_subscrp_create(net, (struct tipc_subscr *)buf, subscrb, &sub))
 		return tipc_conn_terminate(tn->topsrv, subscrb->conid);
 
-	if (sub)
-		tipc_nametbl_subscribe(sub);
+	tipc_nametbl_subscribe(sub);
 }
 
 /* Handle one request to establish a new subscriber */
