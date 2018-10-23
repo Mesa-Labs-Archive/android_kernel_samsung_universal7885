@@ -617,7 +617,6 @@ void __slsi_rx_blockack_ind(struct slsi_dev *sdev, struct net_device *dev, struc
 		      fapi_get_u16(skb, u.ma_blockack_ind.direction));
 
 	peer = slsi_get_peer_from_mac(sdev, dev, fapi_get_buff(skb, u.ma_blockack_ind.peer_qsta_address));
-	WARN_ON(!peer);
 
 	if (peer) {
 		/* Buffering of frames before the mlme_connected_ind */
@@ -636,6 +635,8 @@ void __slsi_rx_blockack_ind(struct slsi_dev *sdev, struct net_device *dev, struc
 			fapi_get_u16(skb, u.ma_blockack_ind.reason_code),
 			fapi_get_u16(skb, u.ma_blockack_ind.direction)
 			);
+	} else {
+		SLSI_NET_DBG1(dev, SLSI_MLME, "no Peer found, cannot handle BA indication\n");
 	}
 
 	slsi_kfree_skb(skb);
@@ -771,6 +772,7 @@ enum slsi_wlan_vendor_attr_roam_auth {
 	SLSI_WLAN_VENDOR_ATTR_ROAM_AUTH_KEY_REPLAY_CTR,
 	SLSI_WLAN_VENDOR_ATTR_ROAM_AUTH_PTK_KCK,
 	SLSI_WLAN_VENDOR_ATTR_ROAM_AUTH_PTK_KEK,
+	SLSI_WLAN_VENDOR_ATTR_ROAM_BEACON_IE,
 	/* keep last */
 	SLSI_WLAN_VENDOR_ATTR_ROAM_AUTH_AFTER_LAST,
 	SLSI_WLAN_VENDOR_ATTR_ROAM_AUTH_MAX =
@@ -781,9 +783,9 @@ int slsi_send_roam_vendor_event(struct slsi_dev *sdev,
 				const u8 *bssid,
 				const u8 *req_ie, size_t req_ie_len,
 				const u8 *resp_ie, size_t resp_ie_len,
+				const u8 *beacon_ie, size_t beacon_ie_len,
 				bool authorized)
 {
-	int                                    length = ETH_ALEN + 32 + req_ie_len + resp_ie_len;
 	bool                                   is_secured_bss;
 	struct sk_buff                         *skb = NULL;
 
@@ -793,9 +795,9 @@ int slsi_send_roam_vendor_event(struct slsi_dev *sdev,
 	SLSI_DBG2(sdev, SLSI_MLME, "authorized:%d, is_secured_bss:%d\n", authorized, is_secured_bss);
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0))
-	skb = cfg80211_vendor_event_alloc(sdev->wiphy, NULL, length, SLSI_NL80211_VENDOR_SUBCMD_KEY_MGMT_ROAM_AUTH, GFP_KERNEL);
+	skb = cfg80211_vendor_event_alloc(sdev->wiphy, NULL, NLMSG_DEFAULT_SIZE, SLSI_NL80211_VENDOR_SUBCMD_KEY_MGMT_ROAM_AUTH, GFP_KERNEL);
 #else
-	skb = cfg80211_vendor_event_alloc(sdev->wiphy, length, SLSI_NL80211_VENDOR_SUBCMD_KEY_MGMT_ROAM_AUTH, GFP_KERNEL);
+	skb = cfg80211_vendor_event_alloc(sdev->wiphy, NLMSG_DEFAULT_SIZE, SLSI_NL80211_VENDOR_SUBCMD_KEY_MGMT_ROAM_AUTH, GFP_KERNEL);
 #endif
 	if (!skb) {
 		SLSI_ERR_NODEV("Failed to allocate skb for VENDOR Roam event\n");
@@ -804,8 +806,10 @@ int slsi_send_roam_vendor_event(struct slsi_dev *sdev,
 	if (nla_put(skb, SLSI_WLAN_VENDOR_ATTR_ROAM_AUTH_BSSID, ETH_ALEN, bssid) ||
 	    nla_put(skb, SLSI_WLAN_VENDOR_ATTR_ROAM_AUTH_AUTHORIZED, 1, &authorized) ||
 	   (req_ie && nla_put(skb, SLSI_WLAN_VENDOR_ATTR_ROAM_AUTH_REQ_IE, req_ie_len, req_ie)) ||
-	   (resp_ie && nla_put(skb, SLSI_WLAN_VENDOR_ATTR_ROAM_AUTH_RESP_IE, resp_ie_len, resp_ie))) {
-		SLSI_ERR_NODEV("Failed nla_put 1\n");
+	   (resp_ie && nla_put(skb, SLSI_WLAN_VENDOR_ATTR_ROAM_AUTH_RESP_IE, resp_ie_len, resp_ie)) ||
+	   (beacon_ie && nla_put(skb, SLSI_WLAN_VENDOR_ATTR_ROAM_BEACON_IE, beacon_ie_len, beacon_ie))) {
+		SLSI_ERR_NODEV("Failed nla_put ,req_ie_len=%d,resp_ie_len=%d,beacon_ie_len=%d\n",
+			       req_ie_len, resp_ie_len, beacon_ie_len);
 		slsi_kfree_skb(skb);
 		return -EINVAL;
 	}
@@ -934,7 +938,9 @@ void slsi_rx_roamed_ind(struct slsi_dev *sdev, struct net_device *dev, struct sk
 				GFP_KERNEL);
 #ifdef CONFIG_SCSC_WLAN_KEY_MGMT_OFFLOAD
 		if (slsi_send_roam_vendor_event(sdev, peer->address, assoc_ie, assoc_ie_len,
-						assoc_rsp_ie, assoc_rsp_ie_len, !temporal_keys_required) != 0) {
+						assoc_rsp_ie, assoc_rsp_ie_len,
+						ndev_vif->sta.sta_bss->ies->data, ndev_vif->sta.sta_bss->ies->len,
+						!temporal_keys_required) != 0) {
 			SLSI_NET_ERR(dev, "Could not send Roam vendor event up");
 		}
 #endif

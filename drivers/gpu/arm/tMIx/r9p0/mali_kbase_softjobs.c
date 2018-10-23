@@ -917,6 +917,24 @@ static int kbase_jit_allocate_prepare(struct kbase_jd_atom *katom)
 		goto free_info;
 	}
 
+	if (kctx->jit_version == 1) {
+		/* Old JIT didn't have usage_id, max_allocations, bin_id
+		 * or padding, so force them to zero
+		 */
+		info->usage_id = 0;
+		info->max_allocations = 0;
+		info->bin_id = 0;
+		memset(info->padding, 0, sizeof(info->padding));
+	} else {
+		int i;
+
+		/* Check padding is all zeroed */
+		for (i = 0; i < sizeof(info->padding); i++) {
+			if (info->padding[i] != 0)
+				goto free_info;
+		}
+	}
+
 	katom->softjob_data = info;
 	katom->jit_blocked = false;
 

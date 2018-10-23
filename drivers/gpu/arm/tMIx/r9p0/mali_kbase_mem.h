@@ -136,8 +136,6 @@ struct kbase_mem_phy_alloc {
 
 	unsigned long properties;
 
-	struct list_head       zone_cache;
-
 	/* member in union valid based on @a type */
 	union {
 #ifdef CONFIG_UMP
@@ -246,6 +244,7 @@ struct kbase_va_region {
 	u64 start_pfn;		/* The PFN in GPU space */
 	size_t nr_pages;
 
+    size_t initial_commit;
 /* Free region */
 #define KBASE_REG_FREE              (1ul << 0)
 /* CPU write access */
@@ -296,6 +295,9 @@ struct kbase_va_region {
  * Do not remove, use the next unreserved bit for new flags */
 #define KBASE_REG_RESERVED_BIT_22   (1ul << 22)
 
+/* Memory is handled by JIT - user space should not be able to free it */
+#define KBASE_REG_JIT               (1ul << 24)                          
+
 #define KBASE_REG_ZONE_SAME_VA      KBASE_REG_ZONE(0)
 
 /* only used with 32-bit clients */
@@ -332,6 +334,12 @@ struct kbase_va_region {
 
 	/* List head used to store the region in the JIT allocation pool */
 	struct list_head jit_node;
+
+    /* The last JIT usage ID for this region */
+    u16 jit_usage_id;                          
+    /* The JIT bin this allocation came from */
+    u8 jit_bin_id;                             
+
 };
 
 /* Common functions */
@@ -413,7 +421,6 @@ static inline struct kbase_mem_phy_alloc *kbase_alloc_create(size_t nr_pages, en
 	alloc->pages = (void *)(alloc + 1);
 	INIT_LIST_HEAD(&alloc->mappings);
 	alloc->type = type;
-	INIT_LIST_HEAD(&alloc->zone_cache);
 
 	if (type == KBASE_MEM_TYPE_IMPORTED_USER_BUF)
 		alloc->imported.user_buf.dma_addrs =
@@ -448,7 +455,6 @@ static inline int kbase_reg_prepare_native(struct kbase_va_region *reg,
 		reg->gpu_alloc = kbase_mem_phy_alloc_get(reg->cpu_alloc);
 	}
 
-	INIT_LIST_HEAD(&reg->jit_node);
 	reg->flags &= ~KBASE_REG_FREE;
 	return 0;
 }
@@ -662,8 +668,9 @@ void kbase_mem_pool_trim(struct kbase_mem_pool *pool, size_t new_size);
 struct page *kbase_mem_alloc_page(struct kbase_mem_pool *pool);
 
 int kbase_region_tracker_init(struct kbase_context *kctx);
-int kbase_region_tracker_init_jit(struct kbase_context *kctx, u64 jit_va_pages);
 void kbase_region_tracker_term(struct kbase_context *kctx);
+int kbase_region_tracker_init_jit(struct kbase_context *kctx, u64 jit_va_pages,
+		u8 max_allocations, u8 trim_level);
 
 struct kbase_va_region *kbase_region_tracker_find_region_enclosing_address(struct kbase_context *kctx, u64 gpu_addr);
 
@@ -1117,36 +1124,9 @@ bool kbase_sticky_resource_release(struct kbase_context *kctx,
 void kbase_sticky_resource_term(struct kbase_context *kctx);
 
 /**
- * kbase_zone_cache_update - Update the memory zone cache after new pages have
- * been added.
- * @alloc:        The physical memory allocation to build the cache for.
- * @start_offset: Offset to where the new pages start.
- *
- * Updates an existing memory zone cache, updating the counters for the
- * various zones.
- * If the memory allocation doesn't already have a zone cache assume that
- * one isn't created and thus don't do anything.
- *
- * Return: Zero cache was updated, negative error code on error.
+ * kbase_mem_evictable_mark_reclaim - Mark the pages as reclaimable.
+ * @alloc: The physical allocation
  */
-int kbase_zone_cache_update(struct kbase_mem_phy_alloc *alloc,
-		size_t start_offset);
-
-/**
- * kbase_zone_cache_build - Build the memory zone cache.
- * @alloc:        The physical memory allocation to build the cache for.
- *
- * Create a new zone cache for the provided physical memory allocation if
- * one doesn't already exist, if one does exist then just return.
- *
- * Return: Zero if the zone cache was created, negative error code on error.
- */
-int kbase_zone_cache_build(struct kbase_mem_phy_alloc *alloc);
-
-/**
- * kbase_zone_cache_clear - Clear the memory zone cache.
- * @alloc:        The physical memory allocation to clear the cache on.
- */
-void kbase_zone_cache_clear(struct kbase_mem_phy_alloc *alloc);
+void kbase_mem_evictable_mark_reclaim(struct kbase_mem_phy_alloc *alloc);
 
 #endif				/* _KBASE_MEM_H_ */

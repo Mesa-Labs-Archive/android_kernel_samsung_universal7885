@@ -537,6 +537,46 @@ static ssize_t ccic_send_role_swap_message(struct device *dev,
 }
 static DEVICE_ATTR(role_swap, 0220, NULL, ccic_send_role_swap_message);
 #endif
+static ssize_t ccic_acc_device_version_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+#ifdef CONFIG_CCIC_S2MM005
+	struct s2mm005_data *usbpd_data = dev_get_drvdata(dev);
+
+	if (!usbpd_data) {
+		pr_err("%s usbpd_data is null!!\n", __func__);
+		return -ENODEV;
+	}
+	pr_info("%s 0x%04x\n", __func__, usbpd_data->Device_Version);
+
+	return sprintf(buf, "%04x\n", usbpd_data->Device_Version);
+#else
+	struct s2mu004_usbpd_data *pdic_data = dev_get_drvdata(dev);
+	struct usbpd_data *pd_data;
+	struct usbpd_manager_data *manager;
+
+	if (!pdic_data) {
+		pr_err("%s s2mu004_data is null!!\n", __func__);
+		return -ENODEV;
+	}
+
+	pd_data = dev_get_drvdata(pdic_data->dev);
+	if (!pd_data) {
+		pr_err("%s usbpd_data is null!!\n", __func__);
+		return -ENODEV;
+	}
+
+	manager = &pd_data->manager;
+	if (!manager) {
+		pr_err("%s manager_data is null!!\n", __func__);
+		return -ENODEV;
+	}
+	pr_info("%s 0x%04x\n", __func__, manager->Device_Version);
+
+	return sprintf(buf, "%04x\n", manager->Device_Version);
+#endif
+}
+static DEVICE_ATTR(acc_device_version, 0444, ccic_acc_device_version_show,NULL);
 
 static ssize_t ccic_usbpd_ids_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -635,6 +675,7 @@ static struct attribute *ccic_attributes[] = {
 	&dev_attr_attention.attr,
 	&dev_attr_role_swap.attr,
 #endif
+	&dev_attr_acc_device_version.attr,
 	&dev_attr_usbpd_ids.attr,
 	&dev_attr_usbpd_type.attr,
 	&dev_attr_water.attr,
