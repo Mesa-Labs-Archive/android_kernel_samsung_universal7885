@@ -1932,13 +1932,16 @@ static const u8 *slsi_mlme_connect_get_sec_ie(struct cfg80211_connect_params *sm
 	return ptr;
 }
 
-/* If is_copy is true copy the required IEs from connect_ie to ie_dest. else calculate the required ie length */
-static int slsi_mlme_connect_info_elems_ie_prep(const u8 *connect_ie, const size_t connect_ie_len,
-						bool is_copy, u8 *ie_dest, int ie_dest_len)
+/* If is_copy is true copy the required IEs from connect_ie to ie_dest. else
+ * calculate the required ie length*/
+static int slsi_mlme_connect_info_elems_ie_prep(struct slsi_dev *sdev, const u8 *connect_ie,
+						const size_t connect_ie_len, bool is_copy, u8 *ie_dest, int ie_dest_len)
 {
 	const u8 *ie_pos = NULL;
 	int      info_elem_length = 0;
 	u16      curr_ie_len;
+	u8       *wmm_ie = NULL;
+	u8       *ie_dest_start = ie_dest;
 
 	if (is_copy && (!ie_dest || ie_dest_len == 0))
 		return -EINVAL;
@@ -1951,7 +1954,8 @@ static int slsi_mlme_connect_info_elems_ie_prep(const u8 *connect_ie, const size
 			if (ie_dest_len >= curr_ie_len) {
 				memcpy(ie_dest, ie_pos, curr_ie_len);
 				ie_dest += curr_ie_len;
-				ie_dest_len -= curr_ie_len;         /* free space available in ie_dest for next ie */
+				/* free space avail in ie_dest for next ie*/
+				ie_dest_len -= curr_ie_len;
 			} else {
 				SLSI_ERR_NODEV("interwork ie extract error (ie_copy_l:%d, c_ie_l:%d):\n", ie_dest_len, curr_ie_len);
 				return -EINVAL;
@@ -1964,7 +1968,8 @@ static int slsi_mlme_connect_info_elems_ie_prep(const u8 *connect_ie, const size
 	/* vendor specific IEs will be the last elements. */
 	ie_pos = cfg80211_find_ie(WLAN_EID_VENDOR_SPECIFIC, connect_ie, connect_ie_len);
 	if (ie_pos) {
-		curr_ie_len = connect_ie_len - (ie_pos - connect_ie);         /* length of all the vendor specific IEs */
+		/* length of all the vendor specific IEs */
+		curr_ie_len = connect_ie_len - (ie_pos - connect_ie);
 		if (is_copy) {
 			if (ie_dest_len >= curr_ie_len) {
 				memcpy(ie_dest, ie_pos, curr_ie_len);
@@ -1976,6 +1981,51 @@ static int slsi_mlme_connect_info_elems_ie_prep(const u8 *connect_ie, const size
 			}
 		} else {
 			info_elem_length += curr_ie_len;
+		}
+		if (sdev->device_config.qos_info != -1 && is_copy) {
+			ie_pos = cfg80211_find_vendor_ie(WLAN_OUI_MICROSOFT, WLAN_OUI_TYPE_MICROSOFT_WMM, ie_dest_start,
+							 ie_dest_len);
+			while (ie_pos) {
+				if (ie_pos[6] == 0 && ie_pos[7] == 1) {
+					wmm_ie = (u8 *)ie_pos;
+					break;
+				}
+				ie_pos += ie_pos[1];
+				ie_pos = cfg80211_find_vendor_ie(WLAN_OUI_MICROSOFT, 2, ie_pos,
+								 ie_dest_len - (ie_pos - ie_dest_start));
+			}
+		}
+	}
+
+	if (sdev->device_config.qos_info != -1) {
+		if (wmm_ie) {
+			if (is_copy) {
+				wmm_ie[8] &= 0xF0;
+				wmm_ie[8] |= sdev->device_config.qos_info & 0x0F;
+			}
+		} else {
+			if (is_copy) {
+				if (ie_dest_len >= 9) {
+					int pos = 0;
+
+					ie_dest[pos++] = 0xdd;
+					ie_dest[pos++] = 0x07;
+					ie_dest[pos++] = 0x00;
+					ie_dest[pos++] = 0x50;
+					ie_dest[pos++] = 0xf2;
+					ie_dest[pos++] = 0x02;
+					ie_dest[pos++] = 0x00;
+					ie_dest[pos++] = 0x01;
+					ie_dest[pos++] = sdev->device_config.qos_info & 0x0F;
+					ie_dest += pos;
+					ie_dest_len -= pos;
+				} else {
+					SLSI_ERR_NODEV("Fail new WMMIE req 9 but left:%d\n", ie_dest_len);
+					return -EINVAL;
+				}
+			} else {
+				info_elem_length += 9;
+			}
 		}
 	}
 
@@ -1991,7 +2041,7 @@ static int slsi_mlme_connect_info_elements(struct slsi_dev *sdev, struct net_dev
 	int               r = 0;
 	u8                *p;
 
-	info_elem_length = slsi_mlme_connect_info_elems_ie_prep(sme->ie, sme->ie_len, false, NULL, 0);
+	info_elem_length = slsi_mlme_connect_info_elems_ie_prep(sdev, sme->ie, sme->ie_len, false, NULL, 0);
 
 	/* NO IE required in MLME-ADD-INFO-ELEMENTS */
 	if (info_elem_length <= 0)
@@ -2010,7 +2060,7 @@ static int slsi_mlme_connect_info_elements(struct slsi_dev *sdev, struct net_dev
 		return -EINVAL;
 	}
 
-	(void)slsi_mlme_connect_info_elems_ie_prep(sme->ie, sme->ie_len, true, p, info_elem_length);
+	(void)slsi_mlme_connect_info_elems_ie_prep(sdev, sme->ie, sme->ie_len, true, p, info_elem_length);
 
 	/* backup ies */
 	if (SLSI_IS_VIF_INDEX_WLAN(ndev_vif)) {

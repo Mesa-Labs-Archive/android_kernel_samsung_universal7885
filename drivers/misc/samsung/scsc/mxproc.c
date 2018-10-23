@@ -384,9 +384,9 @@ int mxproc_create_ctrl_proc_dir(struct mxproc *mxproc, struct mxman *mxman)
 	mxproc->mxman = mxman;
 	mxproc->procfs_ctrl_dir = parent;
 	mxproc->procfs_ctrl_dir_num = proc_count;
-	MX_PROCFS_ADD_FILE(mxproc, mx_fail, parent, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
-	MX_PROCFS_ADD_FILE(mxproc, mx_freeze, parent, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH |S_IWOTH);
-	MX_PROCFS_ADD_FILE(mxproc, mx_panic, parent, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+	MX_PROCFS_ADD_FILE(mxproc, mx_fail, parent, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
+	MX_PROCFS_ADD_FILE(mxproc, mx_freeze, parent, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
+	MX_PROCFS_ADD_FILE(mxproc, mx_panic, parent, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
 	MX_PROCFS_ADD_FILE(mxproc, mx_suspend, parent, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
 	MX_PROCFS_ADD_FILE(mxproc, mx_suspend_count, parent, S_IRUSR | S_IRGRP | S_IROTH);
 	MX_PROCFS_ADD_FILE(mxproc, mx_recovery_count, parent, S_IRUSR | S_IRGRP | S_IROTH);
@@ -471,12 +471,12 @@ static ssize_t mx_procfs_mx_release_read(struct file *file, char __user *user_bu
 
 	memset(buf, '\0', sizeof(buf));
 #ifdef CONFIG_SCSC_BUILD_TYPE
-	bytes = snprintf(buf, sizeof(buf), "Release: %d.%d.%d (build type: %s) (f/w: %s)\n",
-		SCSC_RELEASE_PRODUCT, SCSC_RELEASE_ITERATION, SCSC_RELEASE_CANDIDATE, CONFIG_SCSC_BUILD_TYPE,
+	bytes = snprintf(buf, sizeof(buf), "Release: %d.%d.%d.%d (build type: %s) (f/w: %s)\n",
+		SCSC_RELEASE_PRODUCT, SCSC_RELEASE_ITERATION, SCSC_RELEASE_CANDIDATE, SCSC_RELEASE_POINT, CONFIG_SCSC_BUILD_TYPE,
 		build_id ? build_id : "unknown");
 #else
-	bytes = snprintf(buf, sizeof(buf), "Release: %d.%d.%d (f/w: %s)\n",
-		SCSC_RELEASE_PRODUCT, SCSC_RELEASE_ITERATION, SCSC_RELEASE_CANDIDATE,
+	bytes = snprintf(buf, sizeof(buf), "Release: %d.%d.%d.%d (f/w: %s)\n",
+		SCSC_RELEASE_PRODUCT, SCSC_RELEASE_ITERATION, SCSC_RELEASE_CANDIDATE, SCSC_RELEASE_POINT,
 		build_id ? build_id : "unknown");
 #endif
 	if (bytes > sizeof(buf))

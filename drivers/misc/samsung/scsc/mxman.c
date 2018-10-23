@@ -311,41 +311,6 @@ static int send_mm_msg_stop_blocking(struct mxman *mxman)
 	return 0;
 }
 
-static void write_m_test_fw_version_file(struct mxman *mxman)
-{
-	struct file *fp = NULL;
-	char *filepath = "/data/misc/conn/.wifiver.info";
-	char buf[256];
-	char *build_id = 0;
-
-	if (mxman)
-		build_id = mxman->fw_build_id;
-
-	fp = filp_open(filepath, O_WRONLY|O_CREAT, 0644);
-
-	if (IS_ERR(fp)) {
-		SCSC_TAG_INFO(MXMAN, "version file wasn't opened\n");
-		return;
-	} else if (fp == NULL) {
-		SCSC_TAG_INFO(MXMAN, "%s doesn't open.\n", filepath);
-		return;
-	}
-#ifdef CONFIG_SCSC_BUILD_TYPE
-	snprintf(buf, sizeof(buf), "drv_ver: %d.%d.%d (build type: %s) N (f/w: %s)\n",
-		 SCSC_RELEASE_PRODUCT, SCSC_RELEASE_ITERATION, SCSC_RELEASE_CANDIDATE, CONFIG_SCSC_BUILD_TYPE,
-		 build_id ? build_id : "unknown");
-#else
-	snprintf(buf, sizeof(buf), "drv_ver: %d.%d.%d N (f/w: %s)\n",
-		 SCSC_RELEASE_PRODUCT, SCSC_RELEASE_ITERATION, SCSC_RELEASE_CANDIDATE,
-		 build_id ? build_id : "unknown");
-#endif
-
-	kernel_write(fp, buf, strlen(buf), 0);
-	filp_close(fp, NULL);
-
-	SCSC_TAG_DEBUG(MXMAN, "Succeed to write firmware/host information to .wifiver.info\n");
-}
-
 static void write_m_test_chip_version_file(struct mxman *mxman)
 {
 	struct file *fp = NULL;
@@ -415,12 +380,11 @@ static void mxman_print_versions(struct mxman *mxman)
 
 	SCSC_TAG_INFO(MXMAN, "%s", buf);
 	SCSC_TAG_INFO(MXMAN, "WLBT FW: %s\n", mxman->fw_build_id);
+	SCSC_TAG_INFO(MXMAN, "WLBT Driver: %d.%d.%d.%d\n",
+		SCSC_RELEASE_PRODUCT, SCSC_RELEASE_ITERATION, SCSC_RELEASE_CANDIDATE, SCSC_RELEASE_POINT);
 #ifdef CONFIG_SCSC_BUILD_TYPE
 	SCSC_TAG_INFO(MXMAN, "WLBT Driver Build Type: %s\n", CONFIG_SCSC_BUILD_TYPE);
 #endif
-
-	/* write .wifiver.info */
-	write_m_test_fw_version_file(mxman);
 
 	/* write .cid.info */
 	write_m_test_chip_version_file(mxman);
@@ -1225,16 +1189,18 @@ static void mxman_failure_work(struct work_struct *work)
 		process_panic_record(mxman);
 		SCSC_TAG_INFO(MXMAN, "Trying to schedule coredump\n");
 #ifdef CONFIG_SCSC_BUILD_TYPE
-		SCSC_TAG_INFO(MXMAN, "scsc_release %d.%d.%d, Kernel build type: %s\n",
+		SCSC_TAG_INFO(MXMAN, "scsc_release %d.%d.%d.%d, Kernel build type: %s\n",
 			SCSC_RELEASE_PRODUCT,
 			SCSC_RELEASE_ITERATION,
 			SCSC_RELEASE_CANDIDATE,
+			SCSC_RELEASE_POINT,
 			CONFIG_SCSC_BUILD_TYPE);
 #else
-		SCSC_TAG_INFO(MXMAN, "scsc_release %d.%d.%d\n",
+		SCSC_TAG_INFO(MXMAN, "scsc_release %d.%d.%d.%d\n",
 			SCSC_RELEASE_PRODUCT,
 			SCSC_RELEASE_ITERATION,
-			SCSC_RELEASE_CANDIDATE);
+			SCSC_RELEASE_CANDIDATE,
+			SCSC_RELEASE_POINT);
 #endif
 
 		/* schedule coredump and wait for it to finish */
@@ -1828,6 +1794,21 @@ static int _mx_exec(char *prog, int wait_exec)
 }
 
 #ifdef CONFIG_SCSC_PRINTK
+
+static int __stat(const char *file)
+{
+	struct kstat stat;
+	mm_segment_t fs;
+	int r;
+
+	fs = get_fs();
+	set_fs(get_ds());
+	r = vfs_stat(file, &stat);
+	set_fs(fs);
+
+	return r;
+}
+
 int mx140_log_dump(void)
 {
 	int r;
@@ -1837,6 +1818,15 @@ int mx140_log_dump(void)
 	if (r) {
 		SCSC_TAG_ERR(MXMAN, "mx_logger_dump.sh path error\n");
 	} else {
+		/*
+		 * Test presence of script before invoking, to suppress
+		 * unnecessary error message if not installed.
+		 */
+		r = __stat(mxlbin);
+		if (r) {
+			SCSC_TAG_DEBUG(MXMAN, "%s not installed\n", mxlbin);
+			return r;
+		}
 		SCSC_TAG_INFO(MXMAN, "Invoking mx_logger_dump.sh UHM\n");
 		r = _mx_exec(mxlbin, UMH_WAIT_EXEC);
 		if (r)
@@ -1881,11 +1871,11 @@ EXPORT_SYMBOL(mxman_get_fw_version);
 void mxman_get_driver_version(char *version, size_t ver_sz)
 {
 #ifdef CONFIG_SCSC_BUILD_TYPE
-	snprintf(version, ver_sz - 1, "drv_ver: %d.%d.%d (build type: %s)",
-		 SCSC_RELEASE_PRODUCT, SCSC_RELEASE_ITERATION, SCSC_RELEASE_CANDIDATE, CONFIG_SCSC_BUILD_TYPE);
+	snprintf(version, ver_sz - 1, "drv_ver: %d.%d.%d.%d (build type: %s)",
+		 SCSC_RELEASE_PRODUCT, SCSC_RELEASE_ITERATION, SCSC_RELEASE_CANDIDATE, SCSC_RELEASE_POINT, CONFIG_SCSC_BUILD_TYPE);
 #else
-	snprintf(version, ver_sz - 1, "drv_ver: %d.%d.%d",
-		 SCSC_RELEASE_PRODUCT, SCSC_RELEASE_ITERATION, SCSC_RELEASE_CANDIDATE);
+	snprintf(version, ver_sz - 1, "drv_ver: %d.%d.%d.%d",
+		 SCSC_RELEASE_PRODUCT, SCSC_RELEASE_ITERATION, SCSC_RELEASE_CANDIDATE, SCSC_RELEASE_POINT);
 #endif
 }
 EXPORT_SYMBOL(mxman_get_driver_version);

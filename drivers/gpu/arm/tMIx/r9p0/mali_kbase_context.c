@@ -178,6 +178,10 @@ kbase_create_context(struct kbase_device *kbdev, bool is_compat)
 	setup_timer(&kctx->soft_job_timeout,
 		    kbasep_soft_job_timeout_worker,
 		    (uintptr_t)kctx);
+
+	get_task_struct(current);
+	kctx->task = current;
+
 	/* MALI_SEC_INTEGRATION */
 	if (kbdev->vendor_callbacks->create_context)
 		kbdev->vendor_callbacks->create_context(kctx);
@@ -352,6 +356,8 @@ void kbase_destroy_context(struct kbase_context *kctx)
 	kbase_mem_pool_term(&kctx->mem_pool);
 	kbase_mem_pool_term(&kctx->lp_mem_pool);
 	WARN_ON(atomic_read(&kctx->nonmapped_pages) != 0);
+
+	put_task_struct(kctx->task);
 
 	/* MALI_SEC_INTEGRATION */
 	if (kbdev->vendor_callbacks->destroy_context)

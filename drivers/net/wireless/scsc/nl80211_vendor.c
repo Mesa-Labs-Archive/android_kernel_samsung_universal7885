@@ -2888,7 +2888,10 @@ static int slsi_lls_get_stats(struct wiphy *wiphy, struct wireless_dev *wdev, co
 		SLSI_WARN(sdev, "not supported in WlanLite mode\n");
 		return -EOPNOTSUPP;
 	}
-	
+	if(!sdev) {
+		SLSI_ERR(sdev, "sdev is Null\n");
+		return -EINVAL;
+	}
 	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
 	/* In case of lower layer failure do not read LLS MIBs */
 	if (sdev->mlme_blocked)

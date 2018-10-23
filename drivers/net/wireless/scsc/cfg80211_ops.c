@@ -917,11 +917,6 @@ int slsi_connect(struct wiphy *wiphy, struct net_device *dev,
 	r = slsi_set_boost(sdev, dev);
 	if (r != 0)
 		SLSI_NET_ERR(dev, "Rssi Boost set failed: %d\n", r);
-	r = slsi_set_uapsd_qos_info(sdev, dev);
-	if (r != 0) {
-		SLSI_NET_ERR(dev, "qosInfo MIB write failed: %d\n", r);
-		goto exit_with_vif;
-	}
 
 	/* add_info_elements with Probe Req IEs. Proceed even if confirm fails for add_info as it would
 	 * still work if the fw pre-join scan does not include the vendor IEs

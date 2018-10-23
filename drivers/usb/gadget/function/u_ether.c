@@ -1548,7 +1548,8 @@ void gether_free_request(struct gether *link)
 	struct eth_dev		*dev = link->ioport;
 	struct usb_request	*req;
 	
-	printk("usb: %s : \n", __func__);
+	printk("usb: %s\n", __func__);
+	flush_work(&dev->work);
 	
 	while (!list_empty(&dev->tx_reqs)) {
 		req = container_of(dev->tx_reqs.next,
