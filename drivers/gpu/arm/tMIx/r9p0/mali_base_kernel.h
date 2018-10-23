@@ -411,6 +411,16 @@ struct base_mem_aliasing_info {
  * @id:                         Unique ID provided by the caller, this is used
  *                              to pair allocation and free requests.
  *                              Zero is not a valid value.
+ * @bin_id:                     The JIT allocation bin, used in conjunction with
+ *                              @max_allocations to limit the number of each
+ *                              type of JIT allocation.
+ * @max_allocations:            The maximum number of allocations allowed within
+ *                              the bin specified by @bin_id. Should be the same
+ *                              for all JIT allocations within the same bin.
+ * @padding:                    Expansion space - should be initialised to zero
+ * @usage_id:                   A hint about which allocation should be reused.
+ *                              The kernel should attempt to use a previous
+ *                              allocation with the same usage_id
  */
 struct base_jit_alloc_info {
 	u64 gpu_alloc_addr;
@@ -418,6 +428,10 @@ struct base_jit_alloc_info {
 	u64 commit_pages;
 	u64 extent;
 	u8 id;
+	u8 bin_id;
+	u8 max_allocations;
+	u8 padding[3];
+	u16 usage_id;
 };
 
 /**

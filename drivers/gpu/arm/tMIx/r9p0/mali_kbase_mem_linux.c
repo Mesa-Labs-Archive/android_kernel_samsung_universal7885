@@ -61,39 +61,6 @@
 
 static int kbase_tracking_page_setup(struct kbase_context *kctx, struct vm_area_struct *vma);
 
-/**
- * kbase_mem_shrink_cpu_mapping - Shrink the CPU mapping(s) of an allocation
- * @kctx:      Context the region belongs to
- * @reg:       The GPU region
- * @new_pages: The number of pages after the shrink
- * @old_pages: The number of pages before the shrink
- *
- * Shrink (or completely remove) all CPU mappings which reference the shrunk
- * part of the allocation.
- *
- * Note: Caller must be holding the processes mmap_sem lock.
- */
-static void kbase_mem_shrink_cpu_mapping(struct kbase_context *kctx,
-		struct kbase_va_region *reg,
-		u64 new_pages, u64 old_pages);
-
-/**
- * kbase_mem_shrink_gpu_mapping - Shrink the GPU mapping of an allocation
- * @kctx:      Context the region belongs to
- * @reg:       The GPU region or NULL if there isn't one
- * @new_pages: The number of pages after the shrink
- * @old_pages: The number of pages before the shrink
- *
- * Return: 0 on success, negative -errno on error
- *
- * Unmap the shrunk pages from the GPU mapping. Note that the size of the region
- * itself is unmodified as we still need to reserve the VA, only the page tables
- * will be modified by this function.
- */
-static int kbase_mem_shrink_gpu_mapping(struct kbase_context *kctx,
-		struct kbase_va_region *reg,
-		u64 new_pages, u64 old_pages);
-
 struct kbase_va_region *kbase_mem_alloc(struct kbase_context *kctx,
 		u64 va_pages, u64 commit_pages, u64 extent, u64 *flags,
 		u64 *gpu_va)
@@ -180,6 +147,8 @@ struct kbase_va_region *kbase_mem_alloc(struct kbase_context *kctx,
 				(unsigned long long)va_pages);
 		goto no_mem;
 	}
+
+	reg->initial_commit = commit_pages;
 
 	kbase_gpu_vm_lock(kctx);
 
@@ -473,134 +442,14 @@ void kbase_mem_evictable_deinit(struct kbase_context *kctx)
 	unregister_shrinker(&kctx->reclaim);
 }
 
-struct kbase_mem_zone_cache_entry {
-	/* List head used to link the cache entry to the memory allocation. */
-	struct list_head zone_node;
-	/* The zone the cacheline is for. */
-	struct zone *zone;
-	/* The number of pages in the allocation which belong to this zone. */
-	u64 count;
-};
-
-static bool kbase_zone_cache_builder(struct kbase_mem_phy_alloc *alloc,
-		size_t start_offset)
-{
-	struct kbase_mem_zone_cache_entry *cache = NULL;
-	size_t i;
-	int ret = 0;
-
-	for (i = start_offset; i < alloc->nents; i++) {
-		struct page *p = phys_to_page(as_phys_addr_t(alloc->pages[i]));
-		struct zone *zone = page_zone(p);
-		bool create = true;
-
-		if (cache && (cache->zone == zone)) {
-			/*
-			 * Fast path check as most of the time adjacent
-			 * pages come from the same zone.
-			 */
-			create = false;
-		} else {
-			/*
-			 * Slow path check, walk all the cache entries to see
-			 * if we already know about this zone.
-			 */
-			list_for_each_entry(cache, &alloc->zone_cache, zone_node) {
-				if (cache->zone == zone) {
-					create = false;
-					break;
-				}
-			}
-		}
-
-		/* This zone wasn't found in the cache, create an entry for it */
-		if (create) {
-			cache = kmalloc(sizeof(*cache), GFP_KERNEL);
-			if (!cache) {
-				ret = -ENOMEM;
-				goto bail;
-			}
-			cache->zone = zone;
-			cache->count = 0;
-			list_add(&cache->zone_node, &alloc->zone_cache);
-		}
-
-		cache->count++;
-	}
-	return 0;
-
-bail:
-	return ret;
-}
-
-int kbase_zone_cache_update(struct kbase_mem_phy_alloc *alloc,
-		size_t start_offset)
-{
-	/*
-	 * Bail if the zone cache is empty, only update the cache if it
-	 * existed in the first place.
-	 */
-	if (list_empty(&alloc->zone_cache))
-		return 0;
-
-	return kbase_zone_cache_builder(alloc, start_offset);
-}
-
-int kbase_zone_cache_build(struct kbase_mem_phy_alloc *alloc)
-{
-	/* Bail if the zone cache already exists */
-	if (!list_empty(&alloc->zone_cache))
-		return 0;
-
-	return kbase_zone_cache_builder(alloc, 0);
-}
-
-void kbase_zone_cache_clear(struct kbase_mem_phy_alloc *alloc)
-{
-	struct kbase_mem_zone_cache_entry *walker;
-
-	while (!list_empty(&alloc->zone_cache)) {
-		walker = list_first_entry(&alloc->zone_cache,
-				struct kbase_mem_zone_cache_entry,
-				zone_node);
-		list_del(&walker->zone_node);
-		kfree(walker);
-	}
-}
-
 /**
  * kbase_mem_evictable_mark_reclaim - Mark the pages as reclaimable.
  * @alloc: The physical allocation
  */
-static void kbase_mem_evictable_mark_reclaim(struct kbase_mem_phy_alloc *alloc)
+void kbase_mem_evictable_mark_reclaim(struct kbase_mem_phy_alloc *alloc)
 {
 	struct kbase_context *kctx = alloc->imported.kctx;
-	struct kbase_mem_zone_cache_entry *zone_cache;
 	int __maybe_unused new_page_count;
-	int err;
-
-	/* Attempt to build a zone cache of tracking */
-	err = kbase_zone_cache_build(alloc);
-	if (err == 0) {
-		/* Bulk update all the zones */
-		list_for_each_entry(zone_cache, &alloc->zone_cache, zone_node) {
-			zone_page_state_add(zone_cache->count,
-					zone_cache->zone, NR_SLAB_RECLAIMABLE);
-		}
-	} else {
-		/* Fall-back to page by page updates */
-		int i;
-
-		for (i = 0; i < alloc->nents; i++) {
-			struct page *p;
-			struct zone *zone;
-
-			p = phys_to_page(as_phys_addr_t(alloc->pages[i]));
-			zone = page_zone(p);
-
-			zone_page_state_add(1, zone, NR_SLAB_RECLAIMABLE);
-		}
-	}
 
 	kbase_process_page_usage_dec(kctx, alloc->nents);
 	new_page_count = kbase_atomic_sub_pages(alloc->nents,
@@ -620,40 +469,16 @@ static
 void kbase_mem_evictable_unmark_reclaim(struct kbase_mem_phy_alloc *alloc)
 {
 	struct kbase_context *kctx = alloc->imported.kctx;
-	struct kbase_mem_zone_cache_entry *zone_cache;
 	int __maybe_unused new_page_count;
-	int err;
 
 	new_page_count = kbase_atomic_add_pages(alloc->nents,
 						&kctx->used_pages);
 	kbase_atomic_add_pages(alloc->nents, &kctx->kbdev->memdev.used_pages);
 
 	/* Increase mm counters so that the allocation is accounted for
-	 * against the process and thus is visible to the OOM killer,
-	 * then remove it from the reclaimable accounting. */
+	 * against the process and thus is visible to the OOM killer.
+	 */
 	kbase_process_page_usage_inc(kctx, alloc->nents);
-
-	/* Attempt to build a zone cache of tracking */
-	err = kbase_zone_cache_build(alloc);
-	if (err == 0) {
-		/* Bulk update all the zones */
-		list_for_each_entry(zone_cache, &alloc->zone_cache, zone_node) {
-			zone_page_state_add(-zone_cache->count,
-					zone_cache->zone, NR_SLAB_RECLAIMABLE);
-		}
-	} else {
-		/* Fall-back to page by page updates */
-		int i;
-
-		for (i = 0; i < alloc->nents; i++) {
-			struct page *p;
-			struct zone *zone;
-
-			p = phys_to_page(as_phys_addr_t(alloc->pages[i]));
-			zone = page_zone(p);
-			zone_page_state_add(-1, zone, NR_SLAB_RECLAIMABLE);
-		}
-	}
 
 	KBASE_TLSTREAM_AUX_PAGESALLOC(
 			kctx->id,
@@ -816,8 +641,8 @@ int kbase_mem_flags_change(struct kbase_context *kctx, u64 gpu_addr, unsigned in
 #ifdef CONFIG_UMP
 	case KBASE_MEM_TYPE_IMPORTED_UMP:
 		ret = kbase_mmu_update_pages(kctx, reg->start_pfn,
-				kbase_get_gpu_phy_pages(reg),
-				reg->gpu_alloc->nents, reg->flags);
+					     kbase_get_gpu_phy_pages(reg),
+					     reg->gpu_alloc->nents, reg->flags);
 		break;
 #endif
 #ifdef CONFIG_DMA_SHARED_BUFFER
@@ -1621,7 +1446,7 @@ int kbase_mem_grow_gpu_mapping(struct kbase_context *kctx,
 	return ret;
 }
 
-static void kbase_mem_shrink_cpu_mapping(struct kbase_context *kctx,
+void kbase_mem_shrink_cpu_mapping(struct kbase_context *kctx,
 		struct kbase_va_region *reg,
 		u64 new_pages, u64 old_pages)
 {
@@ -1636,7 +1461,7 @@ static void kbase_mem_shrink_cpu_mapping(struct kbase_context *kctx,
 			(old_pages - new_pages)<<PAGE_SHIFT, 1);
 }
 
-static int kbase_mem_shrink_gpu_mapping(struct kbase_context *kctx,
+int kbase_mem_shrink_gpu_mapping(struct kbase_context *kctx,
 		struct kbase_va_region *reg,
 		u64 new_pages, u64 old_pages)
 {
@@ -2226,9 +2051,9 @@ int kbase_mmap(struct file *file, struct vm_area_struct *vma)
 	dev_dbg(dev, "kbase_mmap\n");
 
 	if (!(vma->vm_flags & VM_READ))
-			vma->vm_flags &= ~VM_MAYREAD;
+		vma->vm_flags &= ~VM_MAYREAD;
 	if (!(vma->vm_flags & VM_WRITE))
-			vma->vm_flags &= ~VM_MAYWRITE;
+		vma->vm_flags &= ~VM_MAYWRITE;
 
 	if (0 == nr_pages) {
 		err = -EINVAL;

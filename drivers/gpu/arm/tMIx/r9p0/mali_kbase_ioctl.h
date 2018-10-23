@@ -33,8 +33,11 @@ extern "C" {
 
 #define KBASE_IOCTL_TYPE 0x80
 
+/* 11.1 introduced a new jit ioctl giving control over the maximum number of
+ * JIT allocations and trim level to be applied on free.
+ */
 #define BASE_UK_VERSION_MAJOR 11
-#define BASE_UK_VERSION_MINOR 0
+#define BASE_UK_VERSION_MINOR 1
 
 #ifdef ANDROID
 /* Android's definition of ioctl is incorrect, specifying the type argument as
@@ -271,15 +274,39 @@ struct kbase_ioctl_get_ddk_version {
 	_IOW(KBASE_IOCTL_TYPE, 13, struct kbase_ioctl_get_ddk_version)
 
 /**
+ * struct kbase_ioctl_mem_jit_init_old - Initialise the JIT memory allocator
+ *
+ * @va_pages: Number of VA pages to reserve for JIT
+ *
+ * Note that depending on the VA size of the application and GPU, the value
+ * specified in @va_pages may be ignored.
+ *
+ * New code should use KBASE_IOCTL_MEM_JIT_INIT instead, this is kept for
+ * backwards compatibility.
+ */
+struct kbase_ioctl_mem_jit_init_old {
+	__u64 va_pages;
+};
+
+#define KBASE_IOCTL_MEM_JIT_INIT_OLD \
+	_IOW(KBASE_IOCTL_TYPE, 14, struct kbase_ioctl_mem_jit_init_old)
+
+/**
  * struct kbase_ioctl_mem_jit_init - Initialise the JIT memory allocator
  *
  * @va_pages: Number of VA pages to reserve for JIT
+ * @max_allocations: Maximum number of concurrent allocations
+ * @trim_level: Level of JIT allocation trimming to perform on free (0 - 100%)
+ * @padding: Currently unused, must be zero
  *
  * Note that depending on the VA size of the application and GPU, the value
  * specified in @va_pages may be ignored.
  */
 struct kbase_ioctl_mem_jit_init {
 	__u64 va_pages;
+	__u8 max_allocations;
+	__u8 trim_level;
+	__u8 padding[6];
 };
 
 #define KBASE_IOCTL_MEM_JIT_INIT \

@@ -1431,6 +1431,7 @@ struct kbase_sub_alloc {
 
 struct kbase_context {
 	struct file *filp;
+	struct task_struct *task;
 	struct kbase_device *kbdev;
 	u32 id; /* System wide unique id */
 	unsigned long api_version;
@@ -1597,6 +1598,17 @@ struct kbase_context {
 
 	/* JIT allocation management */
 	struct kbase_va_region *jit_alloc[256];
+	/* Maximum number of JIT allocations allowed at once */
+	u8 jit_max_allocations;
+	/* Current number of in-flight JIT allocations */
+	u8 jit_current_allocations;
+	/* Current number of in-flight JIT allocations per bin */
+	u8 jit_current_allocations_per_bin[256];
+	/* JIT version number:
+	 * 1: client used KBASE_IOCTL_MEM_JIT_INIT_OLD
+	 * 2: client used KBASE_IOCTL_MEM_JIT_INIT
+	 */
+	u8 jit_version;
 	struct list_head jit_active_head;
 	struct list_head jit_pool_head;
 	struct list_head jit_destroy_head;
@@ -1620,6 +1632,9 @@ struct kbase_context {
 
 	/* Current age count, used to determine age for newly submitted atoms */
 	u32 age_count;
+    
+	/* Level of JIT allocation trimming to perform on free (0 - 100%) */
+	u8 trim_level;
 };
 
 /**

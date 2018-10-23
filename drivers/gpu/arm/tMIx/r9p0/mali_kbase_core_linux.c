@@ -394,7 +394,7 @@ static int kbase_open(struct inode *inode, struct file *filp)
 	}
 
 	debugfs_create_file("infinite_cache", 0644, kctx->kctx_dentry,
-			    kctx, &kbase_infinite_cache_fops);
+			kctx, &kbase_infinite_cache_fops);
 
 	mutex_init(&kctx->mem_profile_lock);
 
@@ -677,10 +677,37 @@ static int kbase_api_get_ddk_version(struct kbase_context *kctx,
 	return len;
 }
 
+/* Defaults for legacy JIT init ioctl */
+#define DEFAULT_MAX_JIT_ALLOCATIONS 255
+#define JIT_LEGACY_TRIM_LEVEL (0) /* No trimming */
+
+static int kbase_api_mem_jit_init_old(struct kbase_context *kctx,
+		struct kbase_ioctl_mem_jit_init_old *jit_init)
+{
+	kctx->jit_version = 1;
+
+	return kbase_region_tracker_init_jit(kctx, jit_init->va_pages,
+			DEFAULT_MAX_JIT_ALLOCATIONS,
+			JIT_LEGACY_TRIM_LEVEL);
+}
+
 static int kbase_api_mem_jit_init(struct kbase_context *kctx,
 		struct kbase_ioctl_mem_jit_init *jit_init)
 {
-	return kbase_region_tracker_init_jit(kctx, jit_init->va_pages);
+    int i;
+
+    kctx->jit_version = 2;
+
+    for (i = 0; i < sizeof(jit_init->padding); i++) {
+        /* Ensure all padding bytes are 0 for potential future
+         * extension
+         */
+        if (jit_init->padding[i])
+            return -EINVAL;
+    }
+
+    return kbase_region_tracker_init_jit(kctx, jit_init->va_pages,
+            jit_init->max_allocations, jit_init->trim_level);
 }
 
 static int kbase_api_mem_sync(struct kbase_context *kctx,
@@ -1045,6 +1072,11 @@ static long kbase_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		KBASE_HANDLE_IOCTL_IN(KBASE_IOCTL_GET_DDK_VERSION,
 				kbase_api_get_ddk_version,
 				struct kbase_ioctl_get_ddk_version);
+		break;
+	case KBASE_IOCTL_MEM_JIT_INIT_OLD:
+		KBASE_HANDLE_IOCTL_IN(KBASE_IOCTL_MEM_JIT_INIT_OLD,
+				kbase_api_mem_jit_init_old,
+				struct kbase_ioctl_mem_jit_init_old);
 		break;
 	case KBASE_IOCTL_MEM_JIT_INIT:
 		KBASE_HANDLE_IOCTL_IN(KBASE_IOCTL_MEM_JIT_INIT,

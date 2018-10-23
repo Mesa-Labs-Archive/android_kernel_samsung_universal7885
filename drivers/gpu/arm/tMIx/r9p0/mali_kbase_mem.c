@@ -650,21 +650,16 @@ fail_unlock:
 	return err;
 }
 
-int kbase_region_tracker_init_jit(struct kbase_context *kctx, u64 jit_va_pages)
-{
 #ifdef CONFIG_64BIT
+static int kbase_region_tracker_init_jit_64(struct kbase_context *kctx,
+		u64 jit_va_pages)
+{
+
 	struct kbase_va_region *same_va;
 	struct kbase_va_region *custom_va_reg;
 	u64 same_va_bits;
 	u64 total_va_size;
 	int err;
-
-	/*
-	 * Nothing to do for 32-bit clients, JIT uses the existing
-	 * custom VA zone.
-	 */
-	if (kbase_ctx_flag(kctx, KCTX_COMPAT))
-		return 0;
 
 #if defined(CONFIG_ARM64)
 	same_va_bits = VA_BITS;
@@ -736,9 +731,27 @@ int kbase_region_tracker_init_jit(struct kbase_context *kctx, u64 jit_va_pages)
 fail_unlock:
 	kbase_gpu_vm_unlock(kctx);
 	return err;
-#else
-	return 0;
+}
 #endif
+
+int kbase_region_tracker_init_jit(struct kbase_context *kctx, u64 jit_va_pages,
+        u8 max_allocations, u8 trim_level)
+{
+    if (trim_level > 100)
+        return -EINVAL;
+
+    kctx->jit_max_allocations = max_allocations;
+    kctx->trim_level = trim_level;
+
+#ifdef CONFIG_64BIT
+    if (!kbase_ctx_flag(kctx, KCTX_COMPAT))
+        return kbase_region_tracker_init_jit_64(kctx, jit_va_pages);
+#endif
+    /*
+     * Nothing to do for 32-bit clients, JIT uses the existing
+     * custom VA zone.
+     */
+    return 0;
 }
 
 int kbase_mem_init(struct kbase_device *kbdev)
@@ -835,6 +848,8 @@ struct kbase_va_region *kbase_alloc_free_region(struct kbase_context *kctx, u64 
 
 	new_reg->start_pfn = start_pfn;
 	new_reg->nr_pages = nr_pages;
+
+	INIT_LIST_HEAD(&new_reg->jit_node);
 
 	return new_reg;
 }
@@ -1283,6 +1298,11 @@ int kbase_mem_free_region(struct kbase_context *kctx, struct kbase_va_region *re
 	KBASE_DEBUG_ASSERT(NULL != reg);
 	lockdep_assert_held(&kctx->reg_lock);
 
+	if (reg->flags & KBASE_REG_JIT) {
+		dev_warn(reg->kctx->kbdev->dev, "Attempt to free JIT memory!\n");
+		return -EINVAL;
+	}
+
 	/*
 	 * Unlink the physical allocation before unmaking it evictable so
 	 * that the allocation isn't grown back to its last backed size
@@ -1446,7 +1466,6 @@ int kbase_alloc_phy_pages_helper(
 	size_t nr_pages_requested)
 {
 	int new_page_count __maybe_unused;
-	size_t old_page_count = alloc->nents;
 	size_t nr_left = nr_pages_requested;
 	int res;
 	struct kbase_context *kctx;
@@ -1474,7 +1493,7 @@ int kbase_alloc_phy_pages_helper(
 	 * allocation is visible to the OOM killer */
 	kbase_process_page_usage_inc(kctx, nr_pages_requested);
 
-	tp = alloc->pages + old_page_count;
+	tp = alloc->pages + alloc->nents;
 
 #ifdef CONFIG_MALI_2MB_ALLOC
 	/* Check if we have enough pages requested so we can allocate a large
@@ -1584,15 +1603,6 @@ no_new_partial:
 			goto alloc_failed;
 	}
 
-	/*
-	 * Request a zone cache update, this scans only the new pages an
-	 * appends their information to the zone cache. if the update
-	 * fails then clear the cache so we fall-back to doing things
-	 * page by page.
-	 */
-	if (kbase_zone_cache_update(alloc, old_page_count) != 0)
-		kbase_zone_cache_clear(alloc);
-
 	KBASE_TLSTREAM_AUX_PAGESALLOC(
 			kctx->id,
 			(u64)new_page_count);
@@ -1606,7 +1616,7 @@ alloc_failed:
 	if (nr_left != nr_pages_requested)
 		kbase_mem_pool_free_pages(&kctx->lp_mem_pool,
 				  nr_pages_requested - nr_left,
-				  alloc->pages + old_page_count,
+				  alloc->pages + alloc->nents,
 				  false,
 				  false);
 
@@ -1670,15 +1680,6 @@ int kbase_free_phy_pages_helper(
 		nr_pages_to_free--;
 		start_free++;
 	}
-
-	/*
-	 * Clear the zone cache, we don't expect JIT allocations to be
-	 * shrunk in parts so there is no point trying to optimize for that
-	 * by scanning for the changes caused by freeing this memory and
-	 * updating the existing cache entries.
-	 */
-	kbase_zone_cache_clear(alloc);
-
 
 	while (nr_pages_to_free) {
 		if (is_huge_head(*start_free)) {
@@ -2139,7 +2140,7 @@ static void kbase_jit_destroy_worker(struct work_struct *work)
 
 		list_del(&reg->jit_node);
 		mutex_unlock(&kctx->jit_evict_lock);
-
+		reg->flags &= ~KBASE_REG_JIT;
 		kbase_gpu_vm_lock(kctx);
 		kbase_mem_free_region(kctx, reg);
 		kbase_gpu_vm_unlock(kctx);
@@ -2156,6 +2157,10 @@ int kbase_jit_init(struct kbase_context *kctx)
 	INIT_LIST_HEAD(&kctx->jit_pending_alloc);
 	INIT_LIST_HEAD(&kctx->jit_atoms_head);
 
+	kctx->jit_max_allocations = 0;
+	kctx->jit_current_allocations = 0;
+	kctx->trim_level = 0;
+
 	return 0;
 }
 
@@ -2163,43 +2168,106 @@ struct kbase_va_region *kbase_jit_allocate(struct kbase_context *kctx,
 		struct base_jit_alloc_info *info)
 {
 	struct kbase_va_region *reg = NULL;
-	struct kbase_va_region *walker;
-	struct kbase_va_region *temp;
-	size_t current_diff = SIZE_MAX;
 
 	int ret;
+
+	if (kctx->jit_current_allocations >= kctx->jit_max_allocations) {
+		/* Too many current allocations */
+		return NULL;
+	}
+	if (info->max_allocations > 0 &&
+			kctx->jit_current_allocations_per_bin[info->bin_id] >=
+			info->max_allocations) {
+		/* Too many current allocations in this bin */
+		return NULL;
+	}
 
 	mutex_lock(&kctx->jit_evict_lock);
 	/*
 	 * Scan the pool for an existing allocation which meets our
 	 * requirements and remove it.
 	 */
-	list_for_each_entry_safe(walker, temp, &kctx->jit_pool_head, jit_node) {
+	if (info->usage_id != 0) {
+		/* First scan for an allocation with the same usage ID */
+		struct kbase_va_region *walker;
+		struct kbase_va_region *temp;
+		size_t current_diff = SIZE_MAX;
 
-		if (walker->nr_pages >= info->va_pages) {
-			size_t min_size, max_size, diff;
+		list_for_each_entry_safe(walker, temp, &kctx->jit_pool_head,
+				jit_node) {
 
-			/*
-			 * The JIT allocations VA requirements have been
-			 * meet, it's suitable but other allocations
-			 * might be a better fit.
-			 */
-			min_size = min_t(size_t, walker->gpu_alloc->nents,
-					info->commit_pages);
-			max_size = max_t(size_t, walker->gpu_alloc->nents,
-					info->commit_pages);
-			diff = max_size - min_size;
+			if (walker->jit_usage_id == info->usage_id &&
+					walker->nr_pages == info->va_pages &&
+					walker->jit_bin_id == info->bin_id) {
+				size_t min_size, max_size, diff;
 
-			if (current_diff > diff) {
-				current_diff = diff;
-				reg = walker;
+				/*
+				 * The JIT allocations VA requirements have been
+				 * met, it's suitable but other allocations
+				 * might be a better fit.
+				 */
+				min_size = min_t(size_t,
+						walker->gpu_alloc->nents,
+						info->commit_pages);
+				max_size = max_t(size_t,
+						walker->gpu_alloc->nents,
+						info->commit_pages);
+				diff = max_size - min_size;
+
+				if (current_diff > diff) {
+					current_diff = diff;
+					reg = walker;
+				}
+
+				/* The allocation is an exact match */
+				if (current_diff == 0)
+					break;
+
 			}
-
-			/* The allocation is an exact match, stop looking */
-			if (current_diff == 0)
-				break;
 		}
 	}
+
+	if (!reg) {
+		/* No allocation with the same usage ID, or usage IDs not in
+		 * use. Search for an allocation we can reuse.
+		 */
+		struct kbase_va_region *walker;
+		struct kbase_va_region *temp;
+		size_t current_diff = SIZE_MAX;
+
+		list_for_each_entry_safe(walker, temp, &kctx->jit_pool_head,
+				jit_node) {
+
+			if (walker->nr_pages == info->va_pages &&
+					walker->jit_bin_id == info->bin_id) {
+				size_t min_size, max_size, diff;
+
+				/*
+				 * The JIT allocations VA requirements have been
+				 * met, it's suitable but other allocations
+				 * might be a better fit.
+				 */
+				min_size = min_t(size_t,
+						walker->gpu_alloc->nents,
+						info->commit_pages);
+				max_size = max_t(size_t,
+						walker->gpu_alloc->nents,
+						info->commit_pages);
+				diff = max_size - min_size;
+
+				if (current_diff > diff) {
+					current_diff = diff;
+					reg = walker;
+				}
+
+				/* The allocation is an exact match, so stop
+				 * looking.
+				 */
+				if (current_diff == 0)
+					break;
+			}
+        }
+    }
 
 	if (reg) {
 		/*
@@ -2266,10 +2334,18 @@ struct kbase_va_region *kbase_jit_allocate(struct kbase_context *kctx,
 		if (!reg)
 			goto out_unlocked;
 
+		reg->flags |= KBASE_REG_JIT;
+
 		mutex_lock(&kctx->jit_evict_lock);
 		list_add(&reg->jit_node, &kctx->jit_active_head);
 		mutex_unlock(&kctx->jit_evict_lock);
 	}
+
+	kctx->jit_current_allocations++;
+	kctx->jit_current_allocations_per_bin[info->bin_id]++;
+
+	reg->jit_usage_id = info->usage_id;
+	reg->jit_bin_id = info->bin_id;
 
 	return reg;
 
@@ -2289,13 +2365,57 @@ out_unlocked:
 
 void kbase_jit_free(struct kbase_context *kctx, struct kbase_va_region *reg)
 {
-	/* The physical backing of memory in the pool is always reclaimable */
+	u64 old_pages;
+
+	/* Get current size of JIT region */
+	old_pages = kbase_reg_current_backed_size(reg);
+	if (reg->initial_commit < old_pages) {
+		/* Free trim_level % of region, but don't go below initial
+		 * commit size
+		 */
+		u64 new_size = MAX(reg->initial_commit,
+			div_u64(old_pages * (100 - kctx->trim_level), 100));
+		u64 delta = old_pages - new_size;
+
+		if (delta) {
+			down_write(&kctx->task->mm->mmap_sem);
+			kbase_mem_shrink_cpu_mapping(kctx, reg, old_pages-delta,
+					old_pages);
+			up_write(&kctx->task->mm->mmap_sem);
+
+			kbase_mem_shrink_gpu_mapping(kctx, reg, old_pages-delta,
+					old_pages);
+
+			kbase_free_phy_pages_helper(reg->cpu_alloc, delta);
+			if (reg->cpu_alloc != reg->gpu_alloc)
+				kbase_free_phy_pages_helper(reg->gpu_alloc,
+						delta);
+		}
+	}
+
+	kctx->jit_current_allocations--;
+	kctx->jit_current_allocations_per_bin[reg->jit_bin_id]--;
+
+	kbase_mem_evictable_mark_reclaim(reg->gpu_alloc);
+
 	kbase_gpu_vm_lock(kctx);
-	kbase_mem_evictable_make(reg->gpu_alloc);
+	reg->flags |= KBASE_REG_DONT_NEED;
+	kbase_mem_shrink_cpu_mapping(kctx, reg, 0, reg->gpu_alloc->nents);
 	kbase_gpu_vm_unlock(kctx);
 
+	/*
+	 * Add the allocation to the eviction list and the jit pool, after this
+	 * point the shrink can reclaim it, or it may be reused.
+	 */
+
 	mutex_lock(&kctx->jit_evict_lock);
+
+	/* This allocation can't already be on a list. */
+	WARN_ON(!list_empty(&reg->gpu_alloc->evict_node));
+	list_add(&reg->gpu_alloc->evict_node, &kctx->evict_list);
+
 	list_move(&reg->jit_node, &kctx->jit_pool_head);
+
 	mutex_unlock(&kctx->jit_evict_lock);
 }
 
@@ -2337,8 +2457,10 @@ bool kbase_jit_evict(struct kbase_context *kctx)
 	}
 	mutex_unlock(&kctx->jit_evict_lock);
 
-	if (reg)
+	if (reg) {
+		reg->flags &= ~KBASE_REG_JIT;
 		kbase_mem_free_region(kctx, reg);
+    }
 
 	return (reg != NULL);
 }
@@ -2363,6 +2485,7 @@ void kbase_jit_term(struct kbase_context *kctx)
 				struct kbase_va_region, jit_node);
 		list_del(&walker->jit_node);
 		mutex_unlock(&kctx->jit_evict_lock);
+		walker->flags &= ~KBASE_REG_JIT;
 		kbase_mem_free_region(kctx, walker);
 		mutex_lock(&kctx->jit_evict_lock);
 	}
@@ -2373,6 +2496,7 @@ void kbase_jit_term(struct kbase_context *kctx)
 				struct kbase_va_region, jit_node);
 		list_del(&walker->jit_node);
 		mutex_unlock(&kctx->jit_evict_lock);
+		walker->flags &= ~KBASE_REG_JIT;
 		kbase_mem_free_region(kctx, walker);
 		mutex_lock(&kctx->jit_evict_lock);
 	}
