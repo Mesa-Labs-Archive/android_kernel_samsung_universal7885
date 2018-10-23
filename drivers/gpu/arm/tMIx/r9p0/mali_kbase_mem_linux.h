@@ -247,4 +247,37 @@ void kbase_va_free(struct kbase_context *kctx, struct kbase_hwc_dma_mapping *han
 
 extern const struct vm_operations_struct kbase_vm_ops;
 
+/**
+ * kbase_mem_shrink_cpu_mapping - Shrink the CPU mapping(s) of an allocation
+ * @kctx:      Context the region belongs to
+ * @reg:       The GPU region
+ * @new_pages: The number of pages after the shrink
+ * @old_pages: The number of pages before the shrink
+ *
+ * Shrink (or completely remove) all CPU mappings which reference the shrunk
+ * part of the allocation.
+ *
+ * Note: Caller must be holding the processes mmap_sem lock.
+ */
+void kbase_mem_shrink_cpu_mapping(struct kbase_context *kctx,
+		struct kbase_va_region *reg,
+		u64 new_pages, u64 old_pages);
+
+/**
+ * kbase_mem_shrink_gpu_mapping - Shrink the GPU mapping of an allocation
+ * @kctx:      Context the region belongs to
+ * @reg:       The GPU region or NULL if there isn't one
+ * @new_pages: The number of pages after the shrink
+ * @old_pages: The number of pages before the shrink
+ *
+ * Return: 0 on success, negative -errno on error
+ *
+ * Unmap the shrunk pages from the GPU mapping. Note that the size of the region
+ * itself is unmodified as we still need to reserve the VA, only the page tables
+ * will be modified by this function.
+ */
+int kbase_mem_shrink_gpu_mapping(struct kbase_context *kctx,
+		struct kbase_va_region *reg,
+		u64 new_pages, u64 old_pages);
+
 #endif				/* _KBASE_MEM_LINUX_H_ */
