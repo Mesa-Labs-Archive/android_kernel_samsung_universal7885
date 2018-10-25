@@ -333,240 +333,6 @@ int print_touch_node(struct ist40xx_data *data, u8 flag,
 	return count;
 }
 
-#if defined(CONFIG_TOUCHSCREEN_DUMP_MODE)
-int dump_touch_node(struct ist40xx_data *data, u8 flag,
-		    struct TSP_NODE_BUF *node)
-{
-	int i, j;
-	int count = 0;
-	int val = 0;
-	const int msg_len = 128;
-	char msg[msg_len];
-	char *buf;
-	TSP_INFO *tsp = &data->tsp_info;
-
-	buf = kzalloc(2048, GFP_KERNEL);
-	buf[0] = '\0';
-
-	if (tsp->dir.swap_xy) {
-		for (i = 0; i < tsp->ch_num.rx; i++) {
-			if (i == 0) {
-				count += snprintf(msg, msg_len, "       ");
-				strncat(buf, msg, msg_len);
-				for (j = 0; j < tsp->ch_num.tx; j++) {
-					if (flag == NODE_FLAG_CDC) {
-						val = (int)node->self_cdc[j];
-						if (val < 0)
-							val = 0;
-					} else if (flag == NODE_FLAG_BASE) {
-						val = (int)node->self_base[j];
-						if (val < 0)
-							val = 0;
-					} else if (flag == NODE_FLAG_DIFF) {
-						val =
-						    (int)(node->self_cdc[j] -
-							  node->self_base[j]);
-					} else {
-						return 0;
-					}
-					count +=
-					    snprintf(msg, msg_len, "%4d ", val);
-					strncat(buf, msg, msg_len);
-				}
-				count += snprintf(msg, msg_len, "\n\n");
-				strncat(buf, msg, msg_len);
-			}
-
-			for (j = 0; j < tsp->ch_num.tx; j++) {
-				if (j == 0) {
-					if (flag == NODE_FLAG_CDC) {
-						val =
-						    (int)node->self_cdc[tsp->
-									ch_num.
-									tx + i];
-						if (val < 0)
-							val = 0;
-					} else if (flag == NODE_FLAG_BASE) {
-						val =
-						    (int)node->self_base[tsp->
-									 ch_num.
-									 tx +
-									 i];
-						if (val < 0)
-							val = 0;
-					} else if (flag == NODE_FLAG_DIFF) {
-						val =
-						    (int)(node->
-							  self_cdc[tsp->ch_num.
-								   tx + i] -
-							  node->self_base[tsp->
-									  ch_num.
-									  tx +
-									  i]);
-					} else {
-						return 0;
-					}
-					count +=
-					    snprintf(msg, msg_len, "%4d   ",
-						     val);
-					strncat(buf, msg, msg_len);
-				}
-
-				if (flag == NODE_FLAG_CDC) {
-					val =
-					    (int)node->
-					    cdc[(j * tsp->ch_num.rx) + i];
-					if (val < 0)
-						val = 0;
-				} else if (flag == NODE_FLAG_BASE) {
-					val =
-					    (int)node->
-					    base[(j * tsp->ch_num.rx) + i];
-					if (val < 0)
-						val = 0;
-				} else if (flag == NODE_FLAG_DIFF) {
-					val =
-					    (int)(node->
-						  cdc[(j * tsp->ch_num.rx) + i]
-						  -
-						  node->
-						  base[(j * tsp->ch_num.rx) +
-						       i]);
-				} else {
-					return 0;
-				}
-
-				if (ist40xx_check_valid_ch(data, j, i) ==
-				    TSP_CH_UNUSED)
-					count +=
-					    snprintf(msg, msg_len, "%4d ", 0);
-				else
-					count +=
-					    snprintf(msg, msg_len, "%4d ", val);
-
-				strncat(buf, msg, msg_len);
-			}
-
-			count += snprintf(msg, msg_len, "\n");
-			strncat(buf, msg, msg_len);
-			tsp_info("%s", buf);
-			buf[0] = '\0';
-		}
-	} else {
-		for (i = 0; i < tsp->ch_num.tx; i++) {
-			if (i == 0) {
-				count += snprintf(msg, msg_len, "       ");
-				strncat(buf, msg, msg_len);
-				for (j = 0; j < tsp->ch_num.rx; j++) {
-					if (flag == NODE_FLAG_CDC) {
-						val =
-						    (int)node->self_cdc[tsp->
-									ch_num.
-									tx + j];
-						if (val < 0)
-							val = 0;
-					} else if (flag == NODE_FLAG_BASE) {
-						val =
-						    (int)node->self_base[tsp->
-									 ch_num.
-									 tx +
-									 j];
-						if (val < 0)
-							val = 0;
-					} else if (flag == NODE_FLAG_DIFF) {
-						val =
-						    (int)(node->
-							  self_cdc[tsp->ch_num.
-								   tx + j] -
-							  node->self_base[tsp->
-									  ch_num.
-									  tx +
-									  j]);
-					} else {
-						return 0;
-					}
-					count +=
-					    snprintf(msg, msg_len, "%4d ", val);
-					strncat(buf, msg, msg_len);
-				}
-
-				count += snprintf(msg, msg_len, "\n\n");
-				strncat(buf, msg, msg_len);
-				tsp_info("%s", buf);
-				buf[0] = '\0';
-			}
-
-			for (j = 0; j < tsp->ch_num.rx; j++) {
-				if (j == 0) {
-					if (flag == NODE_FLAG_CDC) {
-						val = (int)node->self_cdc[i];
-						if (val < 0)
-							val = 0;
-					} else if (flag == NODE_FLAG_BASE) {
-						val = (int)node->self_base[i];
-						if (val < 0)
-							val = 0;
-					} else if (flag == NODE_FLAG_DIFF) {
-						val =
-						    (int)(node->self_cdc[i] -
-							  node->self_base[i]);
-					} else {
-						return 0;
-					}
-					count +=
-					    snprintf(msg, msg_len, "%4d   ",
-						     val);
-					strncat(buf, msg, msg_len);
-				}
-
-				if (flag == NODE_FLAG_CDC) {
-					val =
-					    (int)node->
-					    cdc[(i * tsp->ch_num.rx) + j];
-					if (val < 0)
-						val = 0;
-				} else if (flag == NODE_FLAG_BASE) {
-					val =
-					    (int)node->
-					    base[(i * tsp->ch_num.rx) + j];
-					if (val < 0)
-						val = 0;
-				} else if (flag == NODE_FLAG_DIFF) {
-					val =
-					    (int)(node->
-						  cdc[(i * tsp->ch_num.rx) + j]
-						  -
-						  node->
-						  base[(i * tsp->ch_num.rx) +
-						       j]);
-				} else {
-					return 0;
-				}
-
-				if (ist40xx_check_valid_ch(data, i, j) ==
-				    TSP_CH_UNUSED)
-					count +=
-					    snprintf(msg, msg_len, "%4d ", 0);
-				else
-					count +=
-					    snprintf(msg, msg_len, "%4d ", val);
-
-				strncat(buf, msg, msg_len);
-			}
-
-			count += snprintf(msg, msg_len, "\n");
-			strncat(buf, msg, msg_len);
-			tsp_info("%s", buf);
-			buf[0] = '\0';
-		}
-	}
-
-	kfree(buf);
-
-	return count;
-}
-#endif
-
 int parse_tsp_node(struct ist40xx_data *data, u8 flag,
 		   struct TSP_NODE_BUF *node, s16 *buf16, s16 *self_buf16,
 		   int mode)
@@ -718,7 +484,7 @@ err_read_node:
 }
 
 int ist40xx_parse_cp_node(struct ist40xx_data *data, struct TSP_NODE_BUF *node,
-			  bool ium)
+		bool ium)
 {
 	int i;
 	int len;
@@ -727,64 +493,48 @@ int ist40xx_parse_cp_node(struct ist40xx_data *data, struct TSP_NODE_BUF *node,
 	u16 *cp;
 	u16 *self_cp;
 	if (ium) {
-		cp = (u16 *) &node->rom_cp;
-		self_cp = (u16 *) &node->rom_self_cp;
+		cp = (u16 *)&node->rom_cp;
+		self_cp = (u16 *)&node->rom_self_cp;
 	} else {
-		cp = (u16 *) &node->memx_cp;
-		self_cp = (u16 *) &node->memx_self_cp;
+		cp = (u16 *)&node->memx_cp;
+		self_cp = (u16 *)&node->memx_self_cp;
 	}
 
 	if (ium) {
-		len = node->self_len / 4;
-		for (i = 0; i < len; i++) {
-			*self_cp++ = *tmp_self_cpbuf & 0xFF;
-			*self_cp++ = (*tmp_self_cpbuf >> 8) & 0xFF;
-			*self_cp++ = (*tmp_self_cpbuf >> 16) & 0xFF;
-			*self_cp++ = (*tmp_self_cpbuf >> 24) & 0xFF;
-
-			tmp_self_cpbuf++;
-		}
-
-		len = node->self_len % 4;
-		for (i = 0; i < len; i++)
-			*self_cp++ = (*tmp_self_cpbuf >> (i * 8)) & 0xFF;
-
-		len = node->len / 4;
-		for (i = 0; i < len; i++) {
-			*cp++ = *tmp_cpbuf & 0xFF;
-			*cp++ = (*tmp_cpbuf >> 8) & 0xFF;
-			*cp++ = (*tmp_cpbuf >> 16) & 0xFF;
-			*cp++ = (*tmp_cpbuf >> 24) & 0xFF;
-
-			tmp_cpbuf++;
-		}
-
-		len = node->len % 4;
-		for (i = 0; i < len; i++)
-			*cp++ = (*tmp_cpbuf >> (i * 8)) & 0xFF;
-
-	} else {
 		len = node->self_len / 2;
 		for (i = 0; i < len; i++) {
-			*self_cp++ = *tmp_self_cpbuf & 0xFF;
-			*self_cp++ = (*tmp_self_cpbuf >> 8) & 0xFF;
+			*self_cp++ = *tmp_self_cpbuf & 0x7FF;
+			*self_cp++ = (*tmp_self_cpbuf >> 16) & 0x7FF;
 
 			tmp_self_cpbuf++;
 		}
 
 		if (node->self_len % 2)
-			*self_cp++ = *tmp_self_cpbuf & 0xFF;
+			*self_cp++ = *tmp_self_cpbuf & 0x7FF;
 
-		len = (node->len / 2) + (node->len % 2);
+		len = node->len / 2;
 		for (i = 0; i < len; i++) {
-			*cp++ = *tmp_cpbuf & 0xFF;
-			*cp++ = (*tmp_cpbuf >> 8) & 0xFF;
+			*cp++ = *tmp_cpbuf & 0x7FF;
+			*cp++ = (*tmp_cpbuf >> 16) & 0x7FF;
 
 			tmp_cpbuf++;
 		}
 
 		if (node->len % 2)
-			*cp++ = *tmp_cpbuf & 0xFF;
+			*cp++ = *tmp_cpbuf & 0x7FF;
+	} else {
+		len = node->self_len;
+		for (i = 0; i < len; i++) {
+			*self_cp++ = *tmp_self_cpbuf & 0x7FF;
+			tmp_self_cpbuf++;
+		}
+
+		len = node->len;
+		for (i = 0; i < len; i++) {
+			*cp++ = *tmp_cpbuf & 0x7FF;
+
+			tmp_cpbuf++;
+		}
 	}
 
 	return 0;
@@ -854,7 +604,7 @@ int print_cp_node(struct ist40xx_data *data, struct TSP_NODE_BUF *node,
 	if (tsp->dir.swap_xy) {
 		for (i = 0; i < tsp->ch_num.rx; i++) {
 			if (i == 0) {
-				count += snprintf(msg, msg_len, "      ");
+				count += snprintf(msg, msg_len, "       ");
 				strncat(buf, msg, msg_len);
 				for (j = 0; j < tsp->ch_num.tx; j++) {
 					if (ium)
@@ -862,7 +612,7 @@ int print_cp_node(struct ist40xx_data *data, struct TSP_NODE_BUF *node,
 					else
 						val = node->memx_self_cp[j];
 					count +=
-					    snprintf(msg, msg_len, "%3d ", val);
+					    snprintf(msg, msg_len, "%4d ", val);
 					strncat(buf, msg, msg_len);
 				}
 				count += snprintf(msg, msg_len, "\n\n");
@@ -884,7 +634,7 @@ int print_cp_node(struct ist40xx_data *data, struct TSP_NODE_BUF *node,
 					if (val < 0)
 						val = 0;
 					count +=
-					    snprintf(msg, msg_len, "%3d   ",
+					    snprintf(msg, msg_len, "%4d   ",
 						     val);
 					strncat(buf, msg, msg_len);
 				}
@@ -901,10 +651,10 @@ int print_cp_node(struct ist40xx_data *data, struct TSP_NODE_BUF *node,
 				if (ist40xx_check_valid_ch(data, j, i) ==
 				    TSP_CH_UNUSED)
 					count +=
-					    snprintf(msg, msg_len, "%3d ", 0);
+					    snprintf(msg, msg_len, "%4d ", 0);
 				else
 					count +=
-					    snprintf(msg, msg_len, "%3d ", val);
+					    snprintf(msg, msg_len, "%4d ", val);
 
 				strncat(buf, msg, msg_len);
 			}
@@ -915,7 +665,7 @@ int print_cp_node(struct ist40xx_data *data, struct TSP_NODE_BUF *node,
 	} else {
 		for (i = 0; i < tsp->ch_num.tx; i++) {
 			if (i == 0) {
-				count += snprintf(msg, msg_len, "      ");
+				count += snprintf(msg, msg_len, "       ");
 				strncat(buf, msg, msg_len);
 				for (j = 0; j < tsp->ch_num.rx; j++) {
 					if (ium)
@@ -929,7 +679,7 @@ int print_cp_node(struct ist40xx_data *data, struct TSP_NODE_BUF *node,
 								       ch_num.
 								       tx + j];
 					count +=
-					    snprintf(msg, msg_len, "%3d ", val);
+					    snprintf(msg, msg_len, "%4d ", val);
 					strncat(buf, msg, msg_len);
 				}
 				count += snprintf(msg, msg_len, "\n\n");
@@ -943,7 +693,7 @@ int print_cp_node(struct ist40xx_data *data, struct TSP_NODE_BUF *node,
 					else
 						val = node->memx_self_cp[i];
 					count +=
-					    snprintf(msg, msg_len, "%3d   ",
+					    snprintf(msg, msg_len, "%4d   ",
 						     val);
 					strncat(buf, msg, msg_len);
 				}
@@ -960,10 +710,10 @@ int print_cp_node(struct ist40xx_data *data, struct TSP_NODE_BUF *node,
 				if (ist40xx_check_valid_ch(data, i, j) ==
 				    TSP_CH_UNUSED)
 					count +=
-					    snprintf(msg, msg_len, "%3d ", 0);
+					    snprintf(msg, msg_len, "%4d ", 0);
 				else
 					count +=
-					    snprintf(msg, msg_len, "%3d ", val);
+					    snprintf(msg, msg_len, "%4d ", val);
 
 				strncat(buf, msg, msg_len);
 			}
@@ -999,7 +749,7 @@ int ist40xx_read_cp_node(struct ist40xx_data *data, struct TSP_NODE_BUF *node,
 			return ret;
 		}
 
-		tsp_info("IMU Area Read");
+		tsp_info("IMU Area Read\n");
 		ret = ist40xx_ium_read(data, tmp_buf);
 		if (ret)
 			goto err_read_cp;
@@ -1053,36 +803,6 @@ err_read_cp:
 	return ret;
 
 }
-
-#if defined(CONFIG_TOUCHSCREEN_DUMP_MODE)
-int ist40xx_display_dump_log(struct ist40xx_data *data)
-{
-	int ret = 0;
-	TSP_INFO *tsp = &data->tsp_info;
-	u8 flag = NODE_FLAG_CDC | NODE_FLAG_BASE;
-
-	tsp_info("*** TSP Dump Log ***\n");
-
-	mutex_lock(&data->lock);
-	ret = ist40xx_read_touch_node(data, flag, &tsp->node);
-	if (unlikely(ret)) {
-		mutex_unlock(&data->lock);
-		tsp_err("TSP Dump Fail\n");
-		return ret;
-	}
-	mutex_unlock(&data->lock);
-
-	ist40xx_parse_touch_node(data, &tsp->node);
-
-	tsp_info("[CDC]\n");
-	dump_touch_node(data, NODE_FLAG_CDC, &tsp->node);
-
-	tsp_info("[DIFf]\n");
-	dump_touch_node(data, NODE_FLAG_DIFF, &tsp->node);
-
-	return 0;
-}
-#endif
 
 /* sysfs: /sys/class/touch/node/refresh */
 ssize_t ist40xx_refresh_show(struct device *dev,
@@ -1204,9 +924,9 @@ ssize_t ist40xx_calib_show(struct device *dev, struct device_attribute *attr,
 
 	ist40xx_reset(data, false);
 #ifdef TCLM_CONCEPT
-	ist40xx_tclm_root_of_cal(data, CALPOSITION_TESTMODE);
-	ist40xx_execute_tclm_package(data, 0);
-	ist40xx_tclm_root_of_cal(data, CALPOSITION_NONE);
+	sec_tclm_root_of_cal(data->tdata, CALPOSITION_TESTMODE);
+	sec_execute_tclm_package(data->tdata, 0);
+	sec_tclm_root_of_cal(data->tdata, CALPOSITION_NONE);
 #else
 	ist40xx_calibrate(data, 1);
 #endif
@@ -1416,6 +1136,9 @@ ssize_t ist40xx_printk6_show(struct device *dev,
 ssize_t ist40xx_spay_store(struct device *dev, struct device_attribute *attr,
 			   const char *buf, size_t size)
 {
+#ifdef USE_SPONGE_LIB
+	int ret;
+#endif
 	int enable;
 	struct ist40xx_data *data = dev_get_drvdata(dev);
 
@@ -1429,12 +1152,35 @@ ssize_t ist40xx_spay_store(struct device *dev, struct device_attribute *attr,
 	data->spay = enable ? true : false;
 
 	if (data->spay) {
+#ifdef USE_SPONGE_LIB
+		data->lpm_mode |= IST40XX_GETURE_CTRL_SPAY;
+#else
 		data->g_reg.b.ctrl |= IST40XX_GETURE_CTRL_SPAY;
 		data->g_reg.b.setting |= IST40XX_GETURE_SET_SPAY;
+#endif
 	} else {
+#ifdef USE_SPONGE_LIB
+		data->lpm_mode &= ~IST40XX_GETURE_CTRL_SPAY;
+#else
 		data->g_reg.b.ctrl &= ~IST40XX_GETURE_CTRL_SPAY;
 		data->g_reg.b.setting &= ~IST40XX_GETURE_SET_SPAY;
+#endif
 	}
+#ifdef USE_SPONGE_LIB
+	ret = ist40xx_write_sponge_reg(data, IST40XX_SPONGE_CTRL,
+				(u16*)&data->lpm_mode, 1);
+	if (ret) {
+		tsp_err("%s(), fail to write sponge reg.\n", __func__);
+		return size;
+	}
+
+	ret = ist40xx_write_cmd(data, IST40XX_HIB_CMD,
+				(eHCOM_NOTIRY_G_REGMAP << 16) | IST40XX_ENABLE);
+	if (ret) {
+		tsp_err("%s(), fail to write notify packet.\n", __func__);
+		return size;
+	}
+#endif
 
 	return size;
 }
@@ -1443,6 +1189,9 @@ ssize_t ist40xx_spay_store(struct device *dev, struct device_attribute *attr,
 ssize_t ist40xx_aod_store(struct device *dev, struct device_attribute *attr,
 			  const char *buf, size_t size)
 {
+#ifdef USE_SPONGE_LIB
+	int ret;
+#endif
 	int enable;
 	struct ist40xx_data *data = dev_get_drvdata(dev);
 
@@ -1456,12 +1205,35 @@ ssize_t ist40xx_aod_store(struct device *dev, struct device_attribute *attr,
 	data->aod = enable ? true : false;
 
 	if (data->aod) {
+#ifdef USE_SPONGE_LIB
+		data->lpm_mode |= IST40XX_GETURE_CTRL_AOD;
+#else
 		data->g_reg.b.ctrl |= IST40XX_GETURE_CTRL_AOD;
 		data->g_reg.b.setting |= IST40XX_GETURE_SET_AOD;
+#endif
 	} else {
+#ifdef USE_SPONGE_LIB
+		data->lpm_mode &= ~IST40XX_GETURE_CTRL_AOD;
+#else
 		data->g_reg.b.ctrl &= ~IST40XX_GETURE_CTRL_AOD;
 		data->g_reg.b.setting &= ~IST40XX_GETURE_SET_AOD;
+#endif
 	}
+#ifdef USE_SPONGE_LIB
+	ret = ist40xx_write_sponge_reg(data, IST40XX_SPONGE_CTRL,
+				(u16*)&data->lpm_mode, 1);
+	if (ret) {
+		tsp_err("%s(), fail to write sponge reg.\n", __func__);
+		return size;
+	}
+
+	ret = ist40xx_write_cmd(data, IST40XX_HIB_CMD,
+				(eHCOM_NOTIRY_G_REGMAP << 16) | IST40XX_ENABLE);
+	if (ret) {
+		tsp_err("%s(), fail to write notify packet.\n", __func__);
+		return size;
+	}
+#endif
 
 	return size;
 }
@@ -1597,6 +1369,45 @@ ssize_t ist40xx_glove_mode_store(struct device *dev,
 	ist40xx_set_glove_mode(mode);
 
 	return size;
+}
+
+extern void ist40xx_set_sensitivity_mode(int mode);
+/* sysfs: /sys/class/touch/sys/mode_sensitibity */
+ssize_t ist40xx_sensitivity_mode_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int mode;
+
+	if (kstrtoint(buf, 10, &mode) < 0) {
+		tsp_err("%s kstrtoint fail\n", __func__);
+		return size;
+	}
+
+	if (unlikely((mode != 0) && (mode != 1)))   // enable/disable
+		return size;
+
+	ist40xx_set_sensitivity_mode(mode);
+
+	return size;
+}
+
+ssize_t ist40xx_sensitivity_mode_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	u32 result[5] = { 0, };
+	struct ist40xx_data *data = dev_get_drvdata(dev);
+
+	if (data->status.sys_mode == STATE_POWER_OFF) {
+		tsp_err("%s(), error currently power off \n", __func__);
+		goto end;
+	}
+
+	if (data->noise_mode & NOISE_MODE_SENSITIVITY)
+		ist40xx_burst_read(data->client, IST40XX_HIB_INTR_MSG, result, 5, true);
+
+end:
+	return sprintf(buf, "%d,%d,%d,%d,%d", result[0], result[1], result[2],
+			result[3], result[4]);
 }
 
 /* sysfs: /sys/class/touch/sys/ic_inform */
@@ -2327,6 +2138,7 @@ ssize_t intr_debug3_show(struct device *dev, struct device_attribute *attr,
 	return count;
 }
 
+#if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 #define IST40XX_DEBUGGING_MAGIC 0xDEBC0000
 #define MAX_FRAME_COUNT         1024
 IST40XX_RING_BUF DebugBuf;
@@ -2972,6 +2784,7 @@ ssize_t recording_frame_show(struct device *dev,
 	kfree(frame_data);
 	return count;
 }
+#endif
 
 #ifdef TCLM_CONCEPT
 static DIRECT_INFO ist40xx_sec_info;
@@ -3155,6 +2968,8 @@ static DEVICE_ATTR(mode_cover, S_IRUGO | S_IWUSR | S_IWGRP, NULL,
 		   ist40xx_cover_mode_store);
 static DEVICE_ATTR(mode_glove, S_IRUGO | S_IWUSR | S_IWGRP, NULL,
 		   ist40xx_glove_mode_store);
+static DEVICE_ATTR(mode_sensitivity, S_IRUGO | S_IWUSR | S_IWGRP,
+		   ist40xx_sensitivity_mode_show, ist40xx_sensitivity_mode_store);
 static DEVICE_ATTR(ic_inform, S_IRUGO, ist40xx_read_ic_inform, NULL);
 #ifdef TCLM_CONCEPT
 static DEVICE_ATTR(sec_info, S_IRUGO | S_IWUSR | S_IWGRP, ist40xx_sec_info_show,
@@ -3178,6 +2993,7 @@ static DEVICE_ATTR(intr_debug2, S_IRUGO | S_IWUSR | S_IWGRP, intr_debug2_show,
 		   intr_debug2_store);
 static DEVICE_ATTR(intr_debug3, S_IRUGO | S_IWUSR | S_IWGRP, intr_debug3_show,
 		   intr_debug3_store);
+#if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 static DEVICE_ATTR(debugging_mode, S_IRUGO | S_IWUSR | S_IWGRP,
 		   debugging_mode_show, debugging_mode_store);
 static DEVICE_ATTR(debugging_status, S_IRUGO | S_IWUSR | S_IWGRP,
@@ -3200,7 +3016,7 @@ static DEVICE_ATTR(recording_cnt, S_IRUGO | S_IWUSR | S_IWGRP,
 		   recording_cnt_show, NULL);
 static DEVICE_ATTR(recording_frame, S_IRUGO | S_IWUSR | S_IWGRP,
 		   recording_frame_show, NULL);
-
+#endif
 static struct attribute *node_attributes[] = {
 	&dev_attr_refresh.attr,
 	NULL,
@@ -3229,6 +3045,7 @@ static struct attribute *sys_attributes[] = {
 	&dev_attr_mode_call.attr,
 	&dev_attr_mode_cover.attr,
 	&dev_attr_mode_glove.attr,
+	&dev_attr_mode_sensitivity.attr,
 	&dev_attr_ic_inform.attr,
 #ifdef TCLM_CONCEPT
 	&dev_attr_sec_info.attr,
@@ -3245,6 +3062,7 @@ static struct attribute *tunes_attributes[] = {
 	&dev_attr_intr_debug.attr,
 	&dev_attr_intr_debug2.attr,
 	&dev_attr_intr_debug3.attr,
+#if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 	&dev_attr_debugging_mode.attr,
 	&dev_attr_debugging_cnt.attr,
 	&dev_attr_debugging_frame.attr,
@@ -3256,6 +3074,7 @@ static struct attribute *tunes_attributes[] = {
 	&dev_attr_recording_cnt.attr,
 	&dev_attr_recording_frame.attr,
 	&dev_attr_recording_status.attr,
+#endif
 	NULL,
 };
 
@@ -3275,7 +3094,7 @@ extern struct class *ist40xx_class;
 struct device *ist40xx_sys_dev;
 struct device *ist40xx_tunes_dev;
 struct device *ist40xx_node_dev;
-
+#ifdef CONFIG_SEC_FACTORY
 static ssize_t cp_sysfs_read(struct file *filp, struct kobject *kobj,
 			     struct bin_attribute *bin_attr, char *buf,
 			     loff_t off, size_t size)
@@ -3592,7 +3411,7 @@ void ist40xx_init_bin_attribute(void)
 	if (sysfs_create_bin_file(&ist40xx_node_dev->kobj, &bin_lofs_attr))
 		tsp_err("Failed to create sysfs diff bin file(%s)!\n", "node");
 }
-
+#endif
 int ist40xx_init_misc_sysfs(struct ist40xx_data *data)
 {
 	/* /sys/class/touch/sys */
@@ -3619,11 +3438,13 @@ int ist40xx_init_misc_sysfs(struct ist40xx_data *data)
 	if (unlikely(sysfs_create_group(&ist40xx_node_dev->kobj,
 					&node_attr_group)))
 		tsp_err("Failed to create sysfs group(%s)!\n", "node");
-
+#ifdef CONFIG_SEC_FACTORY
 	/* /sys/class/touch/node/... */
 	ist40xx_init_bin_attribute();
-
+#endif
+#if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 	ist40xx_debugging_init(data);
+#endif
 
 	return 0;
 }

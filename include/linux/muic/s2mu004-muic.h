@@ -350,6 +350,7 @@
 #define DRY_DET_RETRY_CNT_MAX			3
 #define RID_REFRESH_DURATION_MS			100
 #define WATER_TOGGLE_WA_DURATION_US		20000
+#define WATER_WAKEUP_WAIT_DURATION_MS	2000
 
 /* s2mu004-muic macros */
 #define REQUEST_IRQ(_irq, _dev_id, _name)				\
@@ -495,6 +496,9 @@ struct s2mu004_muic_data {
 	/* model dependant mfd platform data */
 	struct s2mu004_platform_data	*mfd_pdata;
 
+	struct notifier_block fb_notifier;
+	bool lcd_on;
+
 	void *if_data;
 
 	int irq_attach;
@@ -552,6 +556,7 @@ struct s2mu004_muic_data {
 	struct delayed_work incomplete_check;
 	struct delayed_work water_detect_handler;
 	struct delayed_work water_dry_handler;
+	struct delayed_work sleep_dry_checker;
 	struct delayed_work afc_mrxrdy;
 
 	struct notifier_block pdic_nb;
@@ -563,6 +568,7 @@ struct s2mu004_muic_data {
 	bool is_otg_vboost;
 	bool is_otg_reboost;
 	bool is_hiccup_mode;
+	bool jig_disable;
 
 	int rev_id;
 	int afc_irq;

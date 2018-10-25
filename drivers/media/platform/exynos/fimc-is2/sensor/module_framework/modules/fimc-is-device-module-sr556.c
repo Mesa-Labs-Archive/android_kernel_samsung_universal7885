@@ -207,7 +207,7 @@ static int sensor_module_sr556_power_setpin(struct device *dev,
 		SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON, gpio_1p8_en, "1p8_en", PIN_OUTPUT, 1, 1000);
 	}
 	if (gpio_is_valid(gpio_1p8_a2p8_en)) {
-		SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON, gpio_1p8_a2p8_en, "1p8_a2p8_en", PIN_OUTPUT, 1, 0);
+		SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON, gpio_1p8_a2p8_en, "1p8_a2p8_en", PIN_OUTPUT, 1, 100);
 	}
 	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON, gpio_none, "pin", PIN_FUNCTION, 2, 1500);
 	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON, gpio_reset, "sen_rst high", PIN_OUTPUT, 1, 10000);

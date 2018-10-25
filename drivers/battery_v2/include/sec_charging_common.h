@@ -67,6 +67,7 @@ enum power_supply_ext_property {
 	POWER_SUPPLY_EXT_PROP_UPDATE_BATTERY_DATA,
 #endif
 	POWER_SUPPLY_EXT_PROP_HV_DISABLE,
+	POWER_SUPPLY_EXT_PROP_WD_QBATTOFF,
 };
 
 enum sec_battery_usb_conf {
@@ -597,7 +598,7 @@ struct sec_charging_current {
 
 #if defined(CONFIG_BATTERY_AGE_FORECAST)
 struct sec_age_data {
-	unsigned int cycle;
+	int cycle;
 	unsigned int float_voltage;
 	unsigned int recharge_condition_vcell;
 	unsigned int full_condition_vcell;
@@ -893,6 +894,10 @@ struct sec_battery_platform_data {
 	int age_data_length;
 	sec_age_data_t* age_data;
 #endif
+	int fg_cycle_check_value;
+
+	unsigned int siop_default_power;
+
 	unsigned int siop_event_check_type;
 	unsigned int siop_call_cc_current;
 	unsigned int siop_call_cv_current;

@@ -91,6 +91,8 @@ static void tfa_status_read(tfa98xx_handle_t handle);
  */
 #if defined(TFA_USE_DEVICE_SPECIFIC_CONTROL)
 static int active_handle = -1;
+static int first_handle; /* first active_handle */
+static int last_handle; /* last active_handle */
 #endif
 
 /*
@@ -3837,8 +3839,8 @@ tfa_run_speaker_boost(tfa98xx_handle_t handle, int force, int profile)
 	/* cold start and not tap profile */
 	if ((value == 1) && (!istap_prof)) {
 #if defined(TFA_USE_DEVICE_SPECIFIC_CONTROL)
-		if (handle == 0
-			|| handle == active_handle) { /* master device only */
+		/* master (or first) device only */
+		if (handle == first_handle) { /* first active_handle */
 #else
 		if (handle == 0) { /* master device only */
 #endif /* TFA_USE_DEVICE_SPECIFIC_CONTROL */
@@ -3962,19 +3964,24 @@ tfa_run_speaker_startup(tfa98xx_handle_t handle, int force, int profile)
 	/* DSP is running now */
 	/* write all the files from the device list */
 #if defined(TFA_USE_DEVICE_SPECIFIC_CONTROL)
-	if (handle == active_handle) {
-		pr_info("%s: load dev files from master device\n",
-			__func__);
-		err = tfa_cont_write_files(0); /* loading master device */
-	} else if ((active_handle == -1)
-		&& (handles_local[0].is_cold == 0)
+	if (active_handle == -1) {
+		if ((handles_local[0].is_cold == 0)
 		&& (handles_local[handle].is_cold != 0)
 		&& (handle != 0)) {
-		pr_info("%s: load dev files from master device, when master is not cold\n",
-			__func__);
-		err = tfa_cont_write_files(0); /* loading master device */
-	} else {
-		err = tfa_cont_write_files(handle);
+			pr_info("%s: [%d] load dev files from master device, when master is not cold\n",
+				__func__, handle);
+			err = tfa_cont_write_files(0); /* loading master device */
+		} else {
+			err = tfa_cont_write_files(handle);
+		}
+	} else { /* active_handle is selected */
+		if (handle == first_handle) { /* first active_handle */
+			pr_info("%s: [%d] load dev files from master device, for first handle\n",
+				__func__, handle);
+			err = tfa_cont_write_files(0); /* loading master device */
+		} else {
+			err = tfa_cont_write_files(handle);
+		}
 	}
 #else
 	err = tfa_cont_write_files(handle);
@@ -4081,8 +4088,7 @@ enum tfa98xx_error tfa_set_calibration_values(tfa98xx_handle_t handle)
 
 	/* reset need_cal for the first device */
 #if defined(TFA_USE_DEVICE_SPECIFIC_CONTROL)
-	if ((handle == 0)
-		|| (handle == active_handle))
+	if (handle == first_handle) /* first active_handle */
 #else
 	if (handle == 0)
 #endif /* TFA_USE_DEVICE_SPECIFIC_CONTROL */
@@ -4092,8 +4098,7 @@ enum tfa98xx_error tfa_set_calibration_values(tfa98xx_handle_t handle)
 #if defined(SET_CALIBRATION_AT_ALL_DEVICE_READY)
 	/* trigger at the last device */
 #if defined(TFA_USE_DEVICE_SPECIFIC_CONTROL)
-	if ((handle < devcount - 1)
-		&& (handle != active_handle)) {
+	if (handle < last_handle) { /* last active_handle */
 #else
 	if (handle < devcount - 1) {
 #endif /* TFA_USE_DEVICE_SPECIFIC_CONTROL */
@@ -4619,6 +4624,8 @@ enum tfa_error tfa_start(int next_profile, int *vstep)
 
 #if defined(TFA_USE_DEVICE_SPECIFIC_CONTROL)
 	active_handle = -1;
+	first_handle = 0; /* first active_handle */
+	last_handle = devcount - 1; /* last active_handle */
 #endif
 
 	for (dev = 0; dev < devcount; dev++) {
@@ -4642,19 +4649,33 @@ enum tfa_error tfa_start(int next_profile, int *vstep)
 #if defined(TFA_PROFILE_ON_DEVICE)
 		/* check active handle with profile */
 		if (tfa_cont_is_dev_specific_profile(dev,
-			next_profile) != 0)
-			active_handle = dev;
+			next_profile) != 0) {
+			if (active_handle == -1) {
+				active_handle = (1 << dev);
+				last_handle = first_handle = dev;
+			} else {
+				active_handle |= (1 << dev);
+				last_handle = dev;
+			}
+		}
 #endif
 #if defined(TFA_ACTIVATED_ASYNCHRONOUSLY)
-		if (tfa_is_selected_dev_to_activate(dev) != 0)
-			active_handle = dev;
-#endif
+		/* check active handle with mixer control */
+		if (tfa_is_selected_dev_to_activate(dev) != 0) {
+			if (active_handle == -1) {
+				active_handle = (1 << dev);
+				last_handle = first_handle = dev;
+			} else {
+				active_handle |= (1 << dev);
+				last_handle = dev;
+			}
+		}
 #endif /* TFA_USE_DEVICE_SPECIFIC_CONTROL */
 	}
 
-#if defined(TFA_USE_DEVICE_SPECIFIC_CONTROL)
-	pr_info("%s: device to be activated = %d\n",
-		__func__, active_handle);
+	pr_info("%s: device to be activated = 0x%x (from %d to %d)\n",
+		__func__, active_handle,
+		first_handle, last_handle);
 #endif
 
 	for (dev = 0; dev < devcount; dev++) {
@@ -4670,7 +4691,7 @@ enum tfa_error tfa_start(int next_profile, int *vstep)
 
 #if defined(TFA_USE_DEVICE_SPECIFIC_CONTROL)
 		if (active_handle != -1) {
-			if (dev != active_handle) {
+			if (!(active_handle & (1 << dev))) {
 				err = _tfa_stop(dev);
 				continue;
 			}
@@ -4723,7 +4744,7 @@ enum tfa_error tfa_start(int next_profile, int *vstep)
 
 #if defined(TFA_USE_DEVICE_SPECIFIC_CONTROL)
 		if (active_handle != -1) {
-			if (dev != active_handle) {
+			if (!(active_handle & (1 << dev))) {
 				tfa_set_swprof(dev,
 					(unsigned short)next_profile);
 				tfa_set_swvstep(dev,
@@ -4808,7 +4829,7 @@ enum tfa_error tfa_start(int next_profile, int *vstep)
 
 #if defined(TFA_USE_DEVICE_SPECIFIC_CONTROL)
 		if (active_handle != -1) {
-			if (dev != active_handle) {
+			if (!(active_handle & (1 << dev))) {
 				tfa_cont_close(dev); /* close all of them */
 				continue;
 			}

@@ -593,8 +593,12 @@ static enum hrtimer_restart lsm6dsl_gyro_timer_func(struct hrtimer *timer)
 	struct lsm6dsl_data *cdata = container_of(timer,
 					struct lsm6dsl_data, gyro_timer);
 
+#ifdef CONFIG_SENSORS_LSM6DSL_SUPPORT_VDIS
+	queue_kthread_work(&cdata->gyro_worker, &cdata->gyro_work);
+#else
 	if (!work_pending(&cdata->gyro_work))
 		queue_work(cdata->gyro_wq, &cdata->gyro_work);
+#endif
 
 	hrtimer_forward_now(&cdata->gyro_timer, cdata->gyro_delay);
 
@@ -674,7 +678,11 @@ exit:
 	}
 }
 
+#ifdef CONFIG_SENSORS_LSM6DSL_SUPPORT_VDIS
+static void lsm6dsl_gyro_work_func(struct kthread_work *work)
+#else
 static void lsm6dsl_gyro_work_func(struct work_struct *work)
+#endif
 {
 	struct lsm6dsl_data *cdata =
 		container_of(work, struct lsm6dsl_data, gyro_work);
@@ -1081,9 +1089,8 @@ static int lsm6dsl_disable_sensors(struct lsm6dsl_data *cdata, int sindex)
 		if (err < 0)
 			return err;
 
-		cancel_work_sync(&cdata->acc_work);
 		hrtimer_cancel(&cdata->acc_timer);
-
+		cancel_work_sync(&cdata->acc_work);
 		break;
 	case LSM6DSL_GYRO:
 		err = lsm6dsl_write_data_with_mask(cdata,
@@ -1093,9 +1100,12 @@ static int lsm6dsl_disable_sensors(struct lsm6dsl_data *cdata, int sindex)
 		if (err < 0)
 			return err;
 
-		cancel_work_sync(&cdata->gyro_work);
 		hrtimer_cancel(&cdata->gyro_timer);
-
+#ifdef CONFIG_SENSORS_LSM6DSL_SUPPORT_VDIS
+		flush_kthread_work(&cdata->gyro_work);
+#else
+		cancel_work_sync(&cdata->gyro_work);
+#endif
 		break;
 	case LSM6DSL_SIGN_MOTION:
 		err = lsm6dsl_write_data_with_mask(cdata,
@@ -3534,7 +3544,9 @@ int lsm6dsl_common_probe(struct lsm6dsl_data *cdata, int irq, u16 bustype)
 	int32_t err;
 	u8 wai = 0x00;
 	int retry = 5;
-
+#ifdef CONFIG_SENSORS_LSM6DSL_SUPPORT_VDIS
+	struct sched_param param = {.sched_priority = MAX_RT_PRIO - 1};
+#endif
 	SENSOR_INFO(" Start!\n");
 
 	dev_set_drvdata(cdata->dev, cdata);
@@ -3658,6 +3670,27 @@ int lsm6dsl_common_probe(struct lsm6dsl_data *cdata, int irq, u16 bustype)
 		goto exit_create_workqueue_acc;
 	}
 
+#ifdef CONFIG_SENSORS_LSM6DSL_SUPPORT_VDIS
+	/* gyro sensor thread create */
+	init_kthread_worker(&cdata->gyro_worker);
+	cdata->gyro_task = kthread_run(kthread_worker_fn, &cdata->gyro_worker, "gyro_work");
+	if (IS_ERR(cdata->gyro_task)) {
+		err = PTR_ERR(cdata->gyro_task);
+		SENSOR_ERR("failed to create kthread for gyro sensor, err(%d)",
+			err);
+		cdata->gyro_task = NULL;
+		goto exit_create_workqueue_gyro;
+	}
+	err = sched_setscheduler_nocheck(cdata->gyro_task, SCHED_FIFO, &param);
+	if (err) {
+		SENSOR_ERR("sched_setscheduler_nocheck is fail(%d)", err);
+		goto exit_create_workqueue_irq;
+	}
+	init_kthread_work(&cdata->gyro_work, lsm6dsl_gyro_work_func);
+
+	/* this is the thread function we run on the work queue */
+	INIT_WORK(&cdata->acc_work, lsm6dsl_acc_work_func);
+#else
 	cdata->gyro_wq = create_singlethread_workqueue("gyro_wq");
 	if (!cdata->gyro_wq) {
 		err = -ENOMEM;
@@ -3668,7 +3701,7 @@ int lsm6dsl_common_probe(struct lsm6dsl_data *cdata, int irq, u16 bustype)
 	/* this is the thread function we run on the work queue */
 	INIT_WORK(&cdata->acc_work, lsm6dsl_acc_work_func);
 	INIT_WORK(&cdata->gyro_work, lsm6dsl_gyro_work_func);
-
+#endif
 	atomic_set(&cdata->acc_wkqueue_en, 0);
 	atomic_set(&cdata->gyro_wkqueue_en, 0);
 
@@ -3697,7 +3730,12 @@ int lsm6dsl_common_probe(struct lsm6dsl_data *cdata, int irq, u16 bustype)
 	return 0;
 
 exit_create_workqueue_irq:
+#ifdef CONFIG_SENSORS_LSM6DSL_SUPPORT_VDIS
+	kthread_stop(cdata->gyro_task);
+	cdata->gyro_task = NULL;
+#else
 	destroy_workqueue(cdata->gyro_wq);
+#endif
 exit_create_workqueue_gyro:
 	destroy_workqueue(cdata->accel_wq);
 exit_create_workqueue_acc:
@@ -3812,6 +3850,14 @@ void lsm6dsl_common_remove(struct lsm6dsl_data *cdata)
 		lsm6dsl_disable_sensors(cdata, LSM6DSL_ACCEL);
 	if (cdata->enabled & (1 << LSM6DSL_GYRO))
 		lsm6dsl_disable_sensors(cdata, LSM6DSL_GYRO);
+
+#ifdef CONFIG_SENSORS_LSM6DSL_SUPPORT_VDIS
+	if (cdata->gyro_task != NULL) {
+		if (kthread_stop(cdata->gyro_task))
+			SENSOR_INFO("kthread_stop fail");
+		cdata->gyro_task = NULL;
+	}
+#endif
 }
 EXPORT_SYMBOL(lsm6dsl_common_remove);
 
@@ -3822,6 +3868,13 @@ void lsm6dsl_common_shutdown(struct lsm6dsl_data *cdata)
 	for (i = 0; i < LSM6DSL_SENSORS_NUMB; i++)
 		lsm6dsl_disable_sensors(cdata, i);
 
+#ifdef CONFIG_SENSORS_LSM6DSL_SUPPORT_VDIS
+    if (cdata->gyro_task != NULL) {
+		if (kthread_stop(cdata->gyro_task))
+			SENSOR_INFO("kthread_stop fail");
+		cdata->gyro_task = NULL;
+	}
+#endif
 }
 EXPORT_SYMBOL(lsm6dsl_common_shutdown);
 

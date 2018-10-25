@@ -54,7 +54,7 @@ int sensor_dw9808_init(struct i2c_client *client, struct fimc_is_caldata_list_dw
 {
 	int ret = 0;
 	u8 i2c_data[2];
-	u32 pre_scale, sac_time;
+	u32 control_mode, pre_scale, sac_time;
 	struct fimc_is_from_info *sysfs_finfo;
 
 	fimc_is_sec_get_sysfs_finfo(&sysfs_finfo);
@@ -148,10 +148,18 @@ int sensor_dw9808_init(struct i2c_client *client, struct fimc_is_caldata_list_dw
 		 * 000: SAC1, 001: SAC2, 010: SAC2.5, 011: SAC3, 101: SAC4
 		 * 000: Tvibx2, 001: Tvibx1, 010: Tvibx1/2, 011: Tvibx1/4, 100: Tvibx8, 101: Tvibx4
 		 */
+		control_mode = cal_data->control_mode;
 		pre_scale = cal_data->prescale;
+		dbg_actuator("[%s]AF Cal data: control_mode=0x%2x, pre_scale=0x%2x\n", __func__, control_mode, pre_scale);
 
+#ifdef CONFIG_CAMERA_A7Y18
+		if (control_mode != 0x83 || pre_scale != 0x01) {
+			control_mode = 0x83;
+			pre_scale = 0x01;
+		}
+#endif
 		i2c_data[0] = REG_MODE;
-		i2c_data[1] = (cal_data->control_mode << 5) | pre_scale;
+		i2c_data[1] = ((control_mode & 0xff) << 5) | (pre_scale & 0xff);
 		ret = fimc_is_sensor_addr8_write8(client, i2c_data[0], i2c_data[1]);
 		if (ret < 0)
 			goto p_err;
@@ -161,6 +169,7 @@ int sensor_dw9808_init(struct i2c_client *client, struct fimc_is_caldata_list_dw
 		 * SACT period = 6.3ms + SACT[5:0] * 0.1ms
 		 */
 		sac_time = cal_data->resonance;
+		dbg_actuator("[%s]AF Cal data: sac_time=0x%2x\n", __func__, sac_time);
 
 		i2c_data[0] = REG_RESONANCE;
 		i2c_data[1] = sac_time;

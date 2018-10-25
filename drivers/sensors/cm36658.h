@@ -17,6 +17,9 @@
 #ifndef __LINUX_CM36658_H
 #define __LINUX_CM36658_H
 
+/* Define delay time in calib */
+#define PS_CALI_DELAY 15
+
 /* Define Command Code */
 #define CS_CONF		0x00
 #define CS_THDH		0x01
@@ -57,6 +60,10 @@
 #define CM36658_CS_SD_MASK	0xFFFE
 
 /* for PS CONF1 command */
+#define CM36658_PS_PERIOD_10MS			0xFF3F
+#define CM36658_PS_PERIOD_MASK			0xFF3F
+#define CM36658_PS_PERIOD_REVERSEMASK	0x00C0
+
 #define CM36658_PS_IT_1T	(0 << 14)
 #define CM36658_PS_IT_2T	(1 << 14)
 #define CM36658_PS_IT_4T	(2 << 14)

@@ -239,6 +239,11 @@ static irqreturn_t bq25898s_irq_handler(int irq, void *data)
 	bq25898s_read_reg(charger->i2c, BQ25898S_CHG_REG_0C, &val);
 	dev_info(charger->dev,
 			"%s: 0x%x\n", __func__, val);
+	if (val & 0x80) {
+		dev_info(charger->dev,
+			"%s: watchdog timer expiration, initialize again\n", __func__);
+		bq25898s_charger_initialize(charger);
+	}
 
 	return IRQ_HANDLED;
 }
@@ -290,6 +295,8 @@ static int bq25898s_chg_get_property(struct power_supply *psy,
 		return -ENODATA;
 	case POWER_SUPPLY_PROP_CHARGE_NOW:
 		break;
+	case POWER_SUPPLY_PROP_CHARGE_OTG_CONTROL:
+		return -ENODATA;
 	case POWER_SUPPLY_PROP_MAX ... POWER_SUPPLY_EXT_PROP_MAX:
 		switch (ext_psp) {
 			case POWER_SUPPLY_EXT_PROP_CHECK_SLAVE_I2C:
@@ -353,6 +360,12 @@ static int bq25898s_chg_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 		charger->input_current = val->intval;
 		bq25898s_set_input_current(charger, charger->input_current);
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_OTG_CONTROL:
+		if (val->intval) {
+			bq25898s_set_charger_state(charger, 0);
+			pr_info("%s: Set OTG so SUB Charger set Off(%d)", __func__, !val->intval);
+		}
 		break;
 	case POWER_SUPPLY_PROP_HEALTH:
 		return -ENODATA;

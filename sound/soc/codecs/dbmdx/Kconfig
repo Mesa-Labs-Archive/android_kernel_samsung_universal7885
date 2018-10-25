@@ -31,8 +31,18 @@ config SND_SOC_DBMDX_SND_CAPTURE
 		n - Do not register DBMDX SOC as separate sound card
 
 
-
-
-
+# Noise Suppression Algorithm Support (Only DBMD8 chip)
+# .
+# y - Enable Noise Suppression Algorithm Support
+# n - Do not enable Noise Suppression Algorithm Support
+config SND_SOC_DBMDX_VA_NS_SUPPORT
+	bool "Noise Suppression Algorithm Support (Only DBMD8 chip)"
+	depends on SND_SOC_DBMDX
+	default n
+	help
+		Noise Suppression Algorithm Support (Only DBMD8 chip).
+		.
+		y - Enable Noise Suppression Algorithm Support
+		n - Do not enable Noise Suppression Algorithm Support
 
 

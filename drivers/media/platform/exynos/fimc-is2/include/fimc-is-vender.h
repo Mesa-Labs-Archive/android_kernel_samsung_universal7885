@@ -63,6 +63,7 @@ struct cam_hw_param {
 struct cam_hw_param_collector {
 	struct cam_hw_param rear_hwparam;
 	struct cam_hw_param rear2_hwparam;
+	struct cam_hw_param rear3_hwparam;
 	struct cam_hw_param front_hwparam;
 	struct cam_hw_param front2_hwparam;
 	struct cam_hw_param iris_hwparam;

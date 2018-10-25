@@ -62,29 +62,7 @@ struct ist40xx_data *tui_tsp_info;
 extern int tui_force_close(uint32_t arg);
 #endif
 
-#ifdef TCLM_CONCEPT
-    /* TCLM_CONCEPT */
-static struct sec_cal_position sec_cal_positions[16] = {
-	{CAL_POS_CMD("NONE", 'N'),},	/* 0, NONe */
-	{CAL_POS_CMD("INIT", 'I'),},	/* 1, INIT case, calcount is 00 or FF */
-	{CAL_POS_CMD("FACT", 'F'),},	/* 2, FACTory line, run_force_calibration without value */
-	{CAL_POS_CMD("OUTS", 'O'),},	/* 3, OUTSide of factory */
-	{CAL_POS_CMD("LCIA", 'L'),},	/* 4, LCIA in factory line */
-	{CAL_POS_CMD("CENT", 'C'),},	/* 5, svc CENTer, cal from service center */
-	{CAL_POS_CMD("ABNO", 'A'),},	/* 6, ABNOrmal case */
-	{CAL_POS_CMD("BOOT", 'B'),},	/* 7, BOOT firmup, when firmup in booting time */
-	{CAL_POS_CMD("SPEC", 'S'),},	/* 8, SPECout case */
-	{CAL_POS_CMD("TUNE", 'V'),},	/* 9, TUNE Version up, when afe version is lage than tune version */
-	{CAL_POS_CMD("EVER", 'E'),},	/* 10, EVERytime, always cal in Booting */
-	{CAL_POS_CMD("TEST", 'T'),},	/* 11, TESTmode, firmup case in *#2663# */
-	{CAL_POS_CMD("UNDE", 'U'),},	/* 12, UNDEfine, undefined value */
-	{CAL_POS_CMD("UNDE", 'U'),},	/* 13 */
-	{CAL_POS_CMD("UNDE", 'U'),},	/* 14 */
-	{CAL_POS_CMD("UNDE", 'U'),}	/* 15 */
-};
-#endif
-
-int ist40xx_log_level = IST40XX_LOG_LEVEL;
+int ist40xx_log_level = DEV_NOTI;
 void tsp_printk(int level, const char *fmt, ...)
 {
 	struct va_format vaf;
@@ -182,12 +160,6 @@ static void ist40xx_request_reset(struct ist40xx_data *data)
 	}
 }
 
-#define NOISE_MODE_TA       (0)
-#define NOISE_MODE_CALL     (1)
-#define NOISE_MODE_COVER    (2)
-#define NOISE_MODE_GLOVE    (3)
-#define NOISE_MODE_EDGE     (4)
-#define NOISE_MODE_POWER    (8)
 void ist40xx_start(struct ist40xx_data *data)
 {
 	if (data->initialized) {
@@ -377,13 +349,64 @@ err_get_info:
 #define SPECIAL_SUCCESS_MASK        (0x0F)
 void ist40xx_special_cmd(struct ist40xx_data *data, int cmd)
 {
+#ifdef USE_SPONGE_LIB
+	gesture_msg g_msg;
+#endif
 	if (cmd == 0) {
+#ifdef USE_SPONGE_LIB
+		ist40xx_burst_read(data->client, IST40XX_HIB_GESTURE_MSG, g_msg.full,
+						sizeof(g_msg.full) / IST40XX_DATA_LEN, true);
+				
+		if (g_msg.b.eid == EID_GESTURE) {
+			switch (g_msg.b.gtype) {
+			case GESTURE_SWIPE:
+				if (g_msg.b.gid == GESTURE_SWIPE_UP) {
+					data->scrub_id = SPONGE_EVENT_TYPE_SPAY;
+					data->scrub_x = 0;
+					data->scrub_y = 0;
+					data->all_spay_count++;
+
+					input_info(true, &data->client->dev, "Swipe Up Trigger~\n");
+
+					input_report_key(data->input_dev, KEY_BLACK_UI_GESTURE, true);
+					input_sync(data->input_dev);
+					input_report_key(data->input_dev, KEY_BLACK_UI_GESTURE, false);
+					input_sync(data->input_dev);
+				}
+				break;
+			case GESTURE_TAP:
+				if (g_msg.b.gid == GESTURE_TAP_DOUBLE) {
+					data->scrub_id = SPONGE_EVENT_TYPE_AOD_DOUBLETAB;
+					data->scrub_x = (g_msg.b.gdata[0] << 4) |
+									(g_msg.b.gdata[2] & 0xF);
+					data->scrub_y = (g_msg.b.gdata[1] << 4) |
+									(g_msg.b.gdata[2] & 0xF);
+					data->all_aod_tsp_count++;
+
+					input_info(true, &data->client->dev, "Double Tap Trigger~ (%d, %d)\n",
+										data->scrub_x, data->scrub_y);
+
+					input_report_key(data->input_dev, KEY_BLACK_UI_GESTURE, true);
+					input_sync(data->input_dev);
+					input_report_key(data->input_dev, KEY_BLACK_UI_GESTURE, false);
+					input_sync(data->input_dev);
+				}
+				break;
+			case GESTURE_PRESSURE:
+			default:
+				input_err(true, &data->client->dev, "Not support gesture type\n");
+				break;
+			}
+		} else {
+			input_err(true, &data->client->dev, "Not Gesture Msg\n");
+		}
+#else
 		ist40xx_burst_read(data->client, IST40XX_HIB_GESTURE_REG,
 				   data->g_reg.full,
 				   sizeof(data->g_reg.full) / IST40XX_DATA_LEN,
 				   true);
 
-		input_dbg(true, &data->client->dev,
+		tsp_debug(
 			  "0x%02X, 0x%02X, %d, %d, %d, %d, %d, %d, 0x%02X\n",
 			  data->g_reg.b.ctrl, data->g_reg.b.evt,
 			  data->g_reg.b.w, data->g_reg.b.h, data->g_reg.b.x,
@@ -424,11 +447,28 @@ void ist40xx_special_cmd(struct ist40xx_data *data, int cmd)
 					 0);
 			input_sync(data->input_dev);
 		}
-
+#endif
 		return;
 	}
 
 	input_err(true, &data->client->dev, "Not support gesture cmd: 0x%02X\n", cmd);
+}
+
+void location_detect (struct ist40xx_data *data, char *loc, int x, int y)
+{
+	if (x < data->dt_data->area_edge)
+		strncat(loc, "E.", 2);
+	else if (x < (data->tsp_info.width - data->dt_data->area_edge))
+		strncat(loc, "C.", 2);
+	else
+		strncat(loc, "e.", 2);
+
+	if (y < data->dt_data->area_indicator)
+		strncat(loc, "S", 1);
+	else if (y < (data->tsp_info.height - data->dt_data->area_navigation))
+		strncat(loc, "C", 1);
+	else
+		strncat(loc, "N", 1);
 }
 
 #define PRESS_MSG_MASK          (0x01)
@@ -442,6 +482,7 @@ void print_tsp_event(struct ist40xx_data *data, int id, finger_info *finger)
 	int ret = 0;
 	u32 status = 0;
 	u8 mode = TOUCH_STATUS_NORMAL_MODE;
+	char location[4] = { 0 };
 
 	press = PRESSED_FINGER(data->t_status, id);
 
@@ -462,16 +503,20 @@ void print_tsp_event(struct ist40xx_data *data, int id, finger_info *finger)
 				}
 			}
 			data->touch_pressed_num++;
+			/*for getting coordinate of pressed point*/
+			data->p_x[id] = data->r_x[id] = finger->bit_field.x;
+			data->p_y[id] = data->r_y[id] = finger->bit_field.y;
+			location_detect(data, location, data->p_x[id], data->p_y[id]);
 #if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
-			input_info(true, &data->client->dev, "%s%d (%d, %d) (p:%d, ma:%d, mi:%d) (%d)\n",
-				 TOUCH_DOWN_MESSAGE, id + 1,
+			input_info(true, &data->client->dev, "%s%d.%d (%d, %d) loc:%s (p:%d, ma:%d, mi:%d) (%d)\n",
+				 TOUCH_DOWN_MESSAGE, id, (data->input_dev->mt->trkid - 1) & TRKID_MAX,
 				 finger->bit_field.x, finger->bit_field.y,
-				 PARSE_PALM_STATUS(data->t_status),
+				 location, PARSE_PALM_STATUS(data->t_status),
 				 finger->bit_field.ma, finger->bit_field.mi, mode);
 #else
-			input_info(true, &data->client->dev, "%s%d (p:%d, ma:%d, mi:%d) (%d)\n",
-				 TOUCH_DOWN_MESSAGE, id + 1,
-				 PARSE_PALM_STATUS(data->t_status),
+			input_info(true, &data->client->dev, "%s%d.%d loc:%s (p:%d, ma:%d, mi:%d) (%d)\n",
+				 TOUCH_DOWN_MESSAGE, id, (data->input_dev->mt->trkid - 1) & TRKID_MAX,
+				 location, PARSE_PALM_STATUS(data->t_status),
 				 finger->bit_field.ma, finger->bit_field.mi, mode);
 #endif
 			data->tsp_touched[id] = true;
@@ -479,17 +524,20 @@ void print_tsp_event(struct ist40xx_data *data, int id, finger_info *finger)
 			data->all_finger_count++;
 		} else {
 			/* touch move */
+			/*for getting coordinate of the last point of move event*/
+			data->r_x[id] = finger->bit_field.x;
+			data->r_y[id] = finger->bit_field.y;
 #if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
-			input_dbg(true, &data->client->dev,
+			tsp_debug(
 				  "%s%d (%d, %d) (p:%d, ma:%d, mi:%d)\n",
-				  TOUCH_MOVE_MESSAGE, id + 1,
+				  TOUCH_MOVE_MESSAGE, id,
 				  finger->bit_field.x, finger->bit_field.y,
 				  PARSE_PALM_STATUS(data->t_status),
 				  finger->bit_field.ma, finger->bit_field.mi);
 #else
-			input_dbg(true, &data->client->dev,
+			tsp_debug(
 				  "%s%d (p:%d, ma:%d, mi:%d)\n",
-				  TOUCH_MOVE_MESSAGE, id + 1,
+				  TOUCH_MOVE_MESSAGE, id,
 				  PARSE_PALM_STATUS(data->t_status),
 				  finger->bit_field.ma, finger->bit_field.mi);
 #endif
@@ -498,18 +546,21 @@ void print_tsp_event(struct ist40xx_data *data, int id, finger_info *finger)
 		if (data->tsp_touched[id] == true) {
 			/* touch up */
 			data->touch_pressed_num--;
+			location_detect(data, location, data->r_x[id], data->r_y[id]);
 #ifdef TCLM_CONCEPT
-			input_info(true, &data->client->dev, "%s%d mc:%d (0x%02x) (test_result data :%x) "
-				 "(C%02XT%04X.%4s%s)\n", TOUCH_UP_MESSAGE,
-				 id + 1, data->move_count[id],
-				 data->fw.cur.fw_ver, data->test_result.data[0],
-				 data->cal_count, data->tune_fix_ver,
-				 data->tclm_string[data->cal_position].f_name,
-				 (data->dt_data->tclm_level ==
-				  TCLM_LEVEL_LOCKDOWN) ? ".L" : " ");
+			input_info(true, &data->client->dev, "%s%d loc:%s dX,dY:%d,%d mc:%d (0x%02x) "
+				"(test_result data :%x) (C%02XT%04X.%4s%s)\n",
+				TOUCH_UP_MESSAGE, id, location,
+				(data->r_x[id] - data->p_x[id]), (data->r_y[id] - data->p_y[id]),
+				data->move_count[id], data->fw.cur.fw_ver, data->test_result.data[0],
+				data->tdata->nvdata.cal_count, data->tdata->nvdata.tune_fix_ver,
+				data->tdata->tclm_string[data->tdata->nvdata.cal_position].f_name,
+				(data->tdata->tclm_level == TCLM_LEVEL_LOCKDOWN) ? ".L" : " ");
 #else
-			input_info(true, &data->client->dev, "%s%d mc:%d (0x%02x)\n", TOUCH_UP_MESSAGE,
-				 id + 1, data->move_count[id], data->fw.cur.fw_ver);
+			input_info(true, &data->client->dev, "%s%d loc:%s dX,dY:%d,%d mc:%d (0x%02x)\n",
+			TOUCH_UP_MESSAGE, id, location,
+			(data->r_x[id] - data->p_x[id]), (data->r_y[id] - data->p_y[id]),
+			data->move_count[id], data->fw.cur.fw_ver);
 #endif
 			data->tsp_touched[id] = false;
 			do_gettimeofday(&data->time_released[id]);
@@ -541,13 +592,13 @@ void print_tkey_event(struct ist40xx_data *data, int id)
 	if (press) {
 		if (data->tkey_pressed[id] == false) {
 			/* tkey down */
-			input_info(true, &data->client->dev, "k %s%d\n", TOUCH_DOWN_MESSAGE, id + 1);
+			input_info(true, &data->client->dev, "k %s%d\n", TOUCH_DOWN_MESSAGE, id);
 			data->tkey_pressed[id] = true;
 		}
 	} else {
 		if (data->tkey_pressed[id] == true) {
 			/* tkey up */
-			input_info(true, &data->client->dev, "k %s%d\n", TOUCH_UP_MESSAGE, id + 1);
+			input_info(true, &data->client->dev, "k %s%d\n", TOUCH_UP_MESSAGE, id);
 			data->tkey_pressed[id] = false;
 		}
 	}
@@ -561,7 +612,7 @@ static void release_finger(struct ist40xx_data *data, int id)
 	input_sync(data->input_dev);
 
 	input_info(true, &data->client->dev, "forced touch release: %d\n",
-		   id + 1);
+		   id);
 
 	data->tsp_touched[id] = false;
 	if (data->debugging_mode && (id < 2))
@@ -583,7 +634,7 @@ static void release_key(struct ist40xx_data *data, int id)
 	input_report_key(data->input_dev, ist40xx_key_code[id], false);
 
 	input_info(true, &data->client->dev, "forced key release: %d\n",
-		   id + 1);
+		   id);
 
 	data->tkey_pressed[id] = false;
 
@@ -707,6 +758,7 @@ static void report_input_data(struct ist40xx_data *data, int finger_counts,
 	input_sync(data->input_dev);
 }
 
+#if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 void recording_data(struct ist40xx_data *data, bool idle)
 {
 	int ret;
@@ -781,6 +833,7 @@ state_idle:
 							0xFFFF));
 	data->ignore_delay = false;
 }
+#endif
 
 /*
  * CMD : CMD_GET_COORD
@@ -792,19 +845,22 @@ state_idle:
  */
 static irqreturn_t ist40xx_irq_thread(int irq, void *ptr)
 {
-	int i, ret;
+	int i, ret = 0;
 	int key_cnt, finger_cnt, read_cnt;
 	struct ist40xx_data *data = (struct ist40xx_data *)ptr;
 	int offset = 1;
 	u32 t_status;
 	u32 msg[IST40XX_MAX_FINGERS * 2 + offset];
 	u32 *buf32;
-	u32 debugBuf32[IST40XX_MAX_DEBUGINFO / IST40XX_DATA_LEN];
 	u32 ms;
+#if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
+	u32 debugBuf32[IST40XX_MAX_DEBUGINFO / IST40XX_DATA_LEN];
 	u32 touch[2];
+#endif
 	bool idle = false;
 
 	data->irq_working = true;
+	memset(msg, 0, sizeof(msg));
 
 	if (unlikely(!data->irq_enabled))
 		goto irq_ignore;
@@ -814,6 +870,7 @@ static irqreturn_t ist40xx_irq_thread(int irq, void *ptr)
 
 	ms = get_milli_second(data);
 
+#if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 	if (data->debugging_mode) {
 		ist40xx_burst_read(data->client,
 				   IST40XX_DA_ADDR(data->debugging_addr),
@@ -821,6 +878,7 @@ static irqreturn_t ist40xx_irq_thread(int irq, void *ptr)
 				   data->debugging_size / IST40XX_DATA_LEN,
 				   true);
 	}
+#endif
 
 	if (data->intr_debug1_size > 0) {
 		buf32 =
@@ -832,7 +890,7 @@ static irqreturn_t ist40xx_irq_thread(int irq, void *ptr)
 			goto irq_err;
 		}
 
-		input_dbg(true, &data->client->dev,
+		tsp_debug(
 			  "Intr_debug1 (addr: 0x%08x)\n",
 			  data->intr_debug1_addr);
 		ist40xx_burst_read(data->client,
@@ -840,8 +898,7 @@ static irqreturn_t ist40xx_irq_thread(int irq, void *ptr)
 				   buf32, data->intr_debug1_size, true);
 
 		for (i = 0; i < data->intr_debug1_size; i++)
-			input_dbg(true, &data->client->dev, " %08x\n",
-				  buf32[i]);
+			tsp_debug(" %08x\n", buf32[i]);
 		kfree(buf32);
 	}
 
@@ -855,20 +912,16 @@ static irqreturn_t ist40xx_irq_thread(int irq, void *ptr)
 			goto irq_err;
 		}
 
-		input_dbg(true, &data->client->dev,
-			  "Intr_debug2 (addr: 0x%08x)\n",
+		tsp_debug("Intr_debug2 (addr: 0x%08x)\n",
 			  data->intr_debug2_addr);
 		ist40xx_burst_read(data->client,
 				   IST40XX_DA_ADDR(data->intr_debug2_addr),
 				   buf32, data->intr_debug2_size, true);
 
 		for (i = 0; i < data->intr_debug2_size; i++)
-			input_dbg(true, &data->client->dev, " %08x\n",
-				  buf32[i]);
+			tsp_debug(" %08x\n", buf32[i]);
 		kfree(buf32);
 	}
-
-	memset(msg, 0, sizeof(msg));
 
 	ret = ist40xx_read_reg(data->client, IST40XX_HIB_INTR_MSG, msg);
 	if (unlikely(ret))
@@ -878,7 +931,7 @@ static irqreturn_t ist40xx_irq_thread(int irq, void *ptr)
 
 	/* TSP End Initial */
 	if (unlikely(*msg == IST40XX_INITIAL_VALUE)) {
-		input_dbg(false, &data->client->dev, "IC Ready~\n");
+		tsp_debug("IC Ready~\n");
 		goto irq_event;
 	}
 
@@ -969,8 +1022,7 @@ static irqreturn_t ist40xx_irq_thread(int irq, void *ptr)
 
 	ret = PARSE_SPECIAL_MESSAGE(*msg);
 	if (unlikely(ret >= 0)) {
-		input_dbg(true, &data->client->dev,
-			  "special cmd: %d (0x%08X)\n", ret, *msg);
+		tsp_debug("special cmd: %d (0x%08X)\n", ret, *msg);
 		mutex_lock(&data->aod_lock);
 		ist40xx_special_cmd(data, ret);
 		mutex_unlock(&data->aod_lock);
@@ -1042,16 +1094,14 @@ static irqreturn_t ist40xx_irq_thread(int irq, void *ptr)
 				  __LINE__);
 			goto irq_err;
 		}
-		input_dbg(true, &data->client->dev,
-			  "Intr_debug3 (addr: 0x%08x)\n",
+		tsp_debug("Intr_debug3 (addr: 0x%08x)\n",
 			  data->intr_debug3_addr);
 		ist40xx_burst_read(data->client,
 				   IST40XX_DA_ADDR(data->intr_debug3_addr),
 				   buf32, data->intr_debug3_size, true);
 
 		for (i = 0; i < data->intr_debug3_size; i++)
-			input_dbg(true, &data->client->dev, " %08x\n",
-				  buf32[i]);
+			tsp_debug(" %08x\n", buf32[i]);
 		kfree(buf32);
 	}
 
@@ -1063,6 +1113,7 @@ irq_err:
 	ist40xx_request_reset(data);
 	goto irq_event;
 irq_end:
+#if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 	if (data->rec_mode)
 		recording_data(data, idle);
 	if (data->debugging_mode) {
@@ -1078,6 +1129,7 @@ irq_end:
 				  data->debugging_size / IST40XX_DATA_LEN);
 		data->debugging_scancnt = debugBuf32[0];
 	}
+#endif
 irq_event:
 irq_ignore:
 	data->irq_working = false;
@@ -1102,18 +1154,18 @@ static int ist40xx_pinctrl_configure(struct ist40xx_data *data, bool active)
 	struct pinctrl_state *set_state;
 
 	int retval;
-	input_info(true, &data->client->dev, "%s: %s\n", __func__, active ? "ACTIVE" : "SUSPEND");
+	tsp_info("%s: %s\n", __func__, active ? "ACTIVE" : "SUSPEND");
 
 	set_state = pinctrl_lookup_state(data->pinctrl,
 				 active ? "on_state" : "off_state");
 	if (IS_ERR(set_state)) {
-		input_err(true, &data->client->dev, "%s: cannot get active state\n", __func__);
+		tsp_err("%s: cannot get active state\n", __func__);
 		return -EINVAL;
 	}
 
 	retval = pinctrl_select_state(data->pinctrl, set_state);
 	if (retval) {
-		input_err(true, &data->client->dev, "%s: cannot set pinctrl %s state\n",
+		tsp_err("%s: cannot set pinctrl %s state\n",
 			__func__, active ? "active" : "suspend");
 		return -EINVAL;
 	}
@@ -1125,6 +1177,23 @@ static int ist40xx_suspend(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct ist40xx_data *data = i2c_get_clientdata(client);
+#ifdef USE_SPONGE_LIB
+	struct timeval utc_time;
+#endif
+
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+	if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
+		tsp_err("%s TUI cancel event call!\n", __func__);
+		msleep(100);
+		tui_force_close(1);
+		msleep(200);
+		if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
+			tsp_err("%s TUI flag force clear!\n", __func__);
+			trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|TRUSTEDUI_MODE_INPUT_SECURED);
+			trustedui_set_mode(TRUSTEDUI_MODE_OFF);
+		}
+	}
+#endif
 
 	if (data->debugging_mode)
 		return 0;
@@ -1139,13 +1208,26 @@ static int ist40xx_suspend(struct device *dev)
 	cancel_delayed_work_sync(&data->work_debug_algorithm);
 	mutex_lock(&data->lock);
 	if (data->spay || data->aod) {
+		mutex_lock(&data->aod_lock);
+		ist40xx_disable_irq(data);
+#ifdef USE_SPONGE_LIB
+		do_gettimeofday(&utc_time);
+		input_info(true, &data->client->dev, "Write UTC to Sponge = %X\n",
+			(int)utc_time.tv_sec);
+		ist40xx_write_sponge_reg(data, IST40XX_SPONGE_UTC,
+						(u16 *)&utc_time.tv_sec, 2);
+		ist40xx_write_cmd(data, IST40XX_HIB_CMD,
+						(eHCOM_NOTIRY_G_REGMAP << 16) | IST40XX_ENABLE);
+#endif
 		ist40xx_cmd_gesture(data, IST40XX_ENABLE);
 		data->status.noise_mode = false;
 
 		if (device_may_wakeup(&data->client->dev))
 			enable_irq_wake(data->client->irq);
 
+		ist40xx_enable_irq(data);
 		data->status.sys_mode = STATE_LPM;
+		mutex_unlock(&data->aod_lock);
 	} else {
 		ist40xx_power_off(data);
 		ist40xx_disable_irq(data);
@@ -1168,6 +1250,20 @@ static int ist40xx_resume(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct ist40xx_data *data = i2c_get_clientdata(client);
 
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+	if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
+		tsp_err("%s TUI cancel event call!\n", __func__);
+		msleep(100);
+		tui_force_close(1);
+		msleep(200);
+		if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
+			tsp_err("%s TUI flag force clear!\n", __func__);
+			trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|TRUSTEDUI_MODE_INPUT_SECURED);
+			trustedui_set_mode(TRUSTEDUI_MODE_OFF);
+		}
+	}
+#endif
+
 	if (!data->initialized) {
 		input_err(true, &data->client->dev,
 			  "IC initialize is not complete\n");
@@ -1181,6 +1277,7 @@ static int ist40xx_resume(struct device *dev)
 
 	mutex_lock(&data->lock);
 	if (data->status.sys_mode == STATE_LPM) {
+		mutex_lock(&data->aod_lock);
 		ist40xx_cmd_gesture(data, IST40XX_DISABLE);
 		mod_timer(&data->event_timer,
 			  get_jiffies_64() + EVENT_TIMER_INTERVAL * 2);
@@ -1190,6 +1287,7 @@ static int ist40xx_resume(struct device *dev)
 			disable_irq_wake(data->client->irq);
 
 		data->status.sys_mode = STATE_POWER_ON;
+		mutex_unlock(&data->aod_lock);
 	} else {
 		if (data->pinctrl) {
 			int ret = ist40xx_pinctrl_configure(data, true);
@@ -1216,7 +1314,30 @@ static void ist40xx_ts_close(struct input_dev *dev)
 {
 	struct ist40xx_data *data = input_get_drvdata(dev);
 
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+	if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
+		tsp_err("%s TUI cancel event call!\n", __func__);
+		msleep(100);
+		tui_force_close(1);
+		msleep(200);
+		if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
+			tsp_err("%s TUI flag force clear!\n", __func__);
+			trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|TRUSTEDUI_MODE_INPUT_SECURED);
+			trustedui_set_mode(TRUSTEDUI_MODE_OFF);
+		}
+	}
+#endif
+
+	if (!data->info_work_done) {
+		input_err(true, &data->client->dev, "%s not finished info work\n", __func__);
+		return;
+	}
+
 	input_info(true, &data->client->dev, "%s\n", __func__);
+
+#ifdef TCLM_CONCEPT
+	sec_tclm_debug_info(data->tdata);
+#endif
 
 	ist40xx_suspend(&data->client->dev);
 }
@@ -1224,6 +1345,25 @@ static void ist40xx_ts_close(struct input_dev *dev)
 static int ist40xx_ts_open(struct input_dev *dev)
 {
 	struct ist40xx_data *data = input_get_drvdata(dev);
+
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+	if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
+		tsp_err("%s TUI cancel event call!\n", __func__);
+		msleep(100);
+		tui_force_close(1);
+		msleep(200);
+		if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
+			tsp_err("%s TUI flag force clear!\n", __func__);
+			trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|TRUSTEDUI_MODE_INPUT_SECURED);
+			trustedui_set_mode(TRUSTEDUI_MODE_OFF);
+		}
+	}
+#endif
+
+	if (!data->info_work_done) {
+		input_err(true, &data->client->dev, "%s not finished info work\n", __func__);
+		return 0;
+	}
 
 	input_info(true, &data->client->dev, "%s\n", __func__);
 
@@ -1359,6 +1499,46 @@ void ist40xx_set_glove_mode(int mode)
 
 EXPORT_SYMBOL(ist40xx_set_glove_mode);
 
+void ist40xx_set_sensitivity_mode(int mode)
+{
+	struct ist40xx_data *data = ts_data;
+
+	if (unlikely(mode == ((data->noise_mode >> NOISE_MODE_SENSITIVITY) & 1)))
+		return;
+
+	input_info(true, &data->client->dev, "%s(), mode = %d\n", __func__, mode);
+
+	if (mode)
+		data->noise_mode |= (1 << NOISE_MODE_SENSITIVITY);
+	else
+		data->noise_mode &= ~(1 << NOISE_MODE_SENSITIVITY);
+
+	if (data->initialized && (data->status.sys_mode != STATE_POWER_OFF))
+		ist40xx_write_cmd(data, IST40XX_HIB_CMD,
+			((eHCOM_SET_MODE_SPECIAL << 16) | (data->noise_mode & 0xFFFF)));
+}
+EXPORT_SYMBOL(ist40xx_set_sensitivity_mode);
+
+void ist40xx_set_touchable_mode(int mode)
+{
+	struct ist40xx_data *data = ts_data;
+
+	if (unlikely(mode == ((data->noise_mode >> NOISE_MODE_TOUCHABLE) & 1)))
+		return;
+
+	input_info(true, &data->client->dev, "%s(), mode = %d\n", __func__, mode);
+
+	if (mode)
+		data->noise_mode |= (1 << NOISE_MODE_TOUCHABLE);
+	else
+		data->noise_mode &= ~(1 << NOISE_MODE_TOUCHABLE);
+
+	if (data->initialized && (data->status.sys_mode != STATE_POWER_OFF))
+		ist40xx_write_cmd(data, IST40XX_HIB_CMD,
+			((eHCOM_SET_MODE_SPECIAL << 16) | (data->noise_mode & 0xFFFF)));
+}
+EXPORT_SYMBOL(ist40xx_set_touchable_mode);
+
 #ifdef USE_TSP_TA_CALLBACKS
 void charger_enable(struct tsp_callbacks *cb, int enable)
 {
@@ -1474,11 +1654,9 @@ static void reset_work_func(struct work_struct *work)
 
 	input_info(true, &data->client->dev, "Request reset function\n");
 
-	if (likely
-	    ((data->initialized == 1)
-	     && (data->status.sys_mode != STATE_POWER_OFF)
-	     && (data->status.update != 1) && (data->status.calib != 1
-	     && (data->status.calib != 2)) && (data->status.miscalib != 1))) {
+	if (likely((data->initialized == 1) && (data->status.sys_mode != STATE_POWER_OFF) &&
+				(data->status.update != 1) && ((data->status.calib != 1) &&
+				(data->status.calib != 2)) && (data->status.miscalib != 1))) {
 		mutex_lock(&data->lock);
 		ist40xx_disable_irq(data);
 		ist40xx_reset(data, false);
@@ -1666,6 +1844,7 @@ restart_timer:
 static int ist40xx_parse_dt(struct device *dev, struct ist40xx_data *data)
 {
 	struct device_node *np = dev->of_node;
+	u32 px_zone[3];
 
 	data->dt_data->irq_gpio = of_get_named_gpio(np, "imagis,irq-gpio", 0);
 
@@ -1675,6 +1854,7 @@ static int ist40xx_parse_dt(struct device *dev, struct ist40xx_data *data)
 		data->dt_data->power_gpio =
 		    of_get_named_gpio(np, "imagis,power-gpio", 0);
 	} else {
+		data->dt_data->power_gpio = -1;
 		if (of_property_read_string(np, "imagis,regulator_avdd",
 					    &data->dt_data->regulator_avdd)) {
 			input_err(true, dev,
@@ -1725,26 +1905,47 @@ static int ist40xx_parse_dt(struct device *dev, struct ist40xx_data *data)
 		input_info(true, dev, "%s() octa-hw: %d\n", __func__,
 			   data->dt_data->octa_hw);
 
-#ifdef TCLM_CONCEPT
-	if (of_property_read_u32(np, "imagis,tclm_level",
-				 &data->dt_data->tclm_level) >= 0)
-		input_info(true, dev, "%s() tclm_level: %d\n", __func__,
-			   data->dt_data->tclm_level);
+	if (of_property_read_u32_array(np, "imagis,area-size", px_zone, 3)) {
+		tsp_err("%s: Failed to get zone's size\n", __func__);
+		data->dt_data->area_indicator = 63;
+		data->dt_data->area_navigation = 126;
+		data->dt_data->area_edge = 60;
+	} else {
+		data->dt_data->area_indicator = px_zone[0];
+		data->dt_data->area_navigation = px_zone[1];
+		data->dt_data->area_edge = px_zone[2];
+	}
 
-	if (of_property_read_u32
-	    (np, "imagis,afe_base", &data->dt_data->afe_base) >= 0)
-		input_info(true, dev, "%s() afe_base: %x\n", __func__,
-			   data->dt_data->afe_base);
-#endif
+	if (of_property_read_u32(np, "imagis,factory_item_version", &data->dt_data->item_version) < 0)
+		data->dt_data->item_version = 0;
 
 	input_info(true, dev, "%s() irq:%d, tsp_ldo: %s\n", __func__,
 		   data->dt_data->irq_gpio, data->dt_data->regulator_avdd);
 
-	input_info(true, dev, "%s() power source by gpio:%d, power_gpio: %s\n",
+	input_info(true, dev, "%s() power source by gpio:%d, power_gpio: %d\n",
 		   __func__, data->dt_data->is_power_by_gpio,
 		   data->dt_data->power_gpio);
 
 	return 0;
+}
+
+void sec_tclm_parse_dt(struct i2c_client *client, struct sec_tclm_data *tdata)
+{
+	struct device *dev = &client->dev;
+	struct device_node *np = dev->of_node;
+
+	if (of_property_read_u32(np, "imagis,tclm_level", &tdata->tclm_level) < 0) {
+		tdata->tclm_level = 0;
+		input_err(true, dev, "%s: Failed to get tclm_level property\n", __func__);
+	}
+
+	if (of_property_read_u32(np, "imagis,afe_base", &tdata->afe_base) < 0) {
+		tdata->afe_base = 0;
+		input_err(true, dev, "%s: Failed to get afe_base property\n", __func__);
+	}
+
+	input_err(true, &client->dev, "%s: tclm_level %d, afe_base %04X\n", __func__,
+				tdata->tclm_level, tdata->afe_base);
 }
 
 static void ist40xx_request_gpio(struct i2c_client *client,
@@ -1805,7 +2006,7 @@ static void ist40xx_free_gpio(struct ist40xx_data *data)
 #endif
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
-void trustedui_mode_on(void)
+void trustedui_mode_ist_on(void)
 {
 	tsp_info("%s, release all finger..", __func__);
 	clear_input_data(tui_tsp_info);
@@ -1821,8 +2022,9 @@ void trustedui_mode_on(void)
 	cancel_delayed_work_sync(&tui_tsp_info->work_debug_algorithm);
 	tui_tsp_info->status.noise_mode = false;
 }
+EXPORT_SYMBOL(trustedui_mode_ist_on);
 
-void trustedui_mode_off(void)
+void trustedui_mode_ist_off(void)
 {
 	tsp_info("%s ", __func__);
 
@@ -1830,20 +2032,20 @@ void trustedui_mode_off(void)
 
 	mod_timer(&tui_tsp_info->event_timer, get_jiffies_64() + (HZ * tui_tsp_info->timer_period_ms / 1000));	//EVENT_TIMER_INTERVAL
 }
+EXPORT_SYMBOL(trustedui_mode_ist_off);
 #endif
-#ifdef TCLM_CONCEPT
-static void ist40xx_tclm_initialize(struct work_struct *work)
+
+static void ist40xx_run_rawdata(struct ist40xx_data *data)
 {
-	struct ist40xx_data *data = container_of(work, struct ist40xx_data,
-						 work_tclm_initialize.work);
-	int ret;
-	input_info(true, &data->client->dev, "%s start \n", __func__);
-	ret = ist40xx_tclm_get_nvm_all(data, false);
-	if (unlikely(!ret))
-		input_info(true, &data->client->dev,
-			   "%s TCLM_CONCEPT get_nvm_all failed \n", __func__);
+	data->tsp_dump_lock = 1;
+	input_raw_data_clear();
+	input_raw_info(true, &data->client->dev, "%s: start ##\n", __func__);
+	ist40xx_display_dump_log(data);
+	/*msleep(100);*/
+	input_raw_info(true, &data->client->dev, "%s: done ##\n", __func__);
+	data->tsp_dump_lock = 0;
 }
-#endif
+
 
 #if defined(CONFIG_TOUCHSCREEN_DUMP_MODE)
 #include <linux/sec_debug.h>
@@ -1866,19 +2068,19 @@ static void ist40xx_check_rawdata(struct work_struct *work)
 		return;
 	}
 
-	data->tsp_dump_lock = 1;
-	input_info(true, &data->client->dev, "%s: start ##\n", __func__);
-	ist40xx_display_dump_log(data);
-	msleep(100);
-
-	input_info(true, &data->client->dev, "%s: done ##\n", __func__);
-	data->tsp_dump_lock = 0;
-
+	ist40xx_run_rawdata(data);
 }
 
 static void dump_tsp_log(void)
 {
 	tsp_info("%s: start\n", __func__);
+
+#ifdef CONFIG_BATTERY_SAMSUNG
+	if (lpcharge == 1) {
+		tsp_info("%s: ignored ## lpm charging Mode!!\n",__func__);
+		return;
+	}
+#endif
 
 	if (p_ghost_check == NULL) {
 		tsp_info("%s: ignored ## tsp probe fail!!\n", __func__);
@@ -1889,6 +2091,27 @@ static void dump_tsp_log(void)
 }
 #endif
 
+static void ist40xx_read_info_work(struct work_struct *work)
+{
+	struct ist40xx_data *data = container_of(work, struct ist40xx_data,
+						 work_read_info.work);
+#ifdef TCLM_CONCEPT
+	u32 buff;
+	int ret;
+
+	ist40xx_read_sec_info(data, IST40XX_NVM_OFFSET_FAC_RESULT, &buff, 1);
+	data->test_result.data[0] = buff & 0xff;
+	ret = sec_tclm_check_cal_case(data->tdata); /*this function will call ist40xx_tclm_data_read*/
+
+	input_info(true, &data->client->dev, "%s: sec_tclm_check_cal_case result %d; test result %X\n",
+				__func__, ret, data->test_result.data[0]);
+#endif
+	input_log_fix();
+	// for rawdata
+	ist40xx_run_rawdata(data);
+	data->info_work_done = true;
+}
+
 static int ist40xx_probe(struct i2c_client *client,
 			 const struct i2c_device_id *id)
 {
@@ -1896,6 +2119,7 @@ static int ist40xx_probe(struct i2c_client *client,
 	int i;
 	// int retry = 3;
 	struct ist40xx_data *data;
+	struct sec_tclm_data *tdata = NULL;
 	struct input_dev *input_dev;
 
 	input_info(true, &client->dev,
@@ -1926,6 +2150,10 @@ static int ist40xx_probe(struct i2c_client *client,
 		ret = ist40xx_parse_dt(&client->dev, data);
 		if (unlikely(ret))
 			goto err_alloc_dev;
+		tdata = kzalloc(sizeof(struct sec_tclm_data), GFP_KERNEL);
+		if (!tdata)
+			goto error_alloc_tdata;
+		sec_tclm_parse_dt(client, tdata);
 	} else {
 		data->dt_data = NULL;
 		input_err(true, &client->dev, "don't exist of_node\n");
@@ -1962,6 +2190,20 @@ static int ist40xx_probe(struct i2c_client *client,
 	data->client = client;
 	data->input_dev = input_dev;
 	i2c_set_clientdata(client, data);
+
+	data->tdata = tdata;
+	if (!data->tdata)
+		goto err_null_data;
+
+#ifdef TCLM_CONCEPT
+	sec_tclm_initialize(data->tdata);
+	data->tdata->client = data->client;
+	data->tdata->tclm_read = ist40xx_tclm_data_read;
+	data->tdata->tclm_write = ist40xx_tclm_data_write;
+	data->tdata->tclm_execute_force_calibration = ist40xx_execute_force_calibration;
+	data->tdata->external_factory = false;
+#endif
+	INIT_DELAYED_WORK(&data->work_read_info, ist40xx_read_info_work);
 
 #ifdef USE_OPEN_CLOSE
 	input_dev->open = ist40xx_ts_open;
@@ -2005,13 +2247,7 @@ static int ist40xx_probe(struct i2c_client *client,
 	data->all_finger_count = 0;
 	data->all_aod_tsp_count = 0;
 	data->all_spay_count = 0;
-#ifdef TCLM_CONCEPT
-	data->root_of_calibration = CALPOSITION_NONE;
-	data->cal_position = 0;
-	data->cal_pos_hist_cnt = 0;
-	data->cal_pos_hist_last3[0] = 0;
-	data->tclm_string = sec_cal_positions;
-#endif
+	data->info_work_done = false;
 #ifdef CONFIG_SEC_FACTORY
 	data->jig_mode = 1;
 #endif
@@ -2021,10 +2257,16 @@ static int ist40xx_probe(struct i2c_client *client,
 	for (i = 0; i < IST40XX_MAX_KEYS; i++)
 		data->tkey_pressed[i] = false;
 #endif
+#ifdef USE_SPONGE_LIB
+	data->lpm_mode = 0;
+	for (i = 0; i < 4; i++)
+		data->rect_data[i] = 0;
+#else
 	data->g_reg.b.w = 0;
 	data->g_reg.b.h = 0;
 	data->g_reg.b.x = 0;
 	data->g_reg.b.y = 0;
+#endif
 
 	/* init irq thread */
 	ret = request_threaded_irq(client->irq, NULL, ist40xx_irq_thread,
@@ -2044,10 +2286,6 @@ static int ist40xx_probe(struct i2c_client *client,
 	trustedui_set_tsp_irq(client->irq);
 	input_info(true, &data->client->dev, "%s[%d] called!\n", __func__,
 		   client->irq);
-#endif
-
-#ifdef TCLM_CONCEPT
-	INIT_DELAYED_WORK(&data->work_tclm_initialize, ist40xx_tclm_initialize);
 #endif
 
 #ifdef IST40XX_INTERNAL_BIN
@@ -2124,10 +2362,9 @@ static int ist40xx_probe(struct i2c_client *client,
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 	tui_tsp_info = data;
 #endif
-#ifdef TCLM_CONCEPT
-	schedule_delayed_work(&data->work_tclm_initialize,
-			      msecs_to_jiffies(5000));
-#endif
+
+	schedule_delayed_work(&data->work_read_info, msecs_to_jiffies(500));
+
 #if defined(CONFIG_TOUCHSCREEN_DUMP_MODE)
 	dump_callbacks.inform_dump = dump_tsp_log;
 	INIT_DELAYED_WORK(&data->ghost_check, ist40xx_check_rawdata);
@@ -2157,16 +2394,20 @@ err_init_drv:
 #if (defined(CONFIG_HAS_EARLYSUSPEND) && !defined(USE_OPEN_CLOSE))
 	unregister_early_suspend(&data->early_suspend);
 #endif
+err_null_data:
 err_alloc_dt:
 err_pinctrl:
+	if (tdata)
+		kfree(tdata);
+	if (data->dt_data) {
+		ist40xx_free_gpio(data);
+	}
+error_alloc_tdata:
 	if (data->dt_data) {
 		input_err(true, &client->dev, "Error, ist40xx mem free\n");
-		ist40xx_free_gpio(data);
 		kfree(data->dt_data);
 	}
-#ifdef CONFIG_OF
 err_alloc_dev:
-#endif
 #ifdef CONFIG_TOUCHSCREEN_DUMP_MODE
 	p_ghost_check = NULL;
 #endif

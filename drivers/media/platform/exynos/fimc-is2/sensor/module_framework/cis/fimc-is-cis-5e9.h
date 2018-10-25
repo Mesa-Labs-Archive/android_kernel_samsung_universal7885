@@ -27,12 +27,7 @@
 
 #define USE_GROUP_PARAM_HOLD	(1)
 
-#if defined(CONFIG_CAMERA_OTPROM_SUPPORT_REAR)
-#define USE_OTP_AWB_CAL_DATA	(1)
-#else
 #define USE_OTP_AWB_CAL_DATA	(0)
-#endif
-
 
 #endif
 

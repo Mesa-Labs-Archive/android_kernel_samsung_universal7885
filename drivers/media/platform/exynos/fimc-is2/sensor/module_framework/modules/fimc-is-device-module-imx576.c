@@ -41,82 +41,98 @@
 #include "fimc-is-device-module-base.h"
 #include "fimc-is-device-module-imx576.h"
 
-// Reference Version : 'IMX576-AAKH5_SAM-Set-26MHz-DPHY_RegisterSetting_ver1.00-6.02_MP0_180622.xlsx'
+// Reference Version : 'IMX576-AAKH5_SAM-Set-26MHz-DPHY_RegisterSetting_ver2.00-9.00_MP_180712.xlsx'
+// Reference Version : 'IMX576-AAKH5_SAM-Set-26MHz-DPHY_RegisterSetting_ver2.00-8.00_MP0_180712.xlsx'
 
 /*
  * [Mode Information]
  *	- Global Setting -
  *
  *	- 2X2 BINNING -
- *	[0] Single Still Preview (4:3)   : 2832x2124@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2099.50
- *	[1] Single Still Preview (16:9)  : 2832x1592@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2099.50
- *	[2] Single Still Preview (18.5:9): 2832x1376@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2099.50
- *	[3] Single Still Preview (1:1)   : 2124x2124@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2099.50
+ *	[0] REG_A: Single Still Preview (4:3)   : 2832x2124@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2054
+ *	[1] REG_B: Single Still Preview (16:9)  : 2832x1592@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2054
+ *	[2] REG_C: Single Still Preview (18.5:9): 2832x1376@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2054
+ *	[3] REG_D: Single Still Preview (1:1)   : 2124x2124@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2054
  *
  *	- QBC_HDR -
- *	[4] Single Still 3HDR (4:3)      : 2832x2124@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2099.50
- *	[5] Single Still 3HDR (16:9)     : 2832x1592@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2099.50
- *	[6] Single Still 3HDR (18.5:9)   : 2832x1376@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2099.50
- *	[7] Single Still 3HDR (1:1)      : 2124x2124@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2099.50
+ *	[4] REG_E: Single Still 3HDR (4:3)      : 2832x2124@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2054
+ *	[5] REG_F: Single Still 3HDR (16:9)     : 2832x1592@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2054
+ *	[6] REG_G: Single Still 3HDR (18.5:9)   : 2832x1376@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2054
+ *	[7] REG_H: Single Still 3HDR (1:1)      : 2124x2124@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2054
  *
- *  - QBC_REMOSAIC -
- *	[8] Single Still Capture (4:3)   : 5664X4248@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2099.50
- *	[9] Single Still Capture (16:9)  : 5664X3184@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2099.50
- *	[10]Single Still Capture (18.5:9): 5664X2752@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2099.50
- *	[11]Single Still Capture (1:1)   : 4248X4248@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2099.50
+ *	- QBC_REMOSAIC -
+ *	[8] REG_I: Single Still Capture (4:3)   : 5664X4248@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2054
+ *	[9] REG_J: Single Still Capture (16:9)  : 5664X3184@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2054
+ *	[10]REG_K: Single Still Capture (18.5:9): 5664X2752@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2054
+ *	[11]REG_L: Single Still Capture (1:1)   : 4248X4248@30,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2054
  *
- *  - Super Slow Motion (SSM) -
- *	[12]Super Slow Motion (16:9)    : 1872x1052@240,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2099.50
- *	[13]Super Slow Motion (16:9)    : 1920x1080@120,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2099.50
- *	[14]Super Slow Motion (16:9)    : 1280x720 @240,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2099.50
+ *	- Super Slow Motion (SSM) -
+ *	[12]REG_M: Super Slow Motion (16:9)     : 1872x1052@240,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2054
+ *	[13]REG_N: Super Slow Motion (16:9)     : 1920x1080@120,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2054
+ *	[14]REG_O: Super Slow Motion (16:9)     : 1280x720 @240,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2054
+ *	[15]REG_U: Super Slow Motion (16:9)     : 1280x720 @120,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2054 
+ *
+ *	- FAST AE -
+ *	[16]REG_R: Single Preview Fast(4:3)     : 2832x2124@117,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2054
+ *	[17]REG_S: Single Preview Fast(4:3)     : 2832x2124@ 60,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2054
+ *	[18]REG_T: Single Preview Fast(16:9)    : 2832x1592@120,  MIPI lane: 4, MIPI data rate(Mbps/lane) Sensor: 2054
  */
 
 static struct fimc_is_sensor_cfg config_imx576[] = {
-	/* 0 : 2832x2124@30fps 2X2BIN */
-	/* 1 : 2832x1592@30fps 2X2BIN */
-	/* 2 : 2832x1376@30fps 2X2BIN */
-	/* 3 : 2124x2124@30fps 2X2BIN */
-	FIMC_IS_SENSOR_CFG_EXT(2832, 2124,  30, 46,  0, CSI_DATA_LANES_4, 2100, 0, 0, 0),
-	FIMC_IS_SENSOR_CFG_EXT(2832, 1592,  30, 46,  1, CSI_DATA_LANES_4, 2100, 0, 0, 0),
-	FIMC_IS_SENSOR_CFG_EXT(2832, 1376,  30, 46,  2, CSI_DATA_LANES_4, 2100, 0, 0, 0),
-	FIMC_IS_SENSOR_CFG_EXT(2124, 2124,  30, 46,  3, CSI_DATA_LANES_4, 2100, 0, 0, 0),
+	/* 0 : REG_A: 2832x2124@30fps 2X2BIN */
+	/* 1 : REG_B: 2832x1592@30fps 2X2BIN */
+	/* 2 : REG_C: 2832x1376@30fps 2X2BIN */
+	/* 3 : REG_D: 2124x2124@30fps 2X2BIN */
+	FIMC_IS_SENSOR_CFG_EXT(2832, 2124,  30, 46,  0, CSI_DATA_LANES_4, 2054, 0, 0, 0),
+	FIMC_IS_SENSOR_CFG_EXT(2832, 1592,  30, 46,  1, CSI_DATA_LANES_4, 2054, 0, 0, 0),
+	FIMC_IS_SENSOR_CFG_EXT(2832, 1376,  30, 46,  2, CSI_DATA_LANES_4, 2054, 0, 0, 0),
+	FIMC_IS_SENSOR_CFG_EXT(2124, 2124,  30, 46,  3, CSI_DATA_LANES_4, 2054, 0, 0, 0),
 
-	/* 4 : 2832x2124@30fps QBC_HDR */
-	/* 5 : 2832x1592@30fps QBC_HDR */
-	/* 6 : 2832x1376@30fps QBC_HDR */
-	/* 7 : 2124x2124@30fps QBC_HDR */
-	FIMC_IS_SENSOR_CFG_EXT(2832, 2124,  30, 46,  4, CSI_DATA_LANES_4, 2100, 0, 0, 0),
-	FIMC_IS_SENSOR_CFG_EXT(2832, 1592,  30, 46,  5, CSI_DATA_LANES_4, 2100, 0, 0, 0),
-	FIMC_IS_SENSOR_CFG_EXT(2832, 1376,  30, 46,  6, CSI_DATA_LANES_4, 2100, 0, 0, 0),
-	FIMC_IS_SENSOR_CFG_EXT(2124, 2124,  30, 46,  7, CSI_DATA_LANES_4, 2100, 0, 0, 0),
+	/* 4 : REG_E: 2832x2124@30fps QBC_HDR */
+	/* 5 : REG_F: 2832x1592@30fps QBC_HDR */
+	/* 6 : REG_G: 2832x1376@30fps QBC_HDR */
+	/* 7 : REG_H: 2124x2124@30fps QBC_HDR */
+	FIMC_IS_SENSOR_CFG_EXT(2832, 2124,  30, 46,  4, CSI_DATA_LANES_4, 2054, 0, 0, 0),
+	FIMC_IS_SENSOR_CFG_EXT(2832, 1592,  30, 46,  5, CSI_DATA_LANES_4, 2054, 0, 0, 0),
+	FIMC_IS_SENSOR_CFG_EXT(2832, 1376,  30, 46,  6, CSI_DATA_LANES_4, 2054, 0, 0, 0),
+	FIMC_IS_SENSOR_CFG_EXT(2124, 2124,  30, 46,  7, CSI_DATA_LANES_4, 2054, 0, 0, 0),
 
-	/* 8 : 5664X4248@30fps QBC_REMOSAIC */
-	/* 9 : 5664X3184@30fps QBC_REMOSAIC */
-	/* 10: 5664X2752@30fps QBC_REMOSAIC */
-	/* 11: 4248X4248@30fps QBC_REMOSAIC */
-	FIMC_IS_SENSOR_CFG_EXT(5664, 4248,  30, 46,  8, CSI_DATA_LANES_4, 2100, 0, 0, 0),
-	FIMC_IS_SENSOR_CFG_EXT(5664, 3184,  30, 46,  9, CSI_DATA_LANES_4, 2100, 0, 0, 0),
-	FIMC_IS_SENSOR_CFG_EXT(5664, 2752,  30, 46, 10, CSI_DATA_LANES_4, 2100, 0, 0, 0),
-	FIMC_IS_SENSOR_CFG_EXT(4248, 4248,  30, 46, 11, CSI_DATA_LANES_4, 2100, 0, 0, 0),
+	/* 8 : REG_I: 5664X4248@30fps QBC_REMOSAIC */
+	/* 9 : REG_J: 5664X3184@30fps QBC_REMOSAIC */
+	/* 10: REG_K: 5664X2752@30fps QBC_REMOSAIC */
+	/* 11: REG_L: 4248X4248@30fps QBC_REMOSAIC */
+	FIMC_IS_SENSOR_CFG_EXT(5664, 4248,  30, 46,  8, CSI_DATA_LANES_4, 2054, 0, 0, 0),
+	FIMC_IS_SENSOR_CFG_EXT(5664, 3184,  30, 46,  9, CSI_DATA_LANES_4, 2054, 0, 0, 0),
+	FIMC_IS_SENSOR_CFG_EXT(5664, 2752,  30, 46, 10, CSI_DATA_LANES_4, 2054, 0, 0, 0),
+	FIMC_IS_SENSOR_CFG_EXT(4248, 4248,  30, 46, 11, CSI_DATA_LANES_4, 2054, 0, 0, 0),
 
-	/* 12: 1872x1052@240fps Super Slow Motion (SSM) */
-	/* 13: 1920x1080@120fps Super Slow Motion (SSM) */
-	/* 14: 1280x720 @240fps Super Slow Motion (SSM) */
-	FIMC_IS_SENSOR_CFG_EXT(1872, 1052, 240, 46, 12, CSI_DATA_LANES_4, 2100, 0, 0, 0),
-	FIMC_IS_SENSOR_CFG_EXT(1920, 1080, 120, 46, 13, CSI_DATA_LANES_4, 2100, 0, 0, 0),
-	FIMC_IS_SENSOR_CFG_EXT(1280,  720, 240, 46, 14, CSI_DATA_LANES_4, 2100, 0, 0, 0),
+	/* 12: REG_M: 1872x1052@240fps Super Slow Motion (SSM) */
+	/* 13: REG_N: 1920x1080@120fps Super Slow Motion (SSM) */
+	/* 14: REG_O: 1280x720 @240fps Super Slow Motion (SSM) */
+	/* 15: REG_U: 1280x720 @120fps Super Slow Motion (SSM) */
+	FIMC_IS_SENSOR_CFG_EXT(1872, 1052, 240, 46, 12, CSI_DATA_LANES_4, 2054, 0, 0, 0),
+	FIMC_IS_SENSOR_CFG_EXT(1920, 1080, 120, 46, 13, CSI_DATA_LANES_4, 2054, 0, 0, 0),
+	FIMC_IS_SENSOR_CFG_EXT(1280,  720, 240, 46, 14, CSI_DATA_LANES_4, 2054, 0, 0, 0),
+	FIMC_IS_SENSOR_CFG_EXT(1280,  720, 120, 46, 15, CSI_DATA_LANES_4, 2054, 0, 0, 0),
+
+	/* 16: REG_R: 2832x2124@117fps FAST AE */
+	/* 17: REG_S: 2832x2124@60fps FAST AE */
+	/* 18: REG_T: 2832x1592@120 FAST AE */
+	FIMC_IS_SENSOR_CFG_EXT(2832, 2124, 117, 46, 16, CSI_DATA_LANES_4, 2054, 0, 0, 0),
+	FIMC_IS_SENSOR_CFG_EXT(2832, 2124,  60, 46, 17, CSI_DATA_LANES_4, 2054, 0, 0, 0),
+	FIMC_IS_SENSOR_CFG_EXT(2832, 1592, 120, 46, 18, CSI_DATA_LANES_4, 2054, 0, 0, 0),
 };
 
 static struct fimc_is_vci vci_module_imx576[] = {
 	{
 		.pixelformat = V4L2_PIX_FMT_SBGGR10,
-		.config = {{0, HW_FORMAT_RAW10}, {1, HW_FORMAT_UNKNOWN}, {2, HW_FORMAT_USER}, {3, 0}}
+		.config = {{0, HW_FORMAT_RAW10}, {1, HW_FORMAT_UNKNOWN}, {2, HW_FORMAT_EMBEDDED_8BIT}, {3, 0}}
 	}, {
 		.pixelformat = V4L2_PIX_FMT_SBGGR12,
-		.config = {{0, HW_FORMAT_RAW10}, {1, HW_FORMAT_UNKNOWN}, {2, HW_FORMAT_USER}, {3, 0}}
+		.config = {{0, HW_FORMAT_RAW10}, {1, HW_FORMAT_UNKNOWN}, {2, HW_FORMAT_EMBEDDED_8BIT}, {3, 0}}
 	}, {
 		.pixelformat = V4L2_PIX_FMT_SBGGR16,
-		.config = {{0, HW_FORMAT_RAW10}, {1, HW_FORMAT_UNKNOWN}, {2, HW_FORMAT_USER}, {3, 0}}
+		.config = {{0, HW_FORMAT_RAW10}, {1, HW_FORMAT_UNKNOWN}, {2, HW_FORMAT_EMBEDDED_8BIT}, {3, 0}}
 	}
 };
 
@@ -160,6 +176,8 @@ static int module_imx576_power_setpin(struct device *dev,
 	int gpio_camio_1p8_en = 0;
 	int gpio_camaf_2p8_en = 0;
 	struct fimc_is_core *core;
+	bool shared_mclk = false;
+	bool shared_camio_1p8 = false;
 
 	BUG_ON(!dev);
 
@@ -236,6 +254,9 @@ static int module_imx576_power_setpin(struct device *dev,
 		}
 	}
 
+	shared_mclk = of_property_read_bool(dnode, "shared_mclk");
+	shared_camio_1p8 = of_property_read_bool(dnode, "shared_camio_1p8");
+	
 	SET_PIN_INIT(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON);
 	SET_PIN_INIT(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF);
 	SET_PIN_INIT(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON);
@@ -247,39 +268,48 @@ static int module_imx576_power_setpin(struct device *dev,
 
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_cam_core_en, "cam_core_en", PIN_OUTPUT, 1, 0);
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_camio_1p8_en, "camio_1p8_en", PIN_OUTPUT, 1, 1000);
+	if(shared_camio_1p8)
+	SET_PIN_SHARED(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, SRT_ACQUIRE,
+			&core->shared_rsc_slock[SHARED_PIN1], &core->shared_rsc_count[SHARED_PIN1], 1);
 	
 	if(actuator)
-		SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_camaf_2p8_en, "camaf_2p8_en", PIN_OUTPUT, 1, 1000);
+		SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_camaf_2p8_en, "camaf_2p8_en", PIN_OUTPUT, 1, 500);
 	
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_none, "pin", PIN_FUNCTION, 2, 3000);
+	if(shared_mclk)
 	SET_PIN_SHARED(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, SRT_ACQUIRE,
-			&core->shared_rsc_slock[SHARED_PIN0], &core->shared_rsc_count[SHARED_PIN0], 1); 
-	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_reset, "sen_rst high", PIN_OUTPUT, 1, 5000);
+			&core->shared_rsc_slock[SHARED_PIN0], &core->shared_rsc_count[SHARED_PIN0], 1);
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_reset, "sen_rst high", PIN_OUTPUT, 1, 10000);
 	
 	/* Normal off */
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_reset, "sen_rst low", PIN_OUTPUT, 0, 0);
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none, "delay", PIN_NONE, 0, 5000);
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none, "pin", PIN_FUNCTION, 0, 0);
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none, "pin", PIN_FUNCTION, 1, 0);
+	if(shared_mclk)
+	SET_PIN_SHARED(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, SRT_RELEASE,
+			&core->shared_rsc_slock[SHARED_PIN0], &core->shared_rsc_count[SHARED_PIN0], 0);
 	if(actuator)
 		SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_camaf_2p8_en, "camaf_2p8_en", PIN_OUTPUT, 0, 1000);
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none, "pin", PIN_FUNCTION, 0, 0);
-	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none, "pin", PIN_FUNCTION, 1, 0);
-	SET_PIN_SHARED(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, SRT_RELEASE,
-			&core->shared_rsc_slock[SHARED_PIN0], &core->shared_rsc_count[SHARED_PIN0], 0); 
-	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none, "pin", PIN_FUNCTION, 0, 0);
-
-	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_reset, "sen_rst low", PIN_OUTPUT, 0, 0);
-	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none, "delay", PIN_NONE, 0, 5000);
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_camio_1p8_en, "camio_1p8_en", PIN_OUTPUT, 0, 0);
+	if(shared_camio_1p8)
+	SET_PIN_SHARED(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, SRT_RELEASE,
+			&core->shared_rsc_slock[SHARED_PIN1], &core->shared_rsc_count[SHARED_PIN1], 0);
+
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_cam_core_en, "cam_core_en", PIN_OUTPUT, 0, 1000);
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_cam_dcdc_en, "cam_dcdc_en", PIN_OUTPUT, 0, 0);
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none, "delay", PIN_NONE, 0, 10000);
 
 	/* READ_ROM - POWER ON */
-	if(actuator)	
+	if(actuator)
 		SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON, gpio_camaf_2p8_en, "camaf_2p8_en", PIN_OUTPUT, 1, 2000);
 	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON, gpio_camio_1p8_en, "camio_1p8_en", PIN_OUTPUT, 1, 2000);
-
+	
 	/* READ_ROM - POWER OFF */
-	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_OFF, gpio_camio_1p8_en, "camio_1p8_en", PIN_OUTPUT, 0, 0);
+	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_OFF, gpio_camio_1p8_en, "camio_1p8_en", PIN_OUTPUT, 0, 1000);
 	if(actuator)	
-		SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_OFF, gpio_camaf_2p8_en, "camaf_2p8_en", PIN_OUTPUT, 0, 10);
+		SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_OFF, gpio_camaf_2p8_en, "camaf_2p8_en", PIN_OUTPUT, 0, 5000);
 
 	dev_info(dev, "%s X v4\n", __func__);
 
@@ -344,7 +374,7 @@ int sensor_module_imx576_probe(struct platform_device *pdev)
 	module->pixel_height = module->active_height + 0;
 	module->max_framerate = 300;
 	module->position = pdata->position;
-	module->mode = CSI_MODE_CH0_ONLY;
+	module->mode = CSI_MODE_DT_ONLY;
 	module->lanes = CSI_DATA_LANES_4;
 	module->bitwidth = 10;
 	module->vcis = ARRAY_SIZE(vci_module_imx576);

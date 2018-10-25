@@ -4,7 +4,7 @@
 #include <linux/ccic/s2mm005_ext.h>
 #include <linux/ccic/s2mm005_fw.h>
 #include <linux/ccic/ccic_sysfs.h>
-#include <linux/ccic/BOOT_FLASH_FW_0x0D_BOOT8.h>
+#include <linux/ccic/BOOT_FLASH_FW_0x10_BOOT8.h>
 
 #define	S2MM005_FIRMWARE_PATH	"usbpd/s2mm005.bin"
 
@@ -337,7 +337,7 @@ int s2mm005_flash(struct s2mm005_data *usbpd_data, unsigned int input)
 	case FLASH_WRITE8: { /* write flash & verify */
 		switch (usbpd_data->s2mm005_fw_product_id) {
 			case PRODUCT_NUM_VIEW2:
-				ret = s2mm005_flash_write(usbpd_data, (unsigned char*)&BOOT_FLASH_FW_0x0D_BOOT8[0]);
+				ret = s2mm005_flash_write(usbpd_data, (unsigned char*)&BOOT_FLASH_FW_0x10_BOOT8[0]);
 				break;
 			default:
 				break;
@@ -409,7 +409,7 @@ void s2mm005_get_fw_version(int product_id,
 	switch (product_id) {
 		case PRODUCT_NUM_VIEW2:
 		default:
-			fw_hd = (struct s2mm005_fw*) BOOT_FLASH_FW_0x0D_BOOT8;
+			fw_hd = (struct s2mm005_fw*) BOOT_FLASH_FW_0x10_BOOT8;
 			break;
 	}
 	version->boot = fw_hd->boot;

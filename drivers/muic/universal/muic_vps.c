@@ -465,6 +465,15 @@ int vps_find_attached_dev(muic_data_t *pmuic, muic_attached_dev_t *pdev, int *pi
 		return -1;
 	}
 
+	if (pmuic->is_hiccup_mode) {
+		if (pmsr->t.vbvolt == VB_HIGH) {
+			pr_info("%s water\n", __func__);
+			*pintr = intr = MUIC_INTR_ATTACH;
+			*pdev = new_dev = ATTACHED_DEV_UNDEFINED_RANGE_MUIC;
+			return 0;
+		}
+	}
+
 	if ((pmsr->t.vbvolt == VB_HIGH) && pmsr->t.chgdetrun &&
 		(pmsr->t.adc != ADC_DESKDOCK)) {
 		pr_info("%s:%s chgdet is running.\n", MUIC_DEV_NAME, __func__);

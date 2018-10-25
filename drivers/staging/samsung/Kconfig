@@ -220,6 +220,12 @@ config SEC_DUMP_SUMMARY
 	help
 	  Samsung Dump Summary Feature for ramdump debugging.
 
+config SEC_GPIO
+	default n
+	bool "Enable gpio detection for PCB type"
+	help
+	  Return FPCB type for factory test
+
 choice
 	prompt "Version of GAF structure"
 	depends on SEC_DEBUG

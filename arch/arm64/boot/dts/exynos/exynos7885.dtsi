@@ -1280,7 +1280,7 @@
 		samsung,syscon-phandle = <&pmu_system_controller>;
 	};
 
-	mipi_phy_dsim: phy_m4s4_dsi@0x12821008 {
+	mipi_phy_dsim: phy_m4s4_dsi@0x11c80000 {
 		compatible = "samsung,mipi-phy-dsim";
 		samsung,pmu-syscon = <&pmu_system_controller>;
 		isolation = <0x678>;
@@ -1288,6 +1288,7 @@
 		/* reg = <0x0 0x12821008 0x4>; */
 		/* reset = <0 1>; */
 		/* init = <4 5>; */ /* PHY reset control path bit of SYSREG */
+		owner = <0>; /* 0: DSI,  1: CSI */
 		#phy-cells = <1>;
 	};
 
@@ -1296,7 +1297,7 @@
 		reg = <0x0 0x14870000 0x100>;
 		interrupts = <0 125 0>;
 
-		phys = <&mipi_phy_dsim 1>;
+		phys = <&mipi_phy_dsim 0>;
 		phy-names = "dsim_dphy";
 
 		/* power domain */
@@ -1334,6 +1335,8 @@
 		out_type = <0>;
 		/* 0: DSI0, 1: DSI1, 2: DSI2 */
 		out_idx = <0>;
+
+		disp_freq = <0>;
 
 		#address-cells = <2>;
 		#size-cells = <1>;

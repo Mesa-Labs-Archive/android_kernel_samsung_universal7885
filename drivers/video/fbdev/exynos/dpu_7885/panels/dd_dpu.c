@@ -157,7 +157,6 @@ static void configure_param(struct d_info *d)
 	d->point[D_VT_COMPENSATION]	=	&lcd_info->vt_compensation;
 	d->point[D_UNDERRUN_LP_REF]	=	&lcd_info->cmd_underrun_lp_ref;
 #endif
-
 }
 
 static inline void update_value(u32 *dest, u32 *src, u32 update)
@@ -378,7 +377,7 @@ static int init_debugfs_lcd_info(struct d_info *d)
 	struct device_node *npetc = NULL;
 	int ret = 0, count;
 	unsigned int i = 0;
-	struct dentry *dbgfs = NULL;
+	struct dentry *debugfs = NULL;
 
 	nplcd = of_find_node_with_property(NULL, LCD_INFO_DTS_NAME);
 	if (!nplcd) {
@@ -414,10 +413,10 @@ static int init_debugfs_lcd_info(struct d_info *d)
 
 		debugfs_list[i].length = count;
 
-		dbgfs = debugfs_create_array(debugfs_list[i].sysfs_name, debugfs_list[i].mode, d->debugfs_root,
+		debugfs = debugfs_create_array(debugfs_list[i].sysfs_name, debugfs_list[i].mode, d->debugfs_root,
 			&d->request_param[i], &d->pending_param[i], count);
 
-		if (dbgfs)
+		if (debugfs)
 			dbg_info("%s is created and length is %d\n", debugfs_list[i].sysfs_name, debugfs_list[i].length);
 
 	}
@@ -434,14 +433,15 @@ static int status_show(struct seq_file *m, void *unused)
 	struct d_info *d = m->private;
 	unsigned int i, j;
 
-	seq_puts(m, "                    |    DEFAULT|    REQUEST|    CURRENT\n");
-	seq_puts(m, "--------------------------------------------------------\n");
+	seq_puts(m, "--------------------------------------------------------------\n");
+	seq_puts(m, "                    |    DEFAULT|    REQUEST|    CURRENT|   RW\n");
+	seq_puts(m, "--------------------------------------------------------------\n");
 	for (i = 0; i < D_MAX; i++) {
 		for (j = 0; j < debugfs_list[i].length; j++) {
 			if (d->pending_param[i + j])
-				seq_printf(m, "%20s| %10u| %10u| %10u\n", D_LIST_NAME[i + j], d->default_param[i + j], d->request_param[i + j], d->current_param[i + j]);
+				seq_printf(m, "%20s| %10u| %10u| %10u| %4s\n", D_LIST_NAME[i + j], d->default_param[i + j], d->request_param[i + j], d->current_param[i + j], (debugfs_list[i].mode & S_IWUGO) ? "RW" : "R");
 			else
-				seq_printf(m, "%20s| %10u| %10s| %10u\n", D_LIST_NAME[i + j], d->default_param[i + j], " ", d->current_param[i + j]);
+				seq_printf(m, "%20s| %10u| %10s| %10u| %4s\n", D_LIST_NAME[i + j], d->default_param[i + j], " ", d->current_param[i + j], (debugfs_list[i].mode & S_IWUGO) ? "RW" : "R");
 		}
 	}
 	seq_puts(m, "\n");
@@ -591,6 +591,9 @@ static int help_show(struct seq_file *m, void *unused)
 	seq_puts(m, "* If you insist, we eliminate these function immediately\n");
 	seq_puts(m, "------------------------------------------------------------\n");
 	seq_puts(m, "\n");
+	seq_puts(m, "----------\n");
+	seq_puts(m, "# cd /d/dd_dpu\n");
+	seq_puts(m, "\n");
 	seq_puts(m, "---------- usage\n");
 	seq_puts(m, "1. you can request to change paremter like below\n");
 	for (i = 0; i < D_MAX; i++) {
@@ -618,17 +621,17 @@ static int help_show(struct seq_file *m, void *unused)
 	seq_puts(m, "3. it is IMPOSSIBLE to apply parameter immediately during lcd on runtime\n");
 	seq_puts(m, "\n");
 	seq_puts(m, "---------- status usage\n");
-	seq_puts(m, "you can check current configuration status like below\n");
+	seq_puts(m, "1. you can check current configuration status like below\n");
 	seq_puts(m, "# cat status\n");
-	seq_puts(m, "--------------------------------------------------------\n");
-	seq_puts(m, "                    |    DEFAULT|    REQUEST|    CURRENT\n");
-	seq_puts(m, "--------------------------------------------------------\n");
+	seq_puts(m, "--------------------------------------------------------------\n");
+	seq_puts(m, "                    |    DEFAULT|    REQUEST|    CURRENT|   RW\n");
+	seq_puts(m, "--------------------------------------------------------------\n");
 	for (i = 0; i < D_MAX; i++) {
 		for (j = 0; j < debugfs_list[i].length; j++) {
 			if (d->pending_param[i + j])
-				seq_printf(m, "%20s| %10u| %10u| %10u\n", D_LIST_NAME[i + j], d->default_param[i + j], d->request_param[i + j], d->current_param[i + j]);
+				seq_printf(m, "%20s| %10u| %10u| %10u| %4s\n", D_LIST_NAME[i + j], d->default_param[i + j], d->request_param[i + j], d->current_param[i + j], (debugfs_list[i].mode & S_IWUGO) ? "RW" : "R");
 			else
-				seq_printf(m, "%20s| %10u| %10s| %10u\n", D_LIST_NAME[i + j], d->default_param[i + j], " ", d->current_param[i + j]);
+				seq_printf(m, "%20s| %10u| %10s| %10u| %4s\n", D_LIST_NAME[i + j], d->default_param[i + j], " ", d->current_param[i + j], (debugfs_list[i].mode & S_IWUGO) ? "RW" : "R");
 		}
 	}
 	seq_puts(m, "\n");

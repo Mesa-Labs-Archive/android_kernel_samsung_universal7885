@@ -421,8 +421,9 @@ p_err:
 	return ret;
 }
 
-#define MAX_BURST 1100
-u8 wbuf[(MAX_BURST + 1) * 2];
+// 16bit data: 2048, 8bit data: 4096
+#define MAX_BURST 4096
+u8 wbuf[MAX_BURST + 2];
 
 int fimc_is_sensor_write16_burst(struct i2c_client *client,
 	u16 addr, u16 *val, u32 num)
@@ -472,3 +473,52 @@ int fimc_is_sensor_write16_burst(struct i2c_client *client,
 p_err:
 	return ret;
 }
+
+int fimc_is_sensor_write8_burst(struct i2c_client *client,
+	u16 addr, u8 *val, u16 num)
+{
+	int ret = 0;
+	struct i2c_msg msg[1];
+	int i = 0;
+
+	if (val == NULL) {
+		pr_err("val array is null\n");
+		ret = -ENODEV;
+		goto p_err;
+	}
+
+	if (num > MAX_BURST) {
+		pr_err("currently limit max num is %d, need to fix it!\n", MAX_BURST);
+		ret = -ENODEV;
+		goto p_err;
+	}
+
+	if (!client->adapter) {
+		pr_err("Could not find adapter!\n");
+		ret = -ENODEV;
+		goto p_err;
+	}
+
+	msg->addr = client->addr;
+	msg->flags = 0;
+	msg->len = 2 + (num * 1);
+	msg->buf = wbuf;
+	wbuf[0] = (addr & 0xFF00) >> 8;
+	wbuf[1] = (addr & 0xFF);
+	for (i = 0; i < num; i++) {
+		wbuf[(i * 1) + 2] = val[i];
+	}
+
+	ret = fimc_is_i2c_transfer(client->adapter, msg, 1);
+	if (ret < 0) {
+		pr_err("i2c treansfer fail(%d)", ret);
+		goto p_err;
+	}
+
+	i2c_info("I2CW08(%d) [0x%04x] : 0x%04x\n", client->addr, addr, *val);
+
+	return 0;
+p_err:
+	return ret;
+}
+

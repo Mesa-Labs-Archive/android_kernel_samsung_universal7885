@@ -527,6 +527,7 @@ static void cmdq_enable_after_sw_reset(struct cmdq_host *cq_host,
 static void cmdq_reset(struct mmc_host *mmc, bool soft)
 {
 	struct cmdq_host *cq_host = (struct cmdq_host *)mmc_cmdq_private(mmc);
+	struct mmc_cmdq_context_info *ctx_info = &mmc->cmdq_ctx;
 	unsigned int cqcfg;
 	unsigned int tdlba;
 	unsigned int tdlbau;
@@ -590,6 +591,8 @@ static void cmdq_reset(struct mmc_host *mmc, bool soft)
 	/* cq_host would use this rca to address the card */
 	cmdq_writel(cq_host, rca, CQSSC2);
 	mb();
+
+	ctx_info->curr_dbr = 0;
 
 	cmdq_writel(cq_host, cqcfg, CQCFG);
 	cmdq_runtime_pm_put(cq_host);
@@ -931,6 +934,7 @@ busy_wait:
 	else
 		exynos_ss_printk("[CQ] D: W, tag %d\n", tag);
 #endif
+	set_bit(tag, &ctx_info->curr_dbr);
 	cmdq_writel(cq_host, 1 << tag, CQTDBR);
 	/* Commit the doorbell write immediately */
 	wmb();
@@ -959,6 +963,8 @@ static void cmdq_finish_data(struct mmc_host *mmc, unsigned int tag)
 		mrq->cmd->resp[0] = cmdq_readl(cq_host, CQCRDCT);
 		set_bit(CMDQ_STATE_PREV_DCMD, &ctx_info->curr_state);
 	}
+
+	clear_bit(tag, &ctx_info->curr_dbr);
 
 #if defined(CONFIG_MMC_DW_DEBUG)
 	if (cq_host->ops->cmdq_log) {
@@ -1016,6 +1022,13 @@ irqreturn_t cmdq_irq(struct mmc_host *mmc, int err)
 		err_info = cmdq_readl(cq_host, CQTERRI);
 		pr_err("%s: err: %d CQIS: 0x%08x CQTERRI (0x%08lx)\n",
 		       mmc_hostname(mmc), err, status, err_info);
+
+		tag = GET_CMD_ERR_TAG(err_info);
+		if (!(test_bit(tag, &ctx_info->curr_dbr))) {
+			pr_err("%s: %s: Invailed tag:%lu interrupt!\n",
+					mmc_hostname(mmc), __func__, tag);
+			return IRQ_NONE;
+		}
 
 		if (err_info & CQ_RMEFV) {
 			tag = GET_CMD_ERR_TAG(err_info);

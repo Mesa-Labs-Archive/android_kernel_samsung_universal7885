@@ -77,6 +77,8 @@ static void no_dev_dbg(void *v, char *s, ...)
 #define COD3035X_3POLE_FAKE_MAX 100
 #define COD3035X_4POLE_FAKE_MIN 350
 #define COD3035X_4POLE_FAKE_MAX 380
+
+#define COD3035X_ANT_DET_DELAY 150
 #endif
 
 /* defined for impedance calculate */
@@ -3294,6 +3296,7 @@ void cod3035x_jack_reset(struct cod3035x_priv *cod3035x)
 
 	dev_dbg(codec->dev, "%s called, Jack Power RESET.\n", __func__);
 
+	mutex_lock(&cod3035x->reset_lock);
 	/* jack power reset */
 	snd_soc_update_bits(codec, COD3035X_80_PDB_ACC1,
 			PDB_JD_MASK, 0);
@@ -3301,6 +3304,7 @@ void cod3035x_jack_reset(struct cod3035x_priv *cod3035x)
 	snd_soc_update_bits(codec, COD3035X_80_PDB_ACC1,
 			PDB_JD_MASK, PDB_JD_MASK);
 	cod3035x_usleep(100);
+	mutex_unlock(&cod3035x->reset_lock);
 }
 
 void set_ant_jack_flag(struct cod3035x_priv *cod3035x,
@@ -3488,7 +3492,8 @@ static void cod3035x_jack_det_work(struct work_struct *work)
 
 		jack_det_status = jack_det_status & STATUS1_JACK_DET_MASK;
 
-		if (jack_det_status == false) {
+		if (jack_det_status == false &&
+				!(cod3035x->model_feature_flag & MODEL_FLAG_5PIN_JACK)) {
 			dev_dbg(cod3035x->dev, "%s fake jack inserted.\n", __func__);
 			queue_work(cod3035x->gdet_adc_wq, &cod3035x->gdet_adc_work);
 			mutex_unlock(&cod3035x->jackdet_lock);
@@ -3548,6 +3553,19 @@ static void cod3035x_jack_det_work(struct work_struct *work)
 		snd_soc_write(codec, COD3035X_93_CTR_DLY6, 0x00);
 		snd_soc_write(codec, COD3035X_94_JACK_CTR, 0x00);
 		dev_dbg(cod3035x->dev, "%s JACK OUT\n", __func__);
+	}
+
+	/* LDET LTH has been added for mass products which is using 5 pin jack house
+	 * This feature can't be enabled with the Ext Antenna feature.
+	 */
+	if (cod3035x->model_feature_flag & MODEL_FLAG_LDET_VTH_ENABLE) {
+		if (jackdet->jack_det) {
+			snd_soc_update_bits(codec, COD3035X_84_CTR_POP1,
+					CTRV_LDET_VTH_MASK, CTRV_LDET_VTH_1241);
+		} else {
+			snd_soc_update_bits(codec, COD3035X_84_CTR_POP1,
+					CTRV_LDET_VTH_MASK, CTRV_LDET_VTH_0900);
+		}
 	}
 
 	if (cod3035x->is_suspend)
@@ -3624,7 +3642,29 @@ static void cod3035x_jack_det_work(struct work_struct *work)
 	if (cod3035x->is_suspend)
 		regcache_cache_only(cod3035x->regmap, true);
 
-	send_status_to_audioframework(&(cod3035x->sdev), jack_det_status);
+	if (jackdet->prev_jack_det_status != JACK_ANT) {
+		dev_dbg(cod3035x->dev, "%s prev_jack_det_status(%d)\n", __func__,
+			jackdet->prev_jack_det_status);
+
+		jackdet->prev_jack_det_status = jack_det_status;
+		send_status_to_audioframework(&(cod3035x->sdev), jack_det_status);
+	} else {
+		dev_dbg(cod3035x->dev, "%s prev_jack_det_status(%d)\n", __func__,
+				jackdet->prev_jack_det_status);
+
+		if (jackdet->prev_jack_det_status == jack_det_status) {
+			dev_dbg(cod3035x->dev, "%s current jack_det_status(%d) == prev_jack_det_status(%d)\n",
+					__func__, jackdet->prev_jack_det_status, jack_det_status);
+			mutex_unlock(&cod3035x->jackdet_lock);
+			return;
+		} else {
+			dev_dbg(cod3035x->dev, "%s current jack_det_status(%d) != prev_jack_det_status(%d)\n",
+					__func__, jackdet->prev_jack_det_status, jack_det_status);
+			jackdet->prev_jack_det_status = jack_det_status;
+			queue_delayed_work(cod3035x->jack_report_wq, &cod3035x->jack_report_work,
+					COD3035X_ANT_DET_DELAY);
+		}
+	}
 
 	dev_dbg(cod3035x->dev, "%s water status: [%d]\n", __func__, jackdet->water_det);
 
@@ -3763,6 +3803,11 @@ static void cod3035x_buttons_work(struct work_struct *work)
 				cod3035x->btn_release_value);
 
 		current_button_state = BUTTON_PRESS;
+	}
+
+	if (!jd->jack_det) {
+		dev_dbg(cod3035x->dev, "skip button event, jack was not detected\n");
+		return;
 	}
 
 	if (jd->privious_button_state == current_button_state) {
@@ -3930,6 +3975,36 @@ static irqreturn_t cod3035x_ant_thread_isr(int irq, void *data)
 	jd->ant_irq = false;
 
 	return IRQ_HANDLED;
+}
+
+static void cod3035x_jack_report_work(struct work_struct *work)
+{
+	struct cod3035x_priv *cod3035x =
+		container_of(work, struct cod3035x_priv, jack_report_work.work);
+	struct cod3035x_jack_det *jackdet = &cod3035x->jack_det;
+	//struct snd_soc_codec *codec = cod3035x->codec;
+	int jack_det_status = 0, adc = 0;
+
+	dev_info(cod3035x->dev, "%s : start\n", __func__);
+
+	mutex_lock(&cod3035x->jackreport_lock);
+	
+	/* read adc for mic detect */
+	adc = cod3035x_adc_get_value(cod3035x);
+
+	set_ant_jack_flag(cod3035x, jackdet, adc);
+	jack_det_status = cod3035x_get_jack_status(jackdet);
+	dev_info(cod3035x->dev, "%s ant[%d], jack[%d], mic[%d]\n",
+			__func__, jackdet->ant_det, jackdet->jack_det, jackdet->mic_det);
+
+	if (jackdet->prev_jack_det_status == jack_det_status) {
+		dev_info(cod3035x->dev, "%s current jack_det_status(%d) == prev_jack_det_status(%d)\n",
+				__func__, jackdet->prev_jack_det_status, jack_det_status);
+
+		send_status_to_audioframework(&(cod3035x->sdev), jack_det_status);
+	}
+	
+	mutex_unlock(&cod3035x->jackreport_lock);
 }
 #endif
 
@@ -4152,7 +4227,7 @@ static void cod3035x_codec_initialize(void *context)
 #ifdef CONFIG_SND_SOC_COD30XX_EXT_ANT
 	snd_soc_write(codec, COD3035X_8E_CTR_DLY1, 0x00);
 	snd_soc_write(codec, COD3035X_8F_CTR_DLY2, 0x00);
-	snd_soc_write(codec, COD3035X_8D_CTR_DBNC3, 0xA0);
+	snd_soc_write(codec, COD3035X_8D_CTR_DBNC3, 0xA1);
 #else
 	snd_soc_write(codec, COD3035X_8E_CTR_DLY1, 0xC0);
 	snd_soc_write(codec, COD3035X_8F_CTR_DLY2, 0xC0);
@@ -4833,6 +4908,15 @@ static int cod3035x_codec_probe(struct snd_soc_codec *codec)
 		return -ENOMEM;
 	}
 
+#if !defined(CONFIG_SEC_FACTORY) && defined(CONFIG_SND_SOC_COD30XX_EXT_ANT)
+	INIT_DELAYED_WORK(&cod3035x->jack_report_work, cod3035x_jack_report_work);
+	cod3035x->jack_report_wq = create_singlethread_workqueue("jack_report_wq");
+	if (cod3035x->jack_report_wq == NULL) {
+		dev_err(codec->dev, "Failed to create jack_report_wq\n");
+		return -ENOMEM;
+	}
+#endif
+
 	cod3035x_adc_start(cod3035x);
 
 	/* cod3035x->aifrate = COD3035X_SAMPLE_RATE_48KHZ; */
@@ -4844,8 +4928,12 @@ static int cod3035x_codec_probe(struct snd_soc_codec *codec)
 	cod3035x->jack_det.gdet_adc_val = -EINVAL;
 
 	mutex_init(&cod3035x->jackdet_lock);
+	mutex_init(&cod3035x->reset_lock);
 	mutex_init(&cod3035x->key_lock);
 	mutex_init(&cod3035x->adc_mute_lock);
+#ifdef CONFIG_SND_SOC_COD30XX_EXT_ANT
+	mutex_init(&cod3035x->jackreport_lock);
+#endif
 
 	/*
 	 * interrupt pin should be shared with pmic.
@@ -4878,6 +4966,8 @@ static int cod3035x_codec_probe(struct snd_soc_codec *codec)
 	cod3035x_jack_mic_register(codec);
 
 #ifdef CONFIG_SND_SOC_COD30XX_EXT_ANT
+	cod3035x->jack_det.prev_jack_det_status = -EINVAL;
+	
 	if (cod3035x->ant_det_gpio > 0) {
 		dev_err(codec->dev, "[DEBUG]%s : ant_det_gpio %d\n",
 				__func__, (int)cod3035x->ant_det_gpio);
@@ -4895,6 +4985,7 @@ static int cod3035x_codec_probe(struct snd_soc_codec *codec)
 		/* If not set int_gpio, do lock init */
 		if (cod3035x->int_gpio <= 0) {
 			mutex_init(&cod3035x->jackdet_lock);
+			mutex_init(&cod3035x->jackreport_lock);
 			mutex_init(&cod3035x->key_lock);
 			wake_lock_init(&cod3035x->jack_wake_lock,
 					WAKE_LOCK_SUSPEND, "jack_wl");
@@ -4960,6 +5051,9 @@ static int cod3035x_codec_remove(struct snd_soc_codec *codec)
 	destroy_workqueue(cod3035x->buttons_wq);
 	destroy_workqueue(cod3035x->jack_det_wq);
 	destroy_workqueue(cod3035x->gdet_adc_wq);
+#if !defined(CONFIG_SEC_FACTORY) && defined(CONFIG_SND_SOC_COD30XX_EXT_ANT)
+	destroy_workqueue(cod3035x->jack_report_wq);
+#endif
 	cod3035x_adc_stop(cod3035x);
 
 	return 0;

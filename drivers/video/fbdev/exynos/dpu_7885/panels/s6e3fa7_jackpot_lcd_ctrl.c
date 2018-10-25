@@ -960,8 +960,8 @@ static int s6e3fa7_read_rddpm(struct lcd_info *lcd)
 	ret = s6e3fa7_read_info(lcd, LDI_REG_RDDPM, LDI_LEN_RDDPM, buf);
 	if (ret < 0)
 		dev_err(&lcd->ld->dev, "%s: fail\n", __func__);
-
-	memcpy(&lcd->rddpm, buf, LDI_LEN_RDDPM);
+	else
+		memcpy(&lcd->rddpm, buf, LDI_LEN_RDDPM);
 
 	dev_info(&lcd->ld->dev, "%s: %x\n", __func__, lcd->rddpm);
 
@@ -976,13 +976,31 @@ static int s6e3fa7_read_rddsm(struct lcd_info *lcd)
 	ret = s6e3fa7_read_info(lcd, LDI_REG_RDDSM, LDI_LEN_RDDSM, buf);
 	if (ret < 0)
 		dev_err(&lcd->ld->dev, "%s: fail\n", __func__);
-
-	memcpy(&lcd->rddpm, buf, LDI_LEN_RDDSM);
+	else
+		memcpy(&lcd->rddsm, buf, LDI_LEN_RDDSM);
 
 	dev_info(&lcd->ld->dev, "%s: %x\n", __func__, lcd->rddsm);
 
 	return ret;
 }
+
+#ifdef CONFIG_LOGGING_BIGDATA_BUG
+unsigned int get_panel_bigdata(struct dsim_device *dsim)
+{
+	struct lcd_info *lcd = dsim->priv.par;
+	unsigned int val = 0;
+
+	lcd->rddpm = 0xff;
+	lcd->rddsm = 0xff;
+
+	s6e3fa7_read_rddpm(lcd);
+	s6e3fa7_read_rddsm(lcd);
+
+	val = (lcd->rddpm  << 8) | lcd->rddsm;
+
+	return val;
+}
+#endif
 
 static int s6e3fa7_init_elvss(struct lcd_info *lcd, u8 *data)
 {

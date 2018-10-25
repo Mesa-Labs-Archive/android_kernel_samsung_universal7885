@@ -256,6 +256,7 @@ int csi_hw_s_config_dma(u32 __iomem *base_reg, u32 channel, struct fimc_is_image
 #endif
 int csi_hw_dma_common_reset(void);
 int csi_hw_s_dma_common(u32 __iomem *base_reg);
+int csi_hw_s_dma_common_dynamic(u32 __iomem *base_reg, size_t size, unsigned int dma_ch);
 #endif
 #if defined(CONFIG_CSIS_V5_0)
 int csi_hw_s_phy_default_value(u32 __iomem *base_reg, u32 instance);
@@ -310,6 +311,8 @@ int fimc_is_hw_shared_meta_update(struct fimc_is_device_ischain *device,
 		struct fimc_is_group *group, struct fimc_is_frame *frame, int shot_done_flag);
 void __iomem *fimc_is_hw_get_sysreg(ulong core_regs);
 u32 fimc_is_hw_find_settle(u32 mipi_speed);
+unsigned int get_dma(struct fimc_is_device_sensor *device, u32 *dma_ch);
+
 /*
  * *****************
  * FIMC-BNS H/W APIS

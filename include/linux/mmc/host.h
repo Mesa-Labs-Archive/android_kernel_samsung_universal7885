@@ -229,6 +229,7 @@ struct mmc_slot {
  * @req_starved		completion should invoke the request_fn since
  *			no tags were available
  * @cmdq_ctx_lock	acquire this before accessing this structure
+ * @curr_dbr		doorbell set information
  */
 struct mmc_cmdq_context_info {
 	unsigned long	active_reqs; /* in-flight requests */
@@ -243,6 +244,7 @@ struct mmc_cmdq_context_info {
 	wait_queue_head_t	queue_empty_wq;
 	wait_queue_head_t	wait;
 	int active_small_sector_read_reqs;
+	unsigned long	curr_dbr;
 };
 
 /**

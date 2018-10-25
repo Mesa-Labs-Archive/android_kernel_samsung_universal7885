@@ -357,10 +357,11 @@ void dsim_reg_set_esc_clk_on_lane(u32 id, u32 en, u32 lane);
 void dsim_reg_enable_word_clock(u32 id, u32 en);
 void dsim_reg_set_esc_clk_prescaler(u32 id, u32 en, u32 p);
 u32 dsim_reg_is_pll_stable(u32 id);
+void dsim_reg_set_cmd_transfer_mode(u32 id, u32 lp);
 #if defined(CONFIG_EXYNOS_SUPPORT_DOZE)
 int dsim_doze(struct dsim_device *dsim);
 int dsim_doze_suspend(struct dsim_device *dsim);
-void dphy_power_on(int on);
+void dphy_power_on(struct dsim_device *dsim, int on);
 #endif
 #define DSIM_IOC_ENTER_ULPS		_IOW('D', 0, u32)
 #define DSIM_IOC_GET_LCD_INFO		_IOW('D', 5, struct decon_lcd *)

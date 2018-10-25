@@ -36,7 +36,7 @@ int dsim_doze(struct dsim_device *dsim)
 
 	dpu_sysreg_set_lpmux(dsim->res.ss_regs);
 
-	dphy_power_on(1);
+	dphy_power_on(dsim, 1);
 
 	if (dsim->doze_state == DOZE_STATE_SUSPEND) {
 		/* Panel power on */
@@ -104,7 +104,7 @@ int dsim_doze_suspend(struct dsim_device *dsim)
 	disable_irq(dsim->res.irq);
 	dsim_reg_stop(dsim->id, dsim->data_lane);
 
-	dphy_power_on(0);
+	dphy_power_on(dsim, 0);
 
 #if defined(CONFIG_PM)
 	pm_runtime_put_sync(dsim->dev);

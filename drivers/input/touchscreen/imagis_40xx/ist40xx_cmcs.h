@@ -25,7 +25,7 @@
 #define CMCS_FLAG_CMJIT             (1 << 6)
 #define CMCS_FLAG_CS                (1 << 7)
 #define CMCS_FLAG_INT               (1 << 8)
-#define CMCS_FLAG_ALL               0xFFFF
+#define CMCS_FLAG_ALL               (CMCS_FLAG_CM | CMCS_FLAG_CMJIT | CMCS_FLAG_CS)
 
 #define CMCS_MSG_MASK               (0xFFFFFFF0)
 #define CM_MSG_VALID                (0x0E7DC770)
@@ -34,6 +34,14 @@
 #define CS_MSG_VALID                (0x0E7DC500)
 #define CMJIT_MSG_VALID             (0x0E7D2170)
 #define INT_MSG_VALID               (0x14709970)
+
+#define CM_MIN_SPEC                 (900)
+#define CM_MAX_SPEC                 (2400)
+#define CM_GAP_ALL_SPEC             (28)
+
+#define CMCS_CMJIT                  "CMJIT"
+#define CMCS_CM                     "CM"
+#define CMCS_CS                     "CS"
 
 #define IST40XX_CMCS_NAME           "ist40xx.cms"
 #define IST40XX_CMCS_MAGIC          "CMCS5TAG"
@@ -160,6 +168,13 @@ typedef struct _CMCS_BUF {
 int check_tsp_type(struct ist40xx_data *data, int tx, int rx);
 int ist40xx_get_cmcs_info(const u8 * buf, const u32 size);
 int ist40xx_cmcs_test(struct ist40xx_data *data, const u8 * buf, int size,
-		      u32 flag);
+			u32 flag);
+int print_cm_slope_result(struct ist40xx_data *data, u8 flag, s16 *buf16,
+			char *buf, char *fail_buf, bool fail_list);
+int print_cm_result(struct ist40xx_data *data, char *buf, char *fail_buf,
+			bool fail_list);
+int print_total_result(struct ist40xx_data *data, s16 *buf16, char *buf,
+			const char *mode, char *fail_buf, bool fail_list);
+
 int ist40xx_init_cmcs_sysfs(struct ist40xx_data *data);
 #endif // __IST40XX_CMCS_H__

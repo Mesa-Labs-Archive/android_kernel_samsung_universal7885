@@ -15,7 +15,7 @@
 #include "fimc-is-cis.h"
 #include "fimc-is-cis-5e9.h"
 
-/* 5E9_EVT00_Setfile_REV06i.xlsx */
+/* 5E9_EVT00_Setfile_REV06.xlsx */
 const u32 sensor_5e9_setfile_A_Global[] = {
 	/* Analog Global Setting */
 	0x0100, 0x00, 0x1, 
@@ -642,6 +642,22 @@ const u32 sensor_5e9_setfile_A_640x480_120fps[] = {
 	0x0101, 0x00, 0x1,
 	0x30B8, 0x2E, 0x1,
 	0x30BA, 0x36, 0x1,
+};
+
+const u32 sensor_5e9_setfile_A_Fsync_Slave[] = {
+	0x0100, 0x00, 0x01,
+	I2C_MODE_DELAY, 50000, 0x00, /* Delay change to 50000us */
+	0x3C02, 0x01, 0x01,
+	0x3C05, 0x1D, 0x01,
+	0x3500, 0x03, 0x01,
+};
+
+const u32 sensor_5e9_setfile_A_Fsync_Master[] = {
+	0x0100, 0x00, 0x01,
+	I2C_MODE_DELAY, 50000, 0x00, /* Delay change to 50000us */
+	0x3C03, 0x1D, 0x01,
+	0x3C05, 0x1F, 0x01,
+	0x3C02, 0x10, 0x01,
 };
 
 const struct sensor_pll_info sensor_5e9_pllinfo_A_2592x1944_30fps = {

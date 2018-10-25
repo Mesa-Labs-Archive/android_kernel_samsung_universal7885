@@ -641,11 +641,13 @@ static int mmc_decode_ext_csd(struct mmc_card *card, u8 *ext_csd)
 			!(ext_csd[EXT_CSD_FW_CONFIG] & 0x1);
 		card->ext_csd.enhanced_strobe_support =
 			ext_csd[EXT_CSD_STORBE_SUPPORT];
+#ifdef CONFIG_SEC_FACTORY
 		if (card->cid.manfid == 0x15 && mmc_fwrev <= 0x02) {
 			card->quirks |= MMC_QUIRK_CMDQ_NEED_BUSYWAIT;
 			pr_err("%s: Need to Firmware Upgrade for using CMDQ (0x%08X)\n",
 				mmc_hostname(card->host), card->quirks);
 		}
+#endif
 	}
 out:
 	return err;

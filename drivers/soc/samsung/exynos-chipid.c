@@ -150,6 +150,12 @@ static void __init exynos_chipid_get_chipid_info(void)
 	val = __raw_readl(exynos_soc_info.reg + data->rev_reg);
 	exynos_soc_info.main_rev = (val >> data->main_rev_bit) & EXYNOS_REV_MASK;
 	exynos_soc_info.sub_rev = (val >> data->sub_rev_bit) & EXYNOS_REV_MASK;
+
+	if (exynos_soc_info.product_id == EXYNOS7885_SOC_ID) {
+		if ((exynos_soc_info.sub_rev == 1) && (val & 0x04000000))
+			exynos_soc_info.sub_rev = 2;
+	}
+
 	exynos_soc_info.revision = (exynos_soc_info.main_rev << 4) | exynos_soc_info.sub_rev;
 
 	val = __raw_readl(exynos_soc_info.reg + data->unique_id_reg);

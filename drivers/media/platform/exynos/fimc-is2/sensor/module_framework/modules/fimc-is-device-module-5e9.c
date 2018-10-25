@@ -42,25 +42,25 @@ static struct fimc_is_sensor_cfg config_module_5e9[] = {
 	/* 2592x1944@30fps */
 	FIMC_IS_SENSOR_CFG(2592, 1944,  30, 19, 0, CSI_DATA_LANES_2),
 	/* 2592x1460@30fps */
-	FIMC_IS_SENSOR_CFG(2592, 1460,  30, 19, 0, CSI_DATA_LANES_2),
+	FIMC_IS_SENSOR_CFG(2592, 1460,  30, 19, 1, CSI_DATA_LANES_2),
 	/* 2592x1458@30fps */
-	FIMC_IS_SENSOR_CFG(2592, 1458,  30, 19, 0, CSI_DATA_LANES_2),
+	FIMC_IS_SENSOR_CFG(2592, 1458,  30, 19, 2, CSI_DATA_LANES_2),
 	/* 2592x1260@30fps */
-	FIMC_IS_SENSOR_CFG(2592, 1260,  30, 19, 0, CSI_DATA_LANES_2),
+	FIMC_IS_SENSOR_CFG(2592, 1260,  30, 19, 3, CSI_DATA_LANES_2),
 	/* 1936x1936@30fps */
-	FIMC_IS_SENSOR_CFG(1936, 1936,  30, 19, 0, CSI_DATA_LANES_2),
+	FIMC_IS_SENSOR_CFG(1936, 1936,  30, 19, 4, CSI_DATA_LANES_2),
 	/* 2592x1460@24fps */
-	FIMC_IS_SENSOR_CFG(2592, 1460,  24, 19, 0, CSI_DATA_LANES_2),
+	FIMC_IS_SENSOR_CFG(2592, 1460,  24, 19, 5, CSI_DATA_LANES_2),
 	/* 2592x1458@24fps */
-	FIMC_IS_SENSOR_CFG(2592, 1458,  24, 19, 0, CSI_DATA_LANES_2),
+	FIMC_IS_SENSOR_CFG(2592, 1458,  24, 19, 6, CSI_DATA_LANES_2),
 	/* 2592x1260@24fps */
-	FIMC_IS_SENSOR_CFG(2592, 1260,  24, 19, 0, CSI_DATA_LANES_2),
+	FIMC_IS_SENSOR_CFG(2592, 1260,  24, 19, 7, CSI_DATA_LANES_2),
 	/* 1936x1936@24fps */
-	FIMC_IS_SENSOR_CFG(1936, 1936,  24, 19, 0, CSI_DATA_LANES_2),
+	FIMC_IS_SENSOR_CFG(1936, 1936,  24, 19, 8, CSI_DATA_LANES_2),
 	/* 1296x972@58fps */
-	FIMC_IS_SENSOR_CFG(1296, 972 ,  58, 19, 1, CSI_DATA_LANES_2),
+	FIMC_IS_SENSOR_CFG(1296, 972 ,  58, 19, 9, CSI_DATA_LANES_2),
 	/* 640x480@120fps */
-	FIMC_IS_SENSOR_CFG(640 , 480 , 120, 19, 2, CSI_DATA_LANES_2),
+	FIMC_IS_SENSOR_CFG(640 , 480 , 120, 19, 10, CSI_DATA_LANES_2),
 };
 
 static struct fimc_is_vci vci_module_5e9[] = {
@@ -111,6 +111,8 @@ static int sensor_module_5e9_power_setpin(struct device *dev,
 	int gpio_camio_1p8_en = 0;
 	int gpio_cam_1p2_cam_a2p8_en = 0;
 	struct fimc_is_core *core;
+	bool shared_mclk = false;
+	bool shared_camio_1p8 = false;
 
 	BUG_ON(!dev);
 
@@ -158,28 +160,56 @@ static int sensor_module_5e9_power_setpin(struct device *dev,
 		gpio_free(gpio_cam_1p2_cam_a2p8_en);
 	}
 
+	shared_mclk = of_property_read_bool(dnode, "shared_mclk");
+	shared_camio_1p8 = of_property_read_bool(dnode, "shared_camio_1p8");
+
 	SET_PIN_INIT(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON);
 	SET_PIN_INIT(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF);
+	SET_PIN_INIT(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON);
+	SET_PIN_INIT(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_OFF);
 
 	/* Normal On */
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_reset, "sen_rst low", PIN_OUTPUT, 0, 100);
-	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_cam_1p2_cam_a2p8_en, "sensor_1p2_2p8_en", PIN_OUTPUT, 1, 0);
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_cam_1p2_cam_a2p8_en, "sensor_1p2_2p8_en", PIN_OUTPUT, 1, 500);
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_camio_1p8_en, "sensor_1p8_en", PIN_OUTPUT, 1, 500);
-	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_none, "pin", PIN_FUNCTION, 2, 0);
+	if(shared_camio_1p8)
 	SET_PIN_SHARED(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, SRT_ACQUIRE,
-			&core->shared_rsc_slock[SHARED_PIN0], &core->shared_rsc_count[SHARED_PIN0], 1); 
-	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_reset, "sen_rst high", PIN_OUTPUT, 1, 1000);
+			&core->shared_rsc_slock[SHARED_PIN1], &core->shared_rsc_count[SHARED_PIN1], 1);
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_none, "pin", PIN_FUNCTION, 2, 0);
+	if(shared_mclk)
+	SET_PIN_SHARED(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, SRT_ACQUIRE,
+			&core->shared_rsc_slock[SHARED_PIN0], &core->shared_rsc_count[SHARED_PIN0], 1);
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, gpio_reset, "sen_rst high", PIN_OUTPUT, 1, 3000);
 
 	/* Normal Off */
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_reset, "sen_rst", PIN_OUTPUT, 0, 500);
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none, "pin", PIN_FUNCTION, 0, 0);
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none, "pin", PIN_FUNCTION, 1, 0);
+	if(shared_mclk)
 	SET_PIN_SHARED(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, SRT_RELEASE,
 			&core->shared_rsc_slock[SHARED_PIN0], &core->shared_rsc_count[SHARED_PIN0], 0); 
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none, "pin", PIN_FUNCTION, 0, 0);
-
-	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_reset, "sen_rst", PIN_OUTPUT, 0, 0);
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_cam_1p2_cam_a2p8_en, "sensor_1p2_2p8_en", PIN_OUTPUT, 0, 0);
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_camio_1p8_en, "sensor_1p8_en", PIN_OUTPUT, 0, 0);
+	if(shared_camio_1p8)
+	SET_PIN_SHARED(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, SRT_RELEASE,
+			&core->shared_rsc_slock[SHARED_PIN1], &core->shared_rsc_count[SHARED_PIN1], 0); 
+
+	/* ROM powerOn */
+	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON, gpio_reset, "sen_rst low", PIN_OUTPUT, 0, 100);
+	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON, gpio_cam_1p2_cam_a2p8_en, "sensor_1p2_2p8_en", PIN_OUTPUT, 1, 0);
+	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON, gpio_camio_1p8_en, "sensor_1p8_en", PIN_OUTPUT, 1, 500);
+	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON, gpio_none, "pin", PIN_FUNCTION, 2, 0);
+	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON, gpio_reset, "sen_rst high", PIN_OUTPUT, 1, 1000);
+
+	/* ROM power Off */
+	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_OFF, gpio_none, "pin", PIN_FUNCTION, 0, 0);
+	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_OFF, gpio_none, "pin", PIN_FUNCTION, 1, 0);
+	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_OFF, gpio_none, "pin", PIN_FUNCTION, 0, 0);
+
+	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_OFF, gpio_reset, "sen_rst", PIN_OUTPUT, 0, 100);
+	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_OFF, gpio_cam_1p2_cam_a2p8_en, "sensor_1p2_2p8_en", PIN_OUTPUT, 0, 0);
+	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_OFF, gpio_camio_1p8_en, "sensor_1p8_en", PIN_OUTPUT, 0, 0);
 
 	dev_info(dev, "%s X v4\n", __func__);
 

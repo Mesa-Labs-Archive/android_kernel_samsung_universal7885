@@ -332,7 +332,7 @@ void five_task_free(struct task_struct *task)
 }
 
 /* Returns string representation of input function */
-static const char *get_string_fn(enum five_hooks fn)
+const char *five_get_string_fn(enum five_hooks fn)
 {
 	switch (fn) {
 	case FILE_CHECK:
@@ -405,7 +405,7 @@ static int process_measurement(const struct processing_event_list *params)
 	enum five_hooks fn = function;
 	unsigned int trace_op = FIVE_TRACE_UNDEFINED;
 	unsigned int trace_type = FIVE_TRACE_UNDEFINED;
-	enum integrity_status prev_tint;
+	enum task_integrity_value prev_tint;
 
 	trace_five_measurement_enter(file, task->pid);
 
@@ -491,11 +491,11 @@ out:
 	if (rc || five_get_cache_status(iint) == FIVE_FILE_UNKNOWN
 			|| five_get_cache_status(iint) == FIVE_FILE_FAIL) {
 		if (hook_affects_integrity(fn)) {
-			enum integrity_status tint;
+			enum task_integrity_value tint;
 
 			task_integrity_reset(integrity);
 			tint = task_integrity_read(integrity);
-			five_audit_info(task, file, get_string_fn(fn),
+			five_audit_verbose(task, file, five_get_string_fn(fn),
 					prev_tint, tint, "reset-integrity", rc);
 		}
 
@@ -512,7 +512,7 @@ out:
 		is_newstate = five_state_proceed(iint, integrity, fn,
 				&new_tint, &msg);
 		if (is_newstate && msg) {
-			five_audit_verbose(task, file, get_string_fn(fn),
+			five_audit_verbose(task, file, five_get_string_fn(fn),
 					prev_tint, new_tint, msg, rc);
 		}
 	}

@@ -739,8 +739,8 @@ void dsim_reg_set_cmd_ctrl(u32 id, struct decon_lcd *lcd_info, struct dsim_clks 
 	unsigned int time_te_tout;
 
 	time_stable_vfp = lcd_info->xres * DSIM_STABLE_VFP_VALUE * 3 / 100;
-	time_te_protect_on = (clks->hs_clk * TE_PROTECT_ON_TIME) / 16;
-	time_te_tout = (clks->hs_clk * TE_TIMEOUT_TIME) / 16;
+	time_te_protect_on = (clks->hs_clk * TE_PROTECT_ON_TIME) / 8;
+	time_te_tout = (clks->hs_clk * TE_TIMEOUT_TIME) / 8;
 	dsim_reg_set_time_stable_vfp(id, time_stable_vfp);
 	dsim_reg_set_time_te_protect_on(id, time_te_protect_on);
 	dsim_reg_set_time_te_timeout(id, time_te_tout);
@@ -1312,7 +1312,7 @@ int dsim_reg_init(u32 id, struct decon_lcd *lcd_info, u32 data_lane_cnt,
  * configure and set DPHY PLL, byte clock, escape clock and hs clock
  *	- PMS value have to be optained by using PMS Gen. tool (MSC_PLL_WIZARD2_00.exe)
  *	- PLL out is source clock of HS clock
- *	- byte clock = HS clock / 16
+ *	- byte clock = HS clock / 8
  *	- calculate divider of escape clock using requested escape clock
  *	  from driver
  *	- DPHY PLL, byte clock, escape clock are enabled.

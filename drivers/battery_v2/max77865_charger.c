@@ -660,7 +660,7 @@ static void max77865_check_slow_charging(struct max77865_charger_data *charger,
 	int input_current)
 {
 	/* under 400mA considered as slow charging concept for VZW */
-	if (input_current <= SLOW_CHARGING_CURRENT_STANDARD &&
+	if (input_current <= charger->slow_charging_current &&
 		charger->cable_type != SEC_BATTERY_CABLE_NONE) {
 		union power_supply_propval value;
 
@@ -720,8 +720,7 @@ static void max77865_charger_initialize(struct max77865_charger_data *charger)
 	max77865_write_reg(charger->i2c, MAX77865_CHG_REG_CNFG_03, reg_data);
 
 	/*
-	 * cv voltage 4.2V or 4.35V
-	 * MINVSYS 3.6V(default)
+	 * cv voltage 4.3V or 4.35V
 	 */
 	max77865_set_float_voltage(charger, charger->pdata->chg_float_voltage);
 
@@ -1181,8 +1180,16 @@ static int max77865_chg_set_property(struct power_supply *psy,
 			/* if jig attached, change the power source
 			from the VBATFG to the internal VSYS*/
 			max77865_update_reg(charger->i2c, MAX77865_CHG_REG_CNFG_07,
-				((!val->intval) << CHG_CNFG_07_REG_FGSRC_SHIFT),
+				(val->intval << CHG_CNFG_07_REG_FGSRC_SHIFT),
 				CHG_CNFG_07_REG_FGSRC_MASK);
+			max77865_read_reg(charger->i2c, MAX77865_CHG_REG_CNFG_07, &reg);
+			pr_info("%s: POWER_SUPPLY_EXT_PROP_INBAT_VOLTAGE_FGSRC_SWITCHING: reg(0x%x) val(0x%x)\n",
+				__func__, MAX77865_CHG_REG_CNFG_07, reg);
+			break;
+		case POWER_SUPPLY_EXT_PROP_WD_QBATTOFF:
+			max77865_update_reg(charger->i2c, MAX77865_CHG_REG_CNFG_07,
+				((!!(val->intval)) << CHG_CNFG_07_REG_WD_QBATTOFF_SHIFT),
+				CHG_CNFG_07_REG_WD_QBATTOFF_MASK);
 			break;
 		default:
 			return -EINVAL;
@@ -1773,6 +1780,22 @@ static irqreturn_t max77865_systm_irq(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static irqreturn_t max77865_chg_irq(int irq, void *data)
+{
+	struct max77865_charger_data *charger = data;
+	u8 chg_dtls;
+
+	max77865_read_reg(charger->i2c, MAX77865_CHG_REG_DETAILS_01, &chg_dtls);
+	chg_dtls = chg_dtls & 0x0F;
+	pr_info("%s: chg dtls(0x%x)\n", __func__, chg_dtls);
+	if (chg_dtls == 0x0B) {
+		pr_info("%s: watchdog timer expiration\n", __func__);
+		max77865_test_read(charger);
+	}
+
+	return IRQ_HANDLED;
+}
+
 #ifdef CONFIG_OF
 static int max77865_charger_parse_dt(struct max77865_charger_data *charger)
 {
@@ -1819,6 +1842,13 @@ static int max77865_charger_parse_dt(struct max77865_charger_data *charger)
 		if (ret) {
 			pr_info("%s : default vsys ocp\n", __func__);
 			charger->vsys_ocp = 0x04;
+		}
+
+		ret = of_property_read_u32(np, "charger,slow_charging_current",
+					   &charger->slow_charging_current);
+		if (ret) {
+			pr_info("%s : slow_charging_current is Empty\n", __func__);
+			charger->slow_charging_current = SLOW_CHARGING_CURRENT_STANDARD;
 		}
 	}
 
@@ -2051,6 +2081,14 @@ static int max77865_charger_probe(struct platform_device *pdev)
 		pr_err("%s: fail to request tm IRQ: %d: %d\n",
 			   __func__, charger->irq_tm, ret);
 
+	charger->irq_chg = pdata->irq_base + MAX77865_CHG_IRQ_CHG_I;
+	ret = request_threaded_irq(charger->irq_chg, NULL,
+				   max77865_chg_irq, 0,
+				   "chg-ok", charger);
+	if (ret < 0)
+		pr_err("%s: fail to request chg IRQ: %d: %d\n",
+			   __func__, charger->irq_chg, ret);
+
 	ret = max77865_chg_create_attrs(&charger->psy_chg->dev);
 	if (ret) {
 		dev_err(charger->dev,
@@ -2140,6 +2178,10 @@ static void max77865_charger_shutdown(struct platform_device *pdev)
 	reg_data = 0x60;
 	max77865_write_reg(charger->i2c,
 			   MAX77865_CHG_REG_CNFG_12, reg_data);
+	/* Disable WD_QBATTOFF */
+	reg_data = 0x00;
+	max77865_update_reg(charger->i2c, MAX77865_CHG_REG_CNFG_07,
+		reg_data, CHG_CNFG_07_REG_WD_QBATTOFF_MASK);
 	pr_info("func:%s \n", __func__);
 }
 

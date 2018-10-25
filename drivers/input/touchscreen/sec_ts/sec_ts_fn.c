@@ -4060,6 +4060,7 @@ static void run_trx_short_test(void *device_data)
 	char buff[SEC_CMD_STR_LEN] = {0};
 	int rc;
 	char para = TO_TOUCH_MODE;
+	char test[32];
 
 	sec_cmd_set_default_result(sec);
 
@@ -4073,6 +4074,8 @@ static void run_trx_short_test(void *device_data)
 
 	disable_irq(ts->client->irq);
 
+	snprintf(test, sizeof(test), "%d", sec->cmd_param[0]);
+
 	rc = execute_selftest(ts, 0xA7);	// default(0x23) + nosave(0x80) + short gap test(0x04)
 	if (rc > 0) {
 		ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SET_POWER_MODE, &para, 1);
@@ -4082,6 +4085,8 @@ static void run_trx_short_test(void *device_data)
 		sec->cmd_state = SEC_CMD_STATUS_OK;
 
 		input_info(true, &ts->client->dev, "%s: %s\n", __func__, buff);
+
+		sec_cmd_send_event_to_user(&ts->sec, test, "RESULT=PASS");
 		return;
 	}
 
@@ -4093,6 +4098,8 @@ static void run_trx_short_test(void *device_data)
 	sec->cmd_state = SEC_CMD_STATUS_FAIL;
 
 	input_info(true, &ts->client->dev, "%s: %s\n", __func__, buff);
+
+	sec_cmd_send_event_to_user(&ts->sec, test, "RESULT=FAIL");
 	return;
 
 }

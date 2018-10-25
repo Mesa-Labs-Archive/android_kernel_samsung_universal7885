@@ -20,7 +20,7 @@
 
 /* HEADER CAL INFO */
 #define EEP_HEADER_PROJECT_NAME_START_ADDR_FRONT        0x40
-#define EEP_HEADER_MODULE_ID_ADDR_FRONT                 0xA8
+#define EEP_HEADER_MODULE_ID_ADDR_FRONT                 0xAE
 #define EEP_HEADER_SENSOR_ID_ADDR_FRONT                 0xB8
 
 /* MTF DATA: AF Position & Resolution */
@@ -36,7 +36,8 @@
 
 #define EEP_OEM_VER_START_ADDR_FRONT                    0x01E0
 #define EEP_CHECKSUM_OEM_ADDR_FRONT                     0x01FC
-#define OEM_CRC32_LEN_FRONT                             (401)
+#define EEP_CHECKSUM_OEM_BASE_ADDR_FRONT                0x0190
+#define OEM_CRC32_LEN_FRONT                             (48)
 
 /***** AWB Referenced section *****/
 #define EEP_AWB_VER_START_ADDR_FRONT                    0x02E0

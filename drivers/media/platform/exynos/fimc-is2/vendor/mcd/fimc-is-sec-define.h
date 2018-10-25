@@ -304,7 +304,7 @@ struct fimc_is_from_info {
 #endif
 	u32		crosstalk_cal_data_start_addr; /* Cross Talk for Tetra sensor (Remosaic sensor)*/
 	u32		crosstalk_cal_data_end_addr; /* Cross Talk for Tetra sensor (Remosaic sensor)*/
-#if defined(CAMERA_REAR2)
+#if defined(CAMERA_REAR2) && defined(CAMERA_REAR2_USE_COMMON_EEP)
 	u32		oem2_start_addr;
 	u32		oem2_end_addr;
 	u32		awb2_start_addr;
@@ -354,7 +354,7 @@ struct fimc_is_from_info {
 	u32		awb2_section_crc_addr;
 	u32		shading2_section_crc_addr;
 #endif
-#if defined(CAMERA_REAR2)
+#if defined(CAMERA_REAR2) && defined(CAMERA_REAR2_USE_COMMON_EEP)
 	char		oem2_ver[FIMC_IS_OEM_VER_SIZE + 1];
 	char		awb2_ver[FIMC_IS_AWB_VER_SIZE + 1];
 	char		shading2_ver[FIMC_IS_SHADING_VER_SIZE + 1];
@@ -363,6 +363,13 @@ struct fimc_is_from_info {
 	u32		awb2_section_crc_addr;
 	u32		shading2_section_crc_addr;
 	u32		dual_data_section_crc_addr;
+#else
+#if defined(EEP_DUAL_DATA_VER_START_ADDR)
+	char		dual_data_ver[FIMC_IS_HEADER_VER_SIZE + 1];
+	u32		dual_data_section_crc_addr;
+	u32		dual_data_start_addr;
+	u32		dual_data_end_addr;
+#endif
 #endif
 	char		load_fw_name[50]; 		/* DDK */
 #ifdef USE_RTA_BINARY
@@ -477,13 +484,15 @@ ssize_t write_data_to_file(char *name, char *buf, size_t count, loff_t *pos);
 ssize_t read_data_from_file(char *name, char *buf, size_t count, loff_t *pos);
 bool fimc_is_sec_file_exist(char *name);
 
+int fimc_is_sec_get_max_cal_size(int position);
+int fimc_is_sec_get_sysfs_finfo_by_position(int position, struct fimc_is_from_info **finfo);
 int fimc_is_sec_get_sysfs_finfo(struct fimc_is_from_info **finfo);
 int fimc_is_sec_get_sysfs_pinfo(struct fimc_is_from_info **pinfo);
 int fimc_is_sec_get_sysfs_finfo_front(struct fimc_is_from_info **finfo);
 int fimc_is_sec_get_sysfs_pinfo_front(struct fimc_is_from_info **pinfo);
 int fimc_is_sec_get_front_cal_buf(char **buf);
 
-int fimc_is_sec_get_cal_buf(char **buf);
+int fimc_is_sec_get_cal_buf(int position, char **buf);
 int fimc_is_sec_get_loaded_fw(char **buf);
 int fimc_is_sec_set_loaded_fw(char *buf);
 int fimc_is_sec_get_loaded_c1_fw(char **buf);
@@ -493,7 +502,7 @@ int fimc_is_sec_get_camid_from_hal(char *fw_name, char *setf_name);
 int fimc_is_sec_get_camid(void);
 int fimc_is_sec_set_camid(int id);
 int fimc_is_sec_get_pixel_size(char *header_ver);
-int fimc_is_sec_fw_find(struct fimc_is_core *core);
+int fimc_is_sec_fw_find(struct fimc_is_core *core, int position);
 int fimc_is_sec_run_fw_sel(struct device *dev, int position);
 
 int fimc_is_sec_readfw(struct fimc_is_core *core);

@@ -47,10 +47,6 @@
 
 #define CMCS_TIMEOUT                10000	// unit : msec
 
-#define CMCS_CMJIT                  "CMJIT"
-#define CMCS_CM                     "CM"
-#define CMCS_CS                     "CS"
-
 int cmcs_ready = CMCS_READY;
 u8 *ts_cmcs_bin = NULL;
 u32 ts_cmcs_bin_size = 0;
@@ -606,10 +602,7 @@ int ist40xx_apply_cmcs_slope(struct ist40xx_data *data, CMCS_BUF *cmcs_buf)
 				if (j == (width - 1)) {
 					slope_x = 0;
 				} else {
-					slope_x =
-					    100 -
-					    ((presult[idx1] * 100) /
-					     presult[idx2]);
+					slope_x = ((presult[idx1] - presult[idx2]) * 100 / presult[idx1]);
 					if (slope_x < 0)
 						slope_x *= -1;
 				}
@@ -618,10 +611,7 @@ int ist40xx_apply_cmcs_slope(struct ist40xx_data *data, CMCS_BUF *cmcs_buf)
 				if (i == (height - 1)) {
 					slope_y = 0;
 				} else {
-					slope_y =
-					    100 -
-					    ((presult[idx1] * 100) /
-					     presult[idx2]);
+					slope_y = ((presult[idx1] - presult[idx2]) * 100 / presult[idx1]);
 					if (slope_y < 0)
 						slope_y *= -1;
 				}
@@ -1166,6 +1156,7 @@ ssize_t ist40xx_cmcs_info_show(struct device *dev,
 	return count;
 }
 
+#ifdef CONFIG_SEC_FACTORY
 /* sysfs: /sys/class/touch/cmcs/cmcs_binary */
 ssize_t ist40xx_cmcs_binary_show(struct device *dev,
 				 struct device_attribute *attr, char *buf)
@@ -1190,6 +1181,7 @@ ssize_t ist40xx_cmcs_binary_show(struct device *dev,
 binary_end:
 	return sprintf(buf, (ret == 0 ? "OK\n" : "Fail\n"));
 }
+#endif
 
 /* sysfs: /sys/class/touch/cmcs/cmcs_custom */
 ssize_t ist40xx_cmcs_custom_show(struct device *dev,
@@ -1284,8 +1276,7 @@ err_fw_size:
 	if (buff)
 		kfree(buff);
 err_alloc:
-	if (fp)
-		filp_close(fp, NULL);
+	filp_close(fp, NULL);
 err_file_open:
 	set_fs(old_fs);
 
@@ -1448,31 +1439,20 @@ ssize_t ist40xx_cs_rx_show(struct device *dev, struct device_attribute *attr,
 }
 
 int print_cm_slope_result(struct ist40xx_data *data, u8 flag, s16 *buf16,
-			  char *buf, bool fail_list)
+			  char *buf, char *fail_buf, bool fail_list)
 {
 	int i, j;
 	int type, idx;
-	int count = 0, err_cnt = 0;
-	int min_spec, max_spec;
+	int count = 0, err_cnt = 0, fail_cnt = 0;
+	u32 tx_result = 0;
+	u32 rx_result = 0;
 	char msg[128];
+	char fail_msg[128];
 	TSP_INFO *tsp = &data->tsp_info;
-	struct CMCS_SPEC_SLOPE *spec =
-	    (struct CMCS_SPEC_SLOPE *)&ts_cmcs->spec_slope;
 
-	if (flag == CMCS_FLAG_CM_SLOPE0) {
-		min_spec = spec->x_min;
-		max_spec = spec->x_max;
-	} else if (flag == CMCS_FLAG_CM_SLOPE1) {
-		min_spec = spec->y_min;
-		max_spec = spec->y_max;
-	} else {
-		count = sprintf(msg, "Unknown flag: %d\n", flag);
-		strcat(buf, msg);
-		return count;
-	}
 
 	if (fail_list) {
-		count = sprintf(msg, "Spec: screen(%d~%d)", min_spec, max_spec);
+		count = sprintf(msg, "Spec: screen(%d~%d)", 0, CM_GAP_ALL_SPEC);
 		strcat(buf, msg);
 	}
 
@@ -1486,8 +1466,7 @@ int print_cm_slope_result(struct ist40xx_data *data, u8 flag, s16 *buf16,
 				continue;
 
 			if (type == TSP_CH_SCREEN) {
-				if ((buf16[idx] >= min_spec)
-				    && (buf16[idx] <= max_spec))
+				if (buf16[idx] <= CM_GAP_ALL_SPEC)
 					continue;
 			}
 
@@ -1498,7 +1477,41 @@ int print_cm_slope_result(struct ist40xx_data *data, u8 flag, s16 *buf16,
 				strcat(buf, msg);
 			}
 
+			tx_result |= (1 << i);
+			rx_result |= (1 << j);
 			err_cnt++;
+		}
+	}
+
+	if (!fail_list) {
+		for (i = 0; i < tsp->ch_num.tx; i++) {
+			if (tx_result & (1 << i)) {
+				if (fail_cnt > 0) {
+					sprintf(fail_msg, ",");
+					strcat(fail_buf, fail_msg);
+				}
+				sprintf(fail_msg, "TX%d", i);
+				strcat(fail_buf, fail_msg);
+				fail_cnt++;
+				if (fail_cnt >= 5)
+					break;
+			}
+		}
+
+		if (fail_cnt < 5) {
+			for (i = 0; i < tsp->ch_num.rx; i++) {
+				if (rx_result & (1 << i)) {
+					if (fail_cnt > 0) {
+						sprintf(fail_msg, ",");
+						strcat(fail_buf, fail_msg);
+					}
+					sprintf(fail_msg, "RX%d", i);
+					strcat(fail_buf, fail_msg);
+					fail_cnt++;
+					if (fail_cnt >= 5)
+						break;
+				}
+			}
 		}
 	}
 
@@ -1564,15 +1577,22 @@ int print_cm_key_slope_result(struct ist40xx_data *data, s16 *buf16, char *buf,
 	return count;
 }
 
-int print_cm_result(struct ist40xx_data *data, char *buf, bool fail_list)
+int print_cm_result(struct ist40xx_data *data, char *buf, char *fail_buf,
+				bool fail_list)
 {
 	int i, j;
-	int type, idx, err_cnt = 0;
+	int type, idx, err_cnt = 0, fail_cnt = 0;
+	u32 tx_result = 0;
+	u32 rx_result = 0;
 	int min_spec, max_spec;
 	int count = 0;
 	short cm;
 	char msg[128];
+	char fail_msg[128];
 	TSP_INFO *tsp = &data->tsp_info;
+
+	min_spec = CM_MIN_SPEC;
+	max_spec = CM_MAX_SPEC;
 
 	for (i = 0; i < tsp->ch_num.tx; i++) {
 		for (j = 0; j < tsp->ch_num.rx; j++) {
@@ -1582,20 +1602,50 @@ int print_cm_result(struct ist40xx_data *data, char *buf, bool fail_list)
 			if ((type == TSP_CH_UNKNOWN) || (type == TSP_CH_UNUSED))
 				continue;
 
-			min_spec = ts_cmcs_buf->spec_min[idx];
-			max_spec = ts_cmcs_buf->spec_max[idx];
-
 			cm = ts_cmcs_buf->cm[idx];
-			if ((cm >= min_spec) && (cm <= max_spec))
-				continue;	// OK
+			if ((cm < min_spec) || (cm > max_spec)) {
+				if (fail_list) {
+					count += sprintf(msg, "%2d,%2d:%4d (%4d~%4d)\n",
+							i, j, cm, min_spec, max_spec);
+					strcat(buf, msg);
+				}
 
-			if (fail_list) {
-				count += sprintf(msg, "%2d,%2d:%4d (%4d~%4d)\n",
-						 i, j, cm, min_spec, max_spec);
-				strcat(buf, msg);
+				tx_result |= (1 << i);
+				rx_result |= (1 << j);
+				err_cnt++;
 			}
+		}
+	}
 
-			err_cnt++;
+	if (!fail_list) {
+		for (i = 0; i < tsp->ch_num.tx; i++) {
+			if (tx_result & (1 << i)) {
+				if (fail_cnt > 0) {
+					sprintf(fail_msg, ",");
+					strcat(fail_buf, fail_msg);
+				}
+				sprintf(fail_msg, "TX%d", i);
+				strcat(fail_buf, fail_msg);
+				fail_cnt++;
+				if (fail_cnt >= 5)
+					break;
+			}
+		}
+
+		if (fail_cnt < 5) {
+			for (i = 0; i < tsp->ch_num.rx; i++) {
+				if (rx_result & (1 << i)) {
+					if (fail_cnt > 0) {
+						sprintf(fail_msg, ",");
+						strcat(fail_buf, fail_msg);
+					}
+					sprintf(fail_msg, "RX%d", i);
+					strcat(fail_buf, fail_msg);
+					fail_cnt++;
+					if (fail_cnt >= 5)
+						break;
+				}
+			}
 		}
 	}
 
@@ -1610,14 +1660,17 @@ int print_cm_result(struct ist40xx_data *data, char *buf, bool fail_list)
 }
 
 int print_total_result(struct ist40xx_data *data, s16 *buf16, char *buf,
-		       const char *mode, bool fail_list)
+				const char *mode, char *fail_buf, bool fail_list)
 {
 	int i, j;
 	bool success = false;
 	int type, idx;
-	int count = 0, err_cnt = 0;
+	int count = 0, err_cnt = 0, fail_cnt = 0;
+	u32 tx_result = 0;
+	u32 rx_result = 0;
 	int min_spec, max_spec;
 	char msg[128];
+	char fail_msg[128];
 
 	TSP_INFO *tsp = &data->tsp_info;
 	struct CMCS_SPEC_TOTAL *spec;
@@ -1671,7 +1724,41 @@ int print_total_result(struct ist40xx_data *data, s16 *buf16, char *buf,
 				strcat(buf, msg);
 			}
 
+			tx_result |= (1 << i);
+			rx_result |= (1 << j);
 			err_cnt++;
+		}
+	}
+
+	if (!fail_list) {
+		for (i = 0; i < tsp->ch_num.tx; i++) {
+			if (tx_result & (1 << i)) {
+				if (fail_cnt > 0) {
+					sprintf(fail_msg, ",");
+					strcat(fail_buf, fail_msg);
+				}
+				sprintf(fail_msg, "TX%d", i);
+				strcat(fail_buf, fail_msg);
+				fail_cnt++;
+				if (fail_cnt >= 5)
+					break;
+			}
+		}
+
+		if (fail_cnt < 5) {
+			for (i = 0; i < tsp->ch_num.rx; i++) {
+				if (rx_result & (1 << i)) {
+					if (fail_cnt > 0) {
+						sprintf(fail_msg, ",");
+						strcat(fail_buf, fail_msg);
+					}
+					sprintf(fail_msg, "RX%d", i);
+					strcat(fail_buf, fail_msg);
+					fail_cnt++;
+					if (fail_cnt >= 5)
+						break;
+				}
+			}
 		}
 	}
 
@@ -1824,6 +1911,7 @@ ssize_t ist40xx_line_cs_show(struct device *dev,
 	return print_line_cmcs(data, CMCS_FLAG_CS, ts_cmcs_buf->cs, buf);
 }
 
+#ifdef CONFIG_SEC_FACTORY
 /* sysfs: /sys/class/touch/cmcs/cm_key_slope_value */
 ssize_t ist40xx_cm_key_slope_value_show(struct device *dev,
 					struct device_attribute *attr,
@@ -1861,6 +1949,7 @@ int cmcs_test_result(struct ist40xx_data *data)
 	int ret;
 	int result = 0;
 	char *msg = NULL;
+	char fail_msg[128];
 
 	msg = kzalloc(sizeof(char) * 4096, GFP_KERNEL);
 	if (!msg) {
@@ -1893,7 +1982,7 @@ int cmcs_test_result(struct ist40xx_data *data)
 
 	/* CM result */
 	memset(msg, 0, 4096);
-	print_cm_result(data, msg, false);
+	print_cm_result(data, msg, fail_msg, false);
 	if (strncmp(msg, "OK\n", strlen("OK\n")) == 0) {
 		tsp_info("CM result: pass\n");
 	} else {
@@ -1904,7 +1993,7 @@ int cmcs_test_result(struct ist40xx_data *data)
 	/* CM slope0 result */
 	memset(msg, 0, 4096);
 	print_cm_slope_result(data, CMCS_FLAG_CM_SLOPE0, ts_cmcs_buf->slope0,
-			      msg, false);
+					msg, fail_msg, false);
 	if (strncmp(msg, "OK\n", strlen("OK\n")) == 0) {
 		tsp_info("Slope0 result: pass\n");
 	} else {
@@ -1912,10 +2001,10 @@ int cmcs_test_result(struct ist40xx_data *data)
 		tsp_err("Slope0 result: fail\n");
 	}
 
-	/* CM slope0 result */
+	/* CM slope1 result */
 	memset(msg, 0, 4096);
 	print_cm_slope_result(data, CMCS_FLAG_CM_SLOPE1, ts_cmcs_buf->slope1,
-			      msg, false);
+					msg, fail_msg, false);
 	if (strncmp(msg, "OK\n", strlen("OK\n")) == 0) {
 		tsp_info("Slope1 result: pass\n");
 	} else {
@@ -1925,7 +2014,7 @@ int cmcs_test_result(struct ist40xx_data *data)
 
 	/* CS Result */
 	memset(msg, 0, 4096);
-	print_total_result(data, ts_cmcs_buf->cs, msg, CMCS_CS, false);
+	print_total_result(data, ts_cmcs_buf->cs, msg, CMCS_CS, fail_msg, false);
 	if (strncmp(msg, "OK\n", strlen("OK\n")) == 0) {
 		tsp_info("CS result: pass\n");
 	} else {
@@ -1955,10 +2044,10 @@ ssize_t ist40xx_cmcs_test_all_show(struct device *dev,
 
 	return sprintf(buf, "%d", result);
 }
+#endif
 
 /* sysfs : cmcs */
 static DEVICE_ATTR(info, S_IRUGO, ist40xx_cmcs_info_show, NULL);
-static DEVICE_ATTR(cmcs_binary, S_IRUGO, ist40xx_cmcs_binary_show, NULL);
 static DEVICE_ATTR(cmcs_custom, S_IRUGO, ist40xx_cmcs_custom_show, NULL);
 static DEVICE_ATTR(cmcs_sdcard, S_IRUGO, ist40xx_cmcs_sdcard_show, NULL);
 
@@ -1966,20 +2055,26 @@ static DEVICE_ATTR(cs_tx, S_IRUGO, ist40xx_cs_tx_show, NULL);
 static DEVICE_ATTR(cs_rx, S_IRUGO, ist40xx_cs_rx_show, NULL);
 static DEVICE_ATTR(cm_key_slope_result, S_IRUGO,
 		   ist40xx_cm_key_slope_result_show, NULL);
+
+#ifdef CONFIG_SEC_FACTORY
 static DEVICE_ATTR(cm_key_slope_value, S_IRUGO, ist40xx_cm_key_slope_value_show,
 		   NULL);
 static DEVICE_ATTR(cmcs_test_all, S_IRUGO, ist40xx_cmcs_test_all_show, NULL);
+static DEVICE_ATTR(cmcs_binary, S_IRUGO, ist40xx_cmcs_binary_show, NULL);
+#endif
 
 static struct attribute *cmcs_attributes[] = {
 	&dev_attr_info.attr,
-	&dev_attr_cmcs_binary.attr,
 	&dev_attr_cmcs_custom.attr,
 	&dev_attr_cmcs_sdcard.attr,
 	&dev_attr_cs_tx.attr,
 	&dev_attr_cs_rx.attr,
 	&dev_attr_cm_key_slope_result.attr,
+#ifdef CONFIG_SEC_FACTORY
 	&dev_attr_cm_key_slope_value.attr,
 	&dev_attr_cmcs_test_all.attr,
+	&dev_attr_cmcs_binary.attr,
+#endif
 	NULL,
 };
 
@@ -2649,8 +2744,8 @@ static ssize_t cm_jit_result_sysfs_read(struct file *filp, struct kobject *kobj,
 
 		data->node_buf[0] = '\0';
 		data->node_cnt = print_total_result(data, ts_cmcs_buf->cm_jit,
-						    data->node_buf, CMCS_CMJIT,
-						    true);
+							data->node_buf, CMCS_CMJIT, NULL,
+							true);
 	}
 
 	if (off >= MAX_BUF_SIZE)
@@ -2685,7 +2780,7 @@ static ssize_t cm_result_sysfs_read(struct file *filp, struct kobject *kobj,
 		}
 
 		data->node_buf[0] = '\0';
-		data->node_cnt = print_cm_result(data, data->node_buf, true);
+		data->node_cnt = print_cm_result(data, data->node_buf, NULL, true);
 	}
 
 	if (off >= MAX_BUF_SIZE)
@@ -2802,7 +2897,7 @@ static ssize_t cm_slope0_result_sysfs_read(struct file *filp,
 		data->node_cnt =
 		    print_cm_slope_result(data, CMCS_FLAG_CM_SLOPE0,
 					  ts_cmcs_buf->slope0, data->node_buf,
-					  true);
+					  NULL, true);
 	}
 
 	if (off >= MAX_BUF_SIZE)
@@ -2841,7 +2936,7 @@ static ssize_t cm_slope1_result_sysfs_read(struct file *filp,
 		data->node_cnt =
 		    print_cm_slope_result(data, CMCS_FLAG_CM_SLOPE1,
 					  ts_cmcs_buf->slope1, data->node_buf,
-					  true);
+					  NULL, true);
 	}
 
 	if (off >= MAX_BUF_SIZE)
@@ -2877,8 +2972,8 @@ static ssize_t cs_result_sysfs_read(struct file *filp, struct kobject *kobj,
 
 		data->node_buf[0] = '\0';
 		data->node_cnt = print_total_result(data, ts_cmcs_buf->cs,
-						    data->node_buf, CMCS_CS,
-						    true);
+							data->node_buf, CMCS_CS, NULL,
+							true);
 	}
 
 	if (off >= MAX_BUF_SIZE)

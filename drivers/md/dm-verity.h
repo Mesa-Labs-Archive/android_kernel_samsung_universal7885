@@ -17,6 +17,7 @@
 #include <crypto/hash.h>
 
 #define DM_VERITY_MAX_LEVELS		63
+#define IO_RETRY_MAX			2
 
 enum verity_mode {
 	DM_VERITY_MODE_EIO,
@@ -80,7 +81,7 @@ struct dm_verity_io {
 	struct bvec_iter iter;
 
 	struct work_struct work;
-
+	int io_retry;
 	/*
 	 * Three variably-size fields follow this struct:
 	 *

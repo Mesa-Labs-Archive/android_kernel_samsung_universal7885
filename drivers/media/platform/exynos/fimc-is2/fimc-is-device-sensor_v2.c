@@ -1055,9 +1055,12 @@ static int fimc_is_sensor_notify_by_fend(struct fimc_is_device_sensor *device, v
 	 * This processing frame's fcount should be equals to sensor device's fcount.
 	 * If it's not, it will be processed in next frame.
 	 */
-	if (frame && (frame->fcount != device->fcount)) {
-		mgwarn("shot mismatch for sensor(%d != %d)",
-			device, group, frame->fcount, device->fcount);
+	if (frame && (frame->fcount > device->fcount)) {
+		mgwarn("frame count is bigger than current (%d > %d)[%d/%d/%d]",
+			device, group, frame->fcount, device->fcount,
+			framemgr->queued_count[FS_REQUEST],
+			framemgr->queued_count[FS_PROCESS],
+			framemgr->queued_count[FS_COMPLETE]);
 		frame = NULL;
 	}
 
@@ -1347,6 +1350,12 @@ static int fimc_is_sensor_probe(struct platform_device *pdev)
 	device->devicemgr = &core->devicemgr;
 	device->dtp_del_flag = false;
 
+#ifdef ENABLE_INIT_AWB
+	memset(device->init_wb, 0, sizeof(float) * WB_GAIN_COUNT);
+	memset(device->last_wb, 0, sizeof(float) * WB_GAIN_COUNT);
+	memset(device->chk_wb, 0, sizeof(float) * WB_GAIN_COUNT);
+#endif
+
 	platform_set_drvdata(pdev, device);
 	init_waitqueue_head(&device->instant_wait);
 	INIT_WORK(&device->instant_work, fimc_is_sensor_instanton);
@@ -1548,6 +1557,11 @@ int fimc_is_sensor_open(struct fimc_is_device_sensor *device,
 	memset(&device->sensor_ctl, 0, sizeof(struct camera2_sensor_ctl));
 	memset(&device->lens_ctl, 0, sizeof(struct camera2_lens_ctl));
 	memset(&device->flash_ctl, 0, sizeof(struct camera2_flash_ctl));
+
+#ifdef ENABLE_INIT_AWB
+	/* copy last awb gain value to init awb value */
+	memcpy(device->init_wb, device->last_wb, sizeof(float) * WB_GAIN_COUNT);
+#endif
 
 	groupmgr = device->groupmgr;
 	group = &device->group_sensor;
@@ -1938,6 +1952,23 @@ int fimc_is_sensor_s_input(struct fimc_is_device_sensor *device,
 						device, ret, device->smc_state, FIMC_IS_SENSOR_SMC_PREPARE);
 			device->smc_state = FIMC_IS_SENSOR_SMC_PREPARE;
 		}
+	}
+#endif
+
+#ifdef ENABLE_INIT_AWB
+	switch (device->position) {
+	case SENSOR_POSITION_REAR:
+	case SENSOR_POSITION_REAR2:
+	case SENSOR_POSITION_REAR3:
+		device->init_wb_cnt = INIT_AWB_COUNT_REAR;
+		break;
+	case SENSOR_POSITION_FRONT:
+	case SENSOR_POSITION_FRONT2:
+		device->init_wb_cnt = INIT_AWB_COUNT_FRONT;
+		break;
+	default:
+		device->init_wb_cnt = 0; /* not operated */
+		break;
 	}
 #endif
 
@@ -3540,6 +3571,24 @@ static int fimc_is_sensor_shot(struct fimc_is_device_ischain *ischain,
 		ret = -EINVAL;
 		goto p_err;
 	}
+
+#ifdef ENABLE_INIT_AWB
+	if ((frame->shot->ctl.aa.awbMode == AA_AWBMODE_WB_AUTO)
+		&& (frame->fcount <= sensor->init_wb_cnt)
+		&& (frame->shot->ctl.aa.sceneMode == AA_SCENE_MODE_FACE_LOCK)
+		&& memcmp(sensor->init_wb, sensor->chk_wb, sizeof(float) * WB_GAIN_COUNT)) {
+
+		/* for applying init AWB feature,
+		 * 1. awbMode is AA_AWB_MODE_WB_AUTO
+		 * 2. it is applied at only initial count frame num
+		 * 3. set only last_ae value exist
+		 */
+		memcpy(frame->shot->ctl.color.gains, sensor->init_wb, sizeof(float) * WB_GAIN_COUNT);
+		frame->shot->ctl.aa.awbMode = AA_AWBMODE_OFF;
+
+		mgrdbgs(1, "init AWB(applied cnt:%d)", group->device, group, frame, sensor->init_wb_cnt);
+	}
+#endif
 
 	PROGRAM_COUNT(8);
 

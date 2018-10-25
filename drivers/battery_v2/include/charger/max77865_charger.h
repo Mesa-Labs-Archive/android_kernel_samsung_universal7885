@@ -157,6 +157,8 @@ ssize_t max77865_chg_store_attrs(struct device *dev,
 #define CHG_CNFG_07_REG_FMBST_MASK		(0x1 << CHG_CNFG_07_REG_FMBST_SHIFT)
 #define CHG_CNFG_07_REG_FGSRC_SHIFT		1
 #define CHG_CNFG_07_REG_FGSRC_MASK		(0x1 << CHG_CNFG_07_REG_FGSRC_SHIFT)
+#define CHG_CNFG_07_REG_WD_QBATTOFF_SHIFT	7
+#define CHG_CNFG_07_REG_WD_QBATTOFF_MASK	(0x1 << CHG_CNFG_07_REG_WD_QBATTOFF_SHIFT)
 
 /* MAX77865_CHG_REG_CHG_CNFG_09 */
 #define MAX77865_CHG_CHGIN_LIM                  0x7F
@@ -262,7 +264,7 @@ struct max77865_charger_data {
 	int		irq_wcin;
 	int		irq_chgin;
 	int		irq_aicl;
-	int             irq_aicl_enabled;
+	int		irq_aicl_enabled;
 	/* software regulation */
 	bool		soft_reg_state;
 	int		soft_reg_current;
@@ -282,7 +284,7 @@ struct max77865_charger_data {
 	int		wc_current;
 	int		wc_pre_current;
 
-	bool            jig_low_active;
+	bool    jig_low_active;
 	int		jig_gpio;
 
 	bool enable_sysovlo_irq;
@@ -290,6 +292,7 @@ struct max77865_charger_data {
 	struct wake_lock sysovlo_wake_lock;
 
 	u8 vsys_ocp;
+	int	slow_charging_current;
 
 	bool is_mdock;
 	bool otg_on;

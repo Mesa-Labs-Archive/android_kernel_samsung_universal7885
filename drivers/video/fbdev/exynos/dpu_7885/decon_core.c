@@ -36,6 +36,9 @@
 #include <soc/samsung/cal-if.h>
 #include <soc/samsung/exynos-pd.h>
 #include <dt-bindings/clock/exynos7885.h>
+#ifdef CONFIG_SEC_DEBUG
+#include <linux/sec_debug.h>
+#endif
 
 #include "decon.h"
 #include "dsim.h"
@@ -147,6 +150,66 @@ void decon_dump(struct decon_device *decon)
 	if (acquired)
 		console_unlock();
 }
+
+#ifdef CONFIG_LOGGING_BIGDATA_BUG
+extern unsigned int get_panel_bigdata(struct dsim_device *dsim);
+
+/* Gen Big Data Error for Decon's Bug
+ *
+ * return value
+ * 1. 31 ~ 28 : decon_id
+ * 2. 27 ~ 24 : decon eing pend register
+ * 3. 23 ~ 16 : dsim underrun count
+ * 4. 15 ~  8 : 0x0e panel register
+ * 5.  7 ~  0 : 0x0a panel register
+ * */
+
+static unsigned int gen_decon_bug_bigdata(struct decon_device *decon)
+{
+	struct dsim_device *dsim;
+	unsigned int value, panel_value;
+	unsigned int underrun_cnt = 0;
+
+	/* for decon id */
+	value = decon->id << 28;
+
+
+	if (decon->id == 0) {
+		/* for eint pend value */
+		value |= (decon->eint_pend & 0x0f) << 24;
+
+		/* for underrun count */
+		dsim = container_of(decon->out_sd[0], struct dsim_device, sd);
+
+		if (dsim != NULL) {
+			underrun_cnt = dsim->total_underrun_cnt;
+			if (underrun_cnt > 0xff) {
+				decon_info("%s:dsim underrun exceed 1byte : %d\n",
+						__func__, underrun_cnt);
+				underrun_cnt = 0xff;
+			}
+		}
+		value |= underrun_cnt << 16;
+
+		/* for panel dump */
+		panel_value = get_panel_bigdata(dsim);
+		value |= panel_value & 0xffff;
+	}
+
+	decon_info("%s:big data : %x\n", __func__, value);
+	return value;
+}
+
+void log_decon_bigdata(struct decon_device *decon)
+{
+	unsigned int bug_err_num;
+
+	bug_err_num = gen_decon_bug_bigdata(decon);
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+	sec_debug_set_extra_info_decon(bug_err_num);
+#endif
+}
+#endif
 
 /* ---------- CHECK FUNCTIONS ----------- */
 static void decon_win_conig_to_regs_param
@@ -429,6 +492,9 @@ static int decon_enable(struct decon_device *decon)
 		}
 	}
 
+	if (decon->dt.disp_freq)
+		decon->bts.ops->bts_update_qos_disp(decon, decon->dt.disp_freq);
+
 	pm_stay_awake(decon->dev);
 	dev_warn(decon->dev, "pm_stay_awake");
 	ret = v4l2_subdev_call(decon->out_sd[0], video, s_stream, 1);
@@ -571,6 +637,9 @@ static int decon_disable(struct decon_device *decon)
 					decon->out_sd[1]->name);
 		}
 	}
+
+	if (decon->dt.disp_freq)
+		decon->bts.ops->bts_update_qos_disp(decon, 0);
 
 	if (decon->dt.out_type == DECON_OUT_DSI) {
 		pm_relax(decon->dev);
@@ -728,6 +797,9 @@ int decon_wait_for_vsync(struct decon_device *decon, u32 timeout)
 			te_pend = readl(decon->d.eint_pend);
 			decon_err("decon%d wait for vsync timeout(p:0x%x)\n",
 				decon->id, te_pend);
+#ifdef CONFIG_LOGGING_BIGDATA_BUG
+			decon->eint_pend = te_pend;
+#endif
 			if (!te_pend)
 				decon->frm_status |= DPU_FRM_NO_TE;
 		} else {
@@ -1325,6 +1397,9 @@ static void __decon_update_regs(struct decon_device *decon, struct decon_reg_dat
 
 	if (decon_reg_start(decon->id, &psr) < 0) {
 		decon_dump(decon);
+#ifdef CONFIG_LOGGING_BIGDATA_BUG
+		log_decon_bigdata(decon);
+#endif
 		BUG();
 	}
 
@@ -1478,6 +1553,9 @@ static void decon_update_regs(struct decon_device *decon,
 		decon_wait_for_vstatus(decon, 50);
 		if (decon_reg_wait_for_update_timeout(decon->id, SHADOW_UPDATE_TIMEOUT) < 0) {
 			decon_dump(decon);
+#ifdef CONFIG_LOGGING_BIGDATA_BUG
+			log_decon_bigdata(decon);
+#endif
 			BUG();
 		}
 		if(!video_emul)
@@ -2335,6 +2413,14 @@ static void decon_parse_dt(struct decon_device *decon)
 		}
 	}
 
+
+	if(!of_property_read_u32(dev->of_node, "disp_freq", &decon->dt.disp_freq))
+		decon_info("disp_freq(Khz): %u\n", decon->dt.disp_freq);
+	else {
+		decon->dt.disp_freq = 0;
+		decon_info("disp_freq is not found in dt\n");
+	}
+
 	if (decon->dt.out_type == DECON_OUT_DSI) {
 		te_eint = of_get_child_by_name(decon->dev->of_node, "te_eint");
 		if (!te_eint) {
@@ -2517,6 +2603,9 @@ static int decon_initial_display(struct decon_device *decon, bool is_colormap)
 			}
 		}
 	}
+
+	if (decon->dt.disp_freq)
+		decon->bts.ops->bts_update_qos_disp(decon, decon->dt.disp_freq);
 
 	decon_to_init_param(decon, &p);
 #if !defined(BRINGUP_DECON_BIST)

@@ -95,6 +95,10 @@ enum com_index {
 	COM_AUDIO   = 7,
 };
 
+#if IS_ENABLED(CONFIG_HICCUP_CHARGER)
+#define GND_PATH COM_USB_CP
+#endif
+
 enum{
 	ADC_SCANMODE_CONTINUOUS = 0x0,
 	ADC_SCANMODE_ONESHOT = 0x1,
@@ -193,17 +197,19 @@ typedef struct _muic_data_t {
 	u8 muic_vendor;			/* Vendor ID */
 	u8 muic_version;		/* Version ID */
 
-	bool			is_gamepad;
-	bool			is_factory_start;
-	bool			is_rustproof;
-	bool			is_otg_test;
+	bool	is_gamepad;
+	bool	is_factory_start;
+	bool	is_rustproof;
+	bool	is_otg_test;
+	bool	is_hiccup_mode;
+
 	struct delayed_work	init_work;
 	struct delayed_work	usb_work;
 
-	bool			is_muic_ready;
-	bool			undefined_range;
-	bool			discard_interrupt;
-	bool			is_dcdtmr_intr;
+	bool	is_muic_ready;
+	bool	undefined_range;
+	bool	discard_interrupt;
+	bool	is_dcdtmr_intr;
 
 	struct hv_data		*phv;
 

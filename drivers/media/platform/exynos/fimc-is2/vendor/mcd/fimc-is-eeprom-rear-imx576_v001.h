@@ -25,7 +25,7 @@
 #define EEP_HEADER_DUAL_DATA_END_ADDR             0x24
 /* HEADER CAL INFO */
 #define EEP_HEADER_PROJECT_NAME_START_ADDR        0x48
-#define EEP_HEADER_MODULE_ID_ADDR                 0xA8
+#define EEP_HEADER_MODULE_ID_ADDR                 0xAE
 #define EEP_HEADER_SENSOR_ID_ADDR                 0xB8
 
 /* MTF DATA: AF Position & Resolution */

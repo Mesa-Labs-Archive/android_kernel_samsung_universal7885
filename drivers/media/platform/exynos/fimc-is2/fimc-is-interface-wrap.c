@@ -414,7 +414,9 @@ int fimc_is_itf_process_off_wrap(struct fimc_is_device_ischain *device, u32 grou
 
 	for (group_id = 0; group_id < GROUP_ID_MAX; group_id++) {
 		if ((group) & GROUP_ID(group_id)) {
-			if (GET_DEVICE_TYPE_BY_GRP(group_id) == FIMC_IS_DEVICE_ISCHAIN && !core->reboot) {
+			if (GET_DEVICE_TYPE_BY_GRP(group_id) == FIMC_IS_DEVICE_ISCHAIN) {
+				if (core->reboot)
+					continue;
 				fimc_is_hardware_process_stop(hardware, instance, group_id, fstop);
 			} else {
 				/* in case of sensor group */

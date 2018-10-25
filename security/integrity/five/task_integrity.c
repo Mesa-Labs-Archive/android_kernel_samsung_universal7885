@@ -16,6 +16,7 @@
 
 #include <linux/task_integrity.h>
 #include <linux/slab.h>
+#include "five_porting.h"
 
 static struct kmem_cache *task_integrity_cache;
 

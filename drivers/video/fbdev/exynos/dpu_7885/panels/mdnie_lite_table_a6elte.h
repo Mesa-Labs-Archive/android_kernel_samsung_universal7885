@@ -23,6 +23,12 @@ static struct mdnie_color_lens_info color_lens_info = {
 	.max_w = 24
 };
 
+static struct rgb_info wrgb_swa = {
+	.r = 11,
+	.g = 13,
+	.b = 0
+};
+
 static inline int color_offset_f1(int x, int y)
 {
 	return ((y << 10) - (((x << 10) * 547) / 503) + (31 << 10)) >> 10;
@@ -2103,6 +2109,147 @@ static unsigned char AUTO_GALLERY_2[] = {
 	0x00, //data_width mask 00 000
 };
 
+static unsigned char AUTO_GALLERY_SWA_1[] = {
+	0xEC,
+	0x00, //roi ctrl
+	0x00, //roi1 y end
+	0x00,
+	0x00, //roi1 y start
+	0x00,
+	0x00, //roi1 x end
+	0x00,
+	0x00, //roi1 x strat
+	0x00,
+	0x00, //roi0 y end
+	0x00,
+	0x00, //roi0 y start
+	0x00,
+	0x00, //roi0 x end
+	0x00,
+	0x00, //roi0 x start
+	0x00,
+	0x04, //nr de cs gamma 0000
+	0xff, //nr_mask_th
+	0x00, //de_gain 10
+	0x08,
+	0x00, //de_maxplus 11
+	0xa0,
+	0x00, //de_maxminus 11
+	0xa0,
+	0x01, //cs gain 10
+	0x00,
+	0x00, //curve 1 b
+	0x20, //curve 1 a
+	0x00, //curve 2 b
+	0x20, //curve 2 a
+	0x00, //curve 3 b
+	0x20, //curve 3 a
+	0x00, //curve 4 b
+	0x20, //curve 4 a
+	0x00, //curve 5 b
+	0x20, //curve 5 a
+	0x00, //curve 6 b
+	0x20, //curve 6 a
+	0x00, //curve 7 b
+	0x20, //curve 7 a
+	0x00, //curve 8 b
+	0x20, //curve 8 a
+	0x00, //curve 9 b
+	0x20, //curve 9 a
+	0x00, //curve10 b
+	0x20, //curve10 a
+	0x00, //curve11 b
+	0x20, //curve11 a
+	0x00, //curve12 b
+	0x20, //curve12 a
+	0x00, //curve13 b
+	0x20, //curve13 a
+	0x00, //curve14 b
+	0x20, //curve14 a
+	0x00, //curve15 b
+	0x20, //curve15 a
+	0x00, //curve16 b
+	0x20, //curve16 a
+	0x00, //curve17 b
+	0x20, //curve17 a
+	0x00, //curve18 b
+	0x20, //curve18 a
+	0x00, //curve19 b
+	0x20, //curve19 a
+	0x00, //curve20 b
+	0x20, //curve20 a
+	0x00, //curve21 b
+	0x20, //curve21 a
+	0x00, //curve22 b
+	0x20, //curve22 a
+	0x00, //curve23 b
+	0x20, //curve23 a
+	0x00, //curve24 b
+	0xFF, //curve24 a
+	0x30, //ascr_skin_on strength 0 00000
+	0x6a, //ascr_skin_cb
+	0x9a, //ascr_skin_cr
+	0x25, //ascr_dist_up
+	0x1a, //ascr_dist_down
+	0x16, //ascr_dist_right
+	0x2a, //ascr_dist_left
+	0x00, //ascr_div_up 20
+	0x37,
+	0x5a,
+	0x00, //ascr_div_down
+	0x4e,
+	0xc5,
+	0x00, //ascr_div_right
+	0x5d,
+	0x17,
+	0x00, //ascr_div_left
+	0x30,
+	0xc3,
+	0xff, //ascr_skin_Rr
+	0x38, //ascr_skin_Rg
+	0x4a, //ascr_skin_Rb
+	0xff, //ascr_skin_Yr
+	0xf9, //ascr_skin_Yg
+	0x00, //ascr_skin_Yb
+	0xd8, //ascr_skin_Mr
+	0x00, //ascr_skin_Mg
+	0xd9, //ascr_skin_Mb
+	0xff, //ascr_skin_Wr
+	0xff, //ascr_skin_Wg
+	0xff, //ascr_skin_Wb
+	0x00, //ascr_Cr
+	0xe0, //ascr_Rr
+	0xff, //ascr_Cg
+	0x00, //ascr_Rg
+	0xf6, //ascr_Cb
+	0x00, //ascr_Rb
+	0xd8, //ascr_Mr
+	0x3b, //ascr_Gr
+	0x00, //ascr_Mg
+	0xff, //ascr_Gg
+	0xd9, //ascr_Mb
+	0x00, //ascr_Gb
+	0xff, //ascr_Yr
+	0x14, //ascr_Br
+	0xf9, //ascr_Yg
+	0x00, //ascr_Bg
+	0x00, //ascr_Yb
+	0xff, //ascr_Bb
+	0xff, //ascr_Wr
+	0x00, //ascr_Kr
+	0xff, //ascr_Wg
+	0x00, //ascr_Kg
+	0xff, //ascr_Wb
+	0x00, //ascr_Kb
+};
+
+static unsigned char AUTO_GALLERY_SWA_2[] = {
+	0xEB,
+	0x01, //mdnie_en
+	0x33, //scr_roi 1 scr algo_roi 1 algo 00 1 0 00 1 0
+	0x00, //data_width mask 00 000
+};
+
 ////////////////// VIDEO /////////////////////
 static unsigned char STANDARD_VIDEO_1[] = {
 	0xEC,
@@ -2809,571 +2956,6 @@ static unsigned char AUTO_VIDEO_2[] = {
 	0x00, //data_width mask 00 000
 };
 
-////////////////// VT /////////////////////
-static unsigned char STANDARD_VT_1[] = {
-	0xEC,
-	0x00, //roi ctrl
-	0x00, //roi1 y end
-	0x00,
-	0x00, //roi1 y start
-	0x00,
-	0x00, //roi1 x end
-	0x00,
-	0x00, //roi1 x strat
-	0x00,
-	0x00, //roi0 y end
-	0x00,
-	0x00, //roi0 y start
-	0x00,
-	0x00, //roi0 x end
-	0x00,
-	0x00, //roi0 x start
-	0x00,
-	0x00, //nr de cs gamma 0000
-	0xff, //nr_mask_th
-	0x00, //de_gain 10
-	0x00,
-	0x00, //de_maxplus 11
-	0xa0,
-	0x00, //de_maxminus 11
-	0xa0,
-	0x01, //cs gain 10
-	0x00,
-	0x00, //curve 1 b
-	0x20, //curve 1 a
-	0x00, //curve 2 b
-	0x20, //curve 2 a
-	0x00, //curve 3 b
-	0x20, //curve 3 a
-	0x00, //curve 4 b
-	0x20, //curve 4 a
-	0x00, //curve 5 b
-	0x20, //curve 5 a
-	0x00, //curve 6 b
-	0x20, //curve 6 a
-	0x00, //curve 7 b
-	0x20, //curve 7 a
-	0x00, //curve 8 b
-	0x20, //curve 8 a
-	0x00, //curve 9 b
-	0x20, //curve 9 a
-	0x00, //curve10 b
-	0x20, //curve10 a
-	0x00, //curve11 b
-	0x20, //curve11 a
-	0x00, //curve12 b
-	0x20, //curve12 a
-	0x00, //curve13 b
-	0x20, //curve13 a
-	0x00, //curve14 b
-	0x20, //curve14 a
-	0x00, //curve15 b
-	0x20, //curve15 a
-	0x00, //curve16 b
-	0x20, //curve16 a
-	0x00, //curve17 b
-	0x20, //curve17 a
-	0x00, //curve18 b
-	0x20, //curve18 a
-	0x00, //curve19 b
-	0x20, //curve19 a
-	0x00, //curve20 b
-	0x20, //curve20 a
-	0x00, //curve21 b
-	0x20, //curve21 a
-	0x00, //curve22 b
-	0x20, //curve22 a
-	0x00, //curve23 b
-	0x20, //curve23 a
-	0x00, //curve24 b
-	0xFF, //curve24 a
-	0x00, //ascr_skin_on strength 0 00000
-	0x67, //ascr_skin_cb
-	0xa9, //ascr_skin_cr
-	0x0c, //ascr_dist_up
-	0x0c, //ascr_dist_down
-	0x0c, //ascr_dist_right
-	0x0c, //ascr_dist_left
-	0x00, //ascr_div_up 20
-	0xaa,
-	0xab,
-	0x00, //ascr_div_down
-	0xaa,
-	0xab,
-	0x00, //ascr_div_right
-	0xaa,
-	0xab,
-	0x00, //ascr_div_left
-	0xaa,
-	0xab,
-	0xff, //ascr_skin_Rr
-	0x00, //ascr_skin_Rg
-	0x00, //ascr_skin_Rb
-	0xff, //ascr_skin_Yr
-	0xff, //ascr_skin_Yg
-	0x00, //ascr_skin_Yb
-	0xff, //ascr_skin_Mr
-	0x00, //ascr_skin_Mg
-	0xff, //ascr_skin_Mb
-	0xff, //ascr_skin_Wr
-	0xff, //ascr_skin_Wg
-	0xff, //ascr_skin_Wb
-	0x0c, //ascr_Cr
-	0xf8, //ascr_Rr
-	0xf0, //ascr_Cg
-	0x0d, //ascr_Rg
-	0xe1, //ascr_Cb
-	0x0d, //ascr_Rb
-	0xff, //ascr_Mr
-	0x00, //ascr_Gr
-	0x0f, //ascr_Mg
-	0xe5, //ascr_Gg
-	0xe5, //ascr_Mb
-	0x0a, //ascr_Gb
-	0xf3, //ascr_Yr
-	0x16, //ascr_Br
-	0xef, //ascr_Yg
-	0x0c, //ascr_Bg
-	0x24, //ascr_Yb
-	0xf0, //ascr_Bb
-	0xff, //ascr_Wr
-	0x00, //ascr_Kr
-	0xf7, //ascr_Wg
-	0x00, //ascr_Kg
-	0xef, //ascr_Wb
-	0x00, //ascr_Kb
-};
-
-static unsigned char STANDARD_VT_2[] = {
-	0xEB,
-	0x01, //mdnie_en
-	0x33, //scr_roi 1 scr algo_roi 1 algo 00 1 0 00 1 0
-	0x00, //data_width mask 00 000
-};
-
-static unsigned char NATURAL_VT_1[] = {
-	0xEC,
-	0x00, //roi ctrl
-	0x00, //roi1 y end
-	0x00,
-	0x00, //roi1 y start
-	0x00,
-	0x00, //roi1 x end
-	0x00,
-	0x00, //roi1 x strat
-	0x00,
-	0x00, //roi0 y end
-	0x00,
-	0x00, //roi0 y start
-	0x00,
-	0x00, //roi0 x end
-	0x00,
-	0x00, //roi0 x start
-	0x00,
-	0x02, //nr de cs gamma 0000
-	0xff, //nr_mask_th
-	0x00, //de_gain 10
-	0x00,
-	0x00, //de_maxplus 11
-	0xa0,
-	0x00, //de_maxminus 11
-	0xa0,
-	0x01, //cs gain 10
-	0x40,
-	0x00, //curve 1 b
-	0x20, //curve 1 a
-	0x00, //curve 2 b
-	0x20, //curve 2 a
-	0x00, //curve 3 b
-	0x20, //curve 3 a
-	0x00, //curve 4 b
-	0x20, //curve 4 a
-	0x00, //curve 5 b
-	0x20, //curve 5 a
-	0x00, //curve 6 b
-	0x20, //curve 6 a
-	0x00, //curve 7 b
-	0x20, //curve 7 a
-	0x00, //curve 8 b
-	0x20, //curve 8 a
-	0x00, //curve 9 b
-	0x20, //curve 9 a
-	0x00, //curve10 b
-	0x20, //curve10 a
-	0x00, //curve11 b
-	0x20, //curve11 a
-	0x00, //curve12 b
-	0x20, //curve12 a
-	0x00, //curve13 b
-	0x20, //curve13 a
-	0x00, //curve14 b
-	0x20, //curve14 a
-	0x00, //curve15 b
-	0x20, //curve15 a
-	0x00, //curve16 b
-	0x20, //curve16 a
-	0x00, //curve17 b
-	0x20, //curve17 a
-	0x00, //curve18 b
-	0x20, //curve18 a
-	0x00, //curve19 b
-	0x20, //curve19 a
-	0x00, //curve20 b
-	0x20, //curve20 a
-	0x00, //curve21 b
-	0x20, //curve21 a
-	0x00, //curve22 b
-	0x20, //curve22 a
-	0x00, //curve23 b
-	0x20, //curve23 a
-	0x00, //curve24 b
-	0xFF, //curve24 a
-	0x00, //ascr_skin_on strength 0 00000
-	0x67, //ascr_skin_cb
-	0xa9, //ascr_skin_cr
-	0x0c, //ascr_dist_up
-	0x0c, //ascr_dist_down
-	0x0c, //ascr_dist_right
-	0x0c, //ascr_dist_left
-	0x00, //ascr_div_up 20
-	0xaa,
-	0xab,
-	0x00, //ascr_div_down
-	0xaa,
-	0xab,
-	0x00, //ascr_div_right
-	0xaa,
-	0xab,
-	0x00, //ascr_div_left
-	0xaa,
-	0xab,
-	0xff, //ascr_skin_Rr
-	0x00, //ascr_skin_Rg
-	0x00, //ascr_skin_Rb
-	0xff, //ascr_skin_Yr
-	0xff, //ascr_skin_Yg
-	0x00, //ascr_skin_Yb
-	0xff, //ascr_skin_Mr
-	0x00, //ascr_skin_Mg
-	0xff, //ascr_skin_Mb
-	0xff, //ascr_skin_Wr
-	0xff, //ascr_skin_Wg
-	0xff, //ascr_skin_Wb
-	0x94, //ascr_Cr
-	0xd7, //ascr_Rr
-	0xf5, //ascr_Cg
-	0x24, //ascr_Rg
-	0xee, //ascr_Cb
-	0x24, //ascr_Rb
-	0xe0, //ascr_Mr
-	0x72, //ascr_Gr
-	0x2c, //ascr_Mg
-	0xee, //ascr_Gg
-	0xdf, //ascr_Mb
-	0x38, //ascr_Gb
-	0xf2, //ascr_Yr
-	0x27, //ascr_Br
-	0xf0, //ascr_Yg
-	0x1a, //ascr_Bg
-	0x5a, //ascr_Yb
-	0xe0, //ascr_Bb
-	0xff, //ascr_Wr
-	0x00, //ascr_Kr
-	0xf7, //ascr_Wg
-	0x00, //ascr_Kg
-	0xef, //ascr_Wb
-	0x00, //ascr_Kb
-};
-
-static unsigned char NATURAL_VT_2[] = {
-	0xEB,
-	0x01, //mdnie_en
-	0x33, //scr_roi 1 scr algo_roi 1 algo 00 1 0 00 1 0
-	0x00, //data_width mask 00 000
-};
-
-static unsigned char DYNAMIC_VT_1[] = {
-	0xEC,
-	0x00, //roi ctrl
-	0x00, //roi1 y end
-	0x00,
-	0x00, //roi1 y start
-	0x00,
-	0x00, //roi1 x end
-	0x00,
-	0x00, //roi1 x strat
-	0x00,
-	0x00, //roi0 y end
-	0x00,
-	0x00, //roi0 y start
-	0x00,
-	0x00, //roi0 x end
-	0x00,
-	0x00, //roi0 x start
-	0x00,
-	0x00, //nr de cs gamma 0000
-	0xff, //nr_mask_th
-	0x00, //de_gain 10
-	0x00,
-	0x00, //de_maxplus 11
-	0xa0,
-	0x00, //de_maxminus 11
-	0xa0,
-	0x01, //cs gain 10
-	0x00,
-	0x00, //curve 1 b
-	0x20, //curve 1 a
-	0x00, //curve 2 b
-	0x20, //curve 2 a
-	0x00, //curve 3 b
-	0x20, //curve 3 a
-	0x00, //curve 4 b
-	0x20, //curve 4 a
-	0x00, //curve 5 b
-	0x20, //curve 5 a
-	0x00, //curve 6 b
-	0x20, //curve 6 a
-	0x00, //curve 7 b
-	0x20, //curve 7 a
-	0x00, //curve 8 b
-	0x20, //curve 8 a
-	0x00, //curve 9 b
-	0x20, //curve 9 a
-	0x00, //curve10 b
-	0x20, //curve10 a
-	0x00, //curve11 b
-	0x20, //curve11 a
-	0x00, //curve12 b
-	0x20, //curve12 a
-	0x00, //curve13 b
-	0x20, //curve13 a
-	0x00, //curve14 b
-	0x20, //curve14 a
-	0x00, //curve15 b
-	0x20, //curve15 a
-	0x00, //curve16 b
-	0x20, //curve16 a
-	0x00, //curve17 b
-	0x20, //curve17 a
-	0x00, //curve18 b
-	0x20, //curve18 a
-	0x00, //curve19 b
-	0x20, //curve19 a
-	0x00, //curve20 b
-	0x20, //curve20 a
-	0x00, //curve21 b
-	0x20, //curve21 a
-	0x00, //curve22 b
-	0x20, //curve22 a
-	0x00, //curve23 b
-	0x20, //curve23 a
-	0x00, //curve24 b
-	0xFF, //curve24 a
-	0x00, //ascr_skin_on strength 0 00000
-	0x67, //ascr_skin_cb
-	0xa9, //ascr_skin_cr
-	0x0c, //ascr_dist_up
-	0x0c, //ascr_dist_down
-	0x0c, //ascr_dist_right
-	0x0c, //ascr_dist_left
-	0x00, //ascr_div_up 20
-	0xaa,
-	0xab,
-	0x00, //ascr_div_down
-	0xaa,
-	0xab,
-	0x00, //ascr_div_right
-	0xaa,
-	0xab,
-	0x00, //ascr_div_left
-	0xaa,
-	0xab,
-	0xff, //ascr_skin_Rr
-	0x00, //ascr_skin_Rg
-	0x00, //ascr_skin_Rb
-	0xff, //ascr_skin_Yr
-	0xff, //ascr_skin_Yg
-	0x00, //ascr_skin_Yb
-	0xff, //ascr_skin_Mr
-	0x00, //ascr_skin_Mg
-	0xff, //ascr_skin_Mb
-	0xff, //ascr_skin_Wr
-	0xff, //ascr_skin_Wg
-	0xff, //ascr_skin_Wb
-	0x78, //ascr_Cr
-	0xe0, //ascr_Rr
-	0xf6, //ascr_Cg
-	0x00, //ascr_Rg
-	0xe7, //ascr_Cb
-	0x00, //ascr_Rb
-	0xe7, //ascr_Mr
-	0x20, //ascr_Gr
-	0x00, //ascr_Mg
-	0xee, //ascr_Gg
-	0xf0, //ascr_Mb
-	0x00, //ascr_Gb
-	0xf1, //ascr_Yr
-	0x18, //ascr_Br
-	0xef, //ascr_Yg
-	0x09, //ascr_Bg
-	0x07, //ascr_Yb
-	0xef, //ascr_Bb
-	0xff, //ascr_Wr
-	0x00, //ascr_Kr
-	0xf7, //ascr_Wg
-	0x00, //ascr_Kg
-	0xef, //ascr_Wb
-	0x00, //ascr_Kb
-};
-
-static unsigned char DYNAMIC_VT_2[] = {
-	0xEB,
-	0x01, //mdnie_en
-	0x33, //scr_roi 1 scr algo_roi 1 algo 00 1 0 00 1 0
-	0x00, //data_width mask 00 000
-};
-
-static unsigned char MOVIE_VT_1[] = {
-	0xEC,
-	0x00, //roi ctrl
-	0x00, //roi1 y end
-	0x00,
-	0x00, //roi1 y start
-	0x00,
-	0x00, //roi1 x end
-	0x00,
-	0x00, //roi1 x strat
-	0x00,
-	0x00, //roi0 y end
-	0x00,
-	0x00, //roi0 y start
-	0x00,
-	0x00, //roi0 x end
-	0x00,
-	0x00, //roi0 x start
-	0x00,
-	0x00, //nr de cs gamma 0000
-	0xff, //nr_mask_th
-	0x00, //de_gain 10
-	0x00,
-	0x07, //de_maxplus 11
-	0xff,
-	0x07, //de_maxminus 11
-	0xff,
-	0x01, //cs gain 10
-	0x00,
-	0x00, //curve 1 b
-	0x20, //curve 1 a
-	0x00, //curve 2 b
-	0x20, //curve 2 a
-	0x00, //curve 3 b
-	0x20, //curve 3 a
-	0x00, //curve 4 b
-	0x20, //curve 4 a
-	0x00, //curve 5 b
-	0x20, //curve 5 a
-	0x00, //curve 6 b
-	0x20, //curve 6 a
-	0x00, //curve 7 b
-	0x20, //curve 7 a
-	0x00, //curve 8 b
-	0x20, //curve 8 a
-	0x00, //curve 9 b
-	0x20, //curve 9 a
-	0x00, //curve10 b
-	0x20, //curve10 a
-	0x00, //curve11 b
-	0x20, //curve11 a
-	0x00, //curve12 b
-	0x20, //curve12 a
-	0x00, //curve13 b
-	0x20, //curve13 a
-	0x00, //curve14 b
-	0x20, //curve14 a
-	0x00, //curve15 b
-	0x20, //curve15 a
-	0x00, //curve16 b
-	0x20, //curve16 a
-	0x00, //curve17 b
-	0x20, //curve17 a
-	0x00, //curve18 b
-	0x20, //curve18 a
-	0x00, //curve19 b
-	0x20, //curve19 a
-	0x00, //curve20 b
-	0x20, //curve20 a
-	0x00, //curve21 b
-	0x20, //curve21 a
-	0x00, //curve22 b
-	0x20, //curve22 a
-	0x00, //curve23 b
-	0x20, //curve23 a
-	0x00, //curve24 b
-	0xFF, //curve24 a
-	0x00, //ascr_skin_on strength 0 00000
-	0x67, //ascr_skin_cb
-	0xa9, //ascr_skin_cr
-	0x0c, //ascr_dist_up
-	0x0c, //ascr_dist_down
-	0x0c, //ascr_dist_right
-	0x0c, //ascr_dist_left
-	0x00, //ascr_div_up 20
-	0xaa,
-	0xab,
-	0x00, //ascr_div_down
-	0xaa,
-	0xab,
-	0x00, //ascr_div_right
-	0xaa,
-	0xab,
-	0x00, //ascr_div_left
-	0xaa,
-	0xab,
-	0xff, //ascr_skin_Rr
-	0x00, //ascr_skin_Rg
-	0x00, //ascr_skin_Rb
-	0xff, //ascr_skin_Yr
-	0xff, //ascr_skin_Yg
-	0x00, //ascr_skin_Yb
-	0xff, //ascr_skin_Mr
-	0x00, //ascr_skin_Mg
-	0xff, //ascr_skin_Mb
-	0xff, //ascr_skin_Wr
-	0xff, //ascr_skin_Wg
-	0xff, //ascr_skin_Wb
-	0x00, //ascr_Cr
-	0xff, //ascr_Rr
-	0xff, //ascr_Cg
-	0x00, //ascr_Rg
-	0xff, //ascr_Cb
-	0x00, //ascr_Rb
-	0xff, //ascr_Mr
-	0x00, //ascr_Gr
-	0x00, //ascr_Mg
-	0xff, //ascr_Gg
-	0xff, //ascr_Mb
-	0x00, //ascr_Gb
-	0xff, //ascr_Yr
-	0x00, //ascr_Br
-	0xff, //ascr_Yg
-	0x00, //ascr_Bg
-	0x00, //ascr_Yb
-	0xff, //ascr_Bb
-	0xff, //ascr_Wr
-	0x00, //ascr_Kr
-	0xff, //ascr_Wg
-	0x00, //ascr_Kg
-	0xff, //ascr_Wb
-	0x00, //ascr_Kb
-};
-
-static unsigned char MOVIE_VT_2[] = {
-	0xEB,
-	0x01, //mdnie_en
-	0x00, //scr_roi 1 scr algo_roi 1 algo 00 1 0 00 1 0
-	0x00, //data_width mask 00 000
-};
-
 static unsigned char BYPASS_1[] = {
 	0xEC,
 	0x00, //roi ctrl
@@ -3512,147 +3094,6 @@ static unsigned char BYPASS_2[] = {
 	0xEB,
 	0x01, //mdnie_en
 	0x00, //scr_roi 1 scr algo_roi 1 algo 00 1 0 00 1 0
-	0x00, //data_width mask 00 000
-};
-
-static unsigned char AUTO_VT_1[] = {
-	0xEC,
-	0x00, //roi ctrl
-	0x00, //roi1 y end
-	0x00,
-	0x00, //roi1 y start
-	0x00,
-	0x00, //roi1 x end
-	0x00,
-	0x00, //roi1 x strat
-	0x00,
-	0x00, //roi0 y end
-	0x00,
-	0x00, //roi0 y start
-	0x00,
-	0x00, //roi0 x end
-	0x00,
-	0x00, //roi0 x start
-	0x00,
-	0x00, //nr de cs gamma 0000
-	0xff, //nr_mask_th
-	0x00, //de_gain 10
-	0x08,
-	0x00, //de_maxplus 11
-	0xa0,
-	0x00, //de_maxminus 11
-	0xa0,
-	0x01, //cs gain 10
-	0x00,
-	0x00, //curve 1 b
-	0x20, //curve 1 a
-	0x00, //curve 2 b
-	0x20, //curve 2 a
-	0x00, //curve 3 b
-	0x20, //curve 3 a
-	0x00, //curve 4 b
-	0x20, //curve 4 a
-	0x00, //curve 5 b
-	0x20, //curve 5 a
-	0x00, //curve 6 b
-	0x20, //curve 6 a
-	0x00, //curve 7 b
-	0x20, //curve 7 a
-	0x00, //curve 8 b
-	0x20, //curve 8 a
-	0x00, //curve 9 b
-	0x20, //curve 9 a
-	0x00, //curve10 b
-	0x20, //curve10 a
-	0x00, //curve11 b
-	0x20, //curve11 a
-	0x00, //curve12 b
-	0x20, //curve12 a
-	0x00, //curve13 b
-	0x20, //curve13 a
-	0x00, //curve14 b
-	0x20, //curve14 a
-	0x00, //curve15 b
-	0x20, //curve15 a
-	0x00, //curve16 b
-	0x20, //curve16 a
-	0x00, //curve17 b
-	0x20, //curve17 a
-	0x00, //curve18 b
-	0x20, //curve18 a
-	0x00, //curve19 b
-	0x20, //curve19 a
-	0x00, //curve20 b
-	0x20, //curve20 a
-	0x00, //curve21 b
-	0x20, //curve21 a
-	0x00, //curve22 b
-	0x20, //curve22 a
-	0x00, //curve23 b
-	0x20, //curve23 a
-	0x00, //curve24 b
-	0xFF, //curve24 a
-	0x00, //ascr_skin_on strength 0 00000
-	0x6a, //ascr_skin_cb
-	0x9a, //ascr_skin_cr
-	0x25, //ascr_dist_up
-	0x1a, //ascr_dist_down
-	0x16, //ascr_dist_right
-	0x2a, //ascr_dist_left
-	0x00, //ascr_div_up 20
-	0x37,
-	0x5a,
-	0x00, //ascr_div_down
-	0x4e,
-	0xc5,
-	0x00, //ascr_div_right
-	0x5d,
-	0x17,
-	0x00, //ascr_div_left
-	0x30,
-	0xc3,
-	0xff, //ascr_skin_Rr
-	0x00, //ascr_skin_Rg
-	0x00, //ascr_skin_Rb
-	0xff, //ascr_skin_Yr
-	0xff, //ascr_skin_Yg
-	0x00, //ascr_skin_Yb
-	0xff, //ascr_skin_Mr
-	0x00, //ascr_skin_Mg
-	0xff, //ascr_skin_Mb
-	0xff, //ascr_skin_Wr
-	0xff, //ascr_skin_Wg
-	0xff, //ascr_skin_Wb
-	0x00, //ascr_Cr
-	0xff, //ascr_Rr
-	0xff, //ascr_Cg
-	0x00, //ascr_Rg
-	0xff, //ascr_Cb
-	0x00, //ascr_Rb
-	0xff, //ascr_Mr
-	0x00, //ascr_Gr
-	0x00, //ascr_Mg
-	0xff, //ascr_Gg
-	0xff, //ascr_Mb
-	0x00, //ascr_Gb
-	0xff, //ascr_Yr
-	0x00, //ascr_Br
-	0xff, //ascr_Yg
-	0x00, //ascr_Bg
-	0x00, //ascr_Yb
-	0xff, //ascr_Bb
-	0xff, //ascr_Wr
-	0x00, //ascr_Kr
-	0xff, //ascr_Wg
-	0x00, //ascr_Kg
-	0xff, //ascr_Wb
-	0x00, //ascr_Kb
-};
-
-static unsigned char AUTO_VT_2[] = {
-	0xEB,
-	0x01, //mdnie_en
-	0x33, //scr_roi 1 scr algo_roi 1 algo 00 1 0 00 1 0
 	0x00, //data_width mask 00 000
 };
 
@@ -4356,6 +3797,147 @@ static unsigned char AUTO_CAMERA_1[] = {
 };
 
 static unsigned char AUTO_CAMERA_2[] = {
+	0xEB,
+	0x01, //mdnie_en
+	0x33, //scr_roi 1 scr algo_roi 1 algo 00 1 0 00 1 0
+	0x00, //data_width mask 00 000
+};
+
+static unsigned char AUTO_CAMERA_SWA_1[] = {
+	0xEC,
+	0x00, //roi ctrl
+	0x00, //roi1 y end
+	0x00,
+	0x00, //roi1 y start
+	0x00,
+	0x00, //roi1 x end
+	0x00,
+	0x00, //roi1 x strat
+	0x00,
+	0x00, //roi0 y end
+	0x00,
+	0x00, //roi0 y start
+	0x00,
+	0x00, //roi0 x end
+	0x00,
+	0x00, //roi0 x start
+	0x00,
+	0x00, //nr de cs gamma 0000
+	0xff, //nr_mask_th
+	0x00, //de_gain 10
+	0x08,
+	0x00, //de_maxplus 11
+	0xa0,
+	0x00, //de_maxminus 11
+	0xa0,
+	0x01, //cs gain 10
+	0x00,
+	0x00, //curve 1 b
+	0x20, //curve 1 a
+	0x00, //curve 2 b
+	0x20, //curve 2 a
+	0x00, //curve 3 b
+	0x20, //curve 3 a
+	0x00, //curve 4 b
+	0x20, //curve 4 a
+	0x00, //curve 5 b
+	0x20, //curve 5 a
+	0x00, //curve 6 b
+	0x20, //curve 6 a
+	0x00, //curve 7 b
+	0x20, //curve 7 a
+	0x00, //curve 8 b
+	0x20, //curve 8 a
+	0x00, //curve 9 b
+	0x20, //curve 9 a
+	0x00, //curve10 b
+	0x20, //curve10 a
+	0x00, //curve11 b
+	0x20, //curve11 a
+	0x00, //curve12 b
+	0x20, //curve12 a
+	0x00, //curve13 b
+	0x20, //curve13 a
+	0x00, //curve14 b
+	0x20, //curve14 a
+	0x00, //curve15 b
+	0x20, //curve15 a
+	0x00, //curve16 b
+	0x20, //curve16 a
+	0x00, //curve17 b
+	0x20, //curve17 a
+	0x00, //curve18 b
+	0x20, //curve18 a
+	0x00, //curve19 b
+	0x20, //curve19 a
+	0x00, //curve20 b
+	0x20, //curve20 a
+	0x00, //curve21 b
+	0x20, //curve21 a
+	0x00, //curve22 b
+	0x20, //curve22 a
+	0x00, //curve23 b
+	0x20, //curve23 a
+	0x00, //curve24 b
+	0xFF, //curve24 a
+	0x30, //ascr_skin_on strength 0 00000
+	0x6a, //ascr_skin_cb
+	0x9a, //ascr_skin_cr
+	0x25, //ascr_dist_up
+	0x1a, //ascr_dist_down
+	0x16, //ascr_dist_right
+	0x2a, //ascr_dist_left
+	0x00, //ascr_div_up 20
+	0x37,
+	0x5a,
+	0x00, //ascr_div_down
+	0x4e,
+	0xc5,
+	0x00, //ascr_div_right
+	0x5d,
+	0x17,
+	0x00, //ascr_div_left
+	0x30,
+	0xc3,
+	0xff, //ascr_skin_Rr
+	0x38, //ascr_skin_Rg
+	0x4a, //ascr_skin_Rb
+	0xff, //ascr_skin_Yr
+	0xf9, //ascr_skin_Yg
+	0x00, //ascr_skin_Yb
+	0xd8, //ascr_skin_Mr
+	0x00, //ascr_skin_Mg
+	0xd9, //ascr_skin_Mb
+	0xff, //ascr_skin_Wr
+	0xff, //ascr_skin_Wg
+	0xff, //ascr_skin_Wb
+	0x00, //ascr_Cr
+	0xe0, //ascr_Rr
+	0xff, //ascr_Cg
+	0x00, //ascr_Rg
+	0xf6, //ascr_Cb
+	0x00, //ascr_Rb
+	0xd8, //ascr_Mr
+	0x3b, //ascr_Gr
+	0x00, //ascr_Mg
+	0xff, //ascr_Gg
+	0xd9, //ascr_Mb
+	0x00, //ascr_Gb
+	0xff, //ascr_Yr
+	0x14, //ascr_Br
+	0xf9, //ascr_Yg
+	0x00, //ascr_Bg
+	0x00, //ascr_Yb
+	0xff, //ascr_Bb
+	0xff, //ascr_Wr
+	0x00, //ascr_Kr
+	0xff, //ascr_Wg
+	0x00, //ascr_Kg
+	0xff, //ascr_Wb
+	0x00, //ascr_Kb
+};
+
+static unsigned char AUTO_CAMERA_SWA_2[] = {
 	0xEB,
 	0x01, //mdnie_en
 	0x33, //scr_roi 1 scr algo_roi 1 algo 00 1 0 00 1 0
@@ -7551,6 +7133,14 @@ static struct mdnie_table main_table[SCENARIO_MAX][MODE_MAX] = {
 		MDNIE_SET(AUTO_CAMERA),
 		MDNIE_SET(AUTO_EBOOK)
 	},
+	[CAMERA_SWA_MODE] = {
+		MDNIE_SET(DYNAMIC_CAMERA),
+		MDNIE_SET(STANDARD_CAMERA),
+		MDNIE_SET(NATURAL_CAMERA),
+		MDNIE_SET(MOVIE_CAMERA),
+		MDNIE_SET(AUTO_CAMERA_SWA),
+		MDNIE_SET(AUTO_EBOOK)
+	},
 	[GALLERY_MODE] = {
 		MDNIE_SET(DYNAMIC_GALLERY),
 		MDNIE_SET(STANDARD_GALLERY),
@@ -7558,12 +7148,13 @@ static struct mdnie_table main_table[SCENARIO_MAX][MODE_MAX] = {
 		MDNIE_SET(MOVIE_GALLERY),
 		MDNIE_SET(AUTO_GALLERY),
 		MDNIE_SET(AUTO_EBOOK)
-	}, {
-		MDNIE_SET(DYNAMIC_VT),
-		MDNIE_SET(STANDARD_VT),
-		MDNIE_SET(NATURAL_VT),
-		MDNIE_SET(MOVIE_VT),
-		MDNIE_SET(AUTO_VT),
+	},
+	[GALLERY_SWA_MODE] = {
+		MDNIE_SET(DYNAMIC_GALLERY),
+		MDNIE_SET(STANDARD_GALLERY),
+		MDNIE_SET(NATURAL_GALLERY),
+		MDNIE_SET(MOVIE_GALLERY),
+		MDNIE_SET(AUTO_GALLERY_SWA),
 		MDNIE_SET(AUTO_EBOOK)
 	}, {
 		MDNIE_SET(DYNAMIC_BROWSER),
@@ -7609,7 +7200,8 @@ static struct mdnie_tune tune_info = {
 	.get_hbm_index = get_hbm_index,
 	.night_info = &night_info,
 	.color_lens_info = &color_lens_info,
-	.color_offset = {NULL, color_offset_f1, color_offset_f2, color_offset_f3, color_offset_f4}
+	.color_offset = {NULL, color_offset_f1, color_offset_f2, color_offset_f3, color_offset_f4},
+	.wrgb_swa = &wrgb_swa,
 };
 
 #endif

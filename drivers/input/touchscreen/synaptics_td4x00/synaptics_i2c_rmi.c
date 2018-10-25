@@ -2619,6 +2619,8 @@ static void	synaptics_init_product_info_v7(struct synaptics_rmi4_data *rmi4_data
 		rmi4_data->product_id = SYNAPTICS_PRODUCT_ID_S5806;
 	} else if (strncmp(rmi4_data->rmi4_mod_info.product_id_string, "TD4100", 6) == 0) {
 		rmi4_data->product_id = SYNAPTICS_PRODUCT_ID_TD4100;
+	} else if (strncmp(rmi4_data->rmi4_mod_info.product_id_string, "TD4101", 6) == 0) {
+		rmi4_data->product_id = SYNAPTICS_PRODUCT_ID_TD4101;
 	} else {
 		rmi4_data->product_id = SYNAPTICS_PRODUCT_ID_NONE;
 		input_err(true, &rmi4_data->i2c_client->dev, "%s, Undefined product id: %s\n",

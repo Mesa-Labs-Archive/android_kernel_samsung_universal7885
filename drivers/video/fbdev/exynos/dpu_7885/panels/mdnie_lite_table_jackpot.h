@@ -23,6 +23,12 @@ static struct mdnie_night_info night_info = {
 	.max_h = 11
 };
 
+static struct rgb_info wrgb_swa = {
+	.r = 11,
+	.g = 13,
+	.b = 0
+};
+
 static inline int color_offset_f1(int x, int y)
 {
 	return ((y << 10) - (((x << 10) * 353) / 326) + (30 << 10)) >> 10;
@@ -3916,6 +3922,216 @@ static unsigned char AUTO_GALLERY_3[] = {
 	/* end */
 };
 
+static unsigned char AUTO_GALLERY_SWA_1[] = {
+	/* start */
+	0xDF,
+	0x01, /* linear_on ascr_skin_on 0000 0000 */
+	0x6a, /* ascr_skin_cb */
+	0x9a, /* ascr_skin_cr */
+	0x25, /* ascr_dist_up */
+	0x1a, /* ascr_dist_down */
+	0x16, /* ascr_dist_right */
+	0x2a, /* ascr_dist_left */
+	0x00, /* ascr_div_up 20 */
+	0x37,
+	0x5a,
+	0x00, /* ascr_div_down */
+	0x4e,
+	0xc5,
+	0x00, /* ascr_div_right */
+	0x5d,
+	0x17,
+	0x00, /* ascr_div_left */
+	0x30,
+	0xc3,
+	0xff, /* ascr_skin_Rr */
+	0x1c, /* ascr_skin_Rg */
+	0x34, /* ascr_skin_Rb */
+	0xff, /* ascr_skin_Yr */
+	0xf0, /* ascr_skin_Yg */
+	0x00, /* ascr_skin_Yb */
+	0xd8, /* ascr_skin_Mr */
+	0x00, /* ascr_skin_Mg */
+	0xd9, /* ascr_skin_Mb */
+	0xff, /* ascr_skin_Wr */
+	0xff, /* ascr_skin_Wg */
+	0xff, /* ascr_skin_Wb */
+	0x00, /* ascr_Cr */
+	0xe0, /* ascr_Rr */
+	0xff, /* ascr_Cg */
+	0x0a, /* ascr_Rg */
+	0xf6, /* ascr_Cb */
+	0x0a, /* ascr_Rb */
+	0xd8, /* ascr_Mr */
+	0x3b, /* ascr_Gr */
+	0x00, /* ascr_Mg */
+	0xff, /* ascr_Gg */
+	0xd9, /* ascr_Mb */
+	0x00, /* ascr_Gb */
+	0xff, /* ascr_Yr */
+	0x14, /* ascr_Br */
+	0xf9, /* ascr_Yg */
+	0x00, /* ascr_Bg */
+	0x00, /* ascr_Yb */
+	0xff, /* ascr_Bb */
+	0xf4, /* ascr_Wr */
+	0x00, /* ascr_Kr */
+	0xf2, /* ascr_Wg */
+	0x00, /* ascr_Kg */
+	0xff, /* ascr_Wb */
+	0x00, /* ascr_Kb */
+};
+
+static unsigned char AUTO_GALLERY_SWA_2[] = {
+	0xDE,
+	0x00, /* gamut_gamma_on gamut_blk_shift 0000 0000 */
+	0x40, /* gamut_scale */
+	0x04, /* gamut_r1 */
+	0x00,
+	0x00, /* gamut_r2 */
+	0x00,
+	0x00, /* gamut_r3 */
+	0x00,
+	0x00, /* gamut_g1 */
+	0x00,
+	0x04, /* gamut_g2 */
+	0x00,
+	0x00, /* gamut_g3 */
+	0x00,
+	0x00, /* gamut_b1 */
+	0x00,
+	0x00, /* gamut_b2 */
+	0x00,
+	0x04, /* gamut_b3 */
+	0x00,
+	0x06, /* ove_SLCE_gain 0 00 0000 */
+	0x0c, /* ove_color_gain 00 0000 */
+	0x00, /* ove_min_ref_offset */
+	0x96,
+	0xf0, /* ove_illum_gain */
+	0x01, /* ove_ref_offset 9 */
+	0x0e,
+	0x01, /* ove_ref_gain 9 */
+	0x00,
+	0x66, /* ove_block_size h v 000 000 */
+	0x00, /* ove_dark_th 000 */
+	0x17, /* ove_black reduct_slope 0 0000 */
+	0x0c, /* nr fa de cs gamma 0 0000 */
+	0xff, /* nr_mask_th */
+	0x00, /* de_gain 10 */
+	0x28,
+	0x00, /* de_maxplus 11 */
+	0xa0,
+	0x00, /* de_maxminus 11 */
+	0xa0,
+	0x14, /* fa_edge_th */
+	0x00, /* fa_step_p 10 */
+	0x01,
+	0x00, /* fa_step_n 10 */
+	0x01,
+	0x00, /* fa_max_de_gain 10 */
+	0x28,
+	0x00, /* fa_pcl_ppi 14 */
+	0x01,
+	0x28, /* fa_os_cnt_10_co */
+	0x3c, /* fa_os_cnt_20_co */
+	0x04, /* fa_edge_cnt */
+	0x0f, /* fa_AVG_y_cnt */
+	0x01, /* cs_gain 10 */
+	0x00,
+	0x00, /* gamma_x_0 */
+	0x08, /* gamma_x_1 */
+	0x10, /* gamma_x_2 */
+	0x18, /* gamma_x_3 */
+	0x20, /* gamma_x_4 */
+	0x28, /* gamma_x_5 */
+	0x30, /* gamma_x_6 */
+	0x38, /* gamma_x_7 */
+	0x40, /* gamma_x_8 */
+	0x48, /* gamma_x_9 */
+	0x50, /* gamma_x_10 */
+	0x58, /* gamma_x_11 */
+	0x60, /* gamma_x_12 */
+	0x68, /* gamma_x_13 */
+	0x70, /* gamma_x_14 */
+	0x78, /* gamma_x_15 */
+	0x80, /* gamma_x_16 */
+	0x88, /* gamma_x_17 */
+	0x90, /* gamma_x_18 */
+	0x98, /* gamma_x_19 */
+	0xa0, /* gamma_x_20 */
+	0xa8, /* gamma_x_21 */
+	0xb0, /* gamma_x_22 */
+	0xb8, /* gamma_x_23 */
+	0xc0, /* gamma_x_24 */
+	0xc8, /* gamma_x_25 */
+	0xd0, /* gamma_x_26 */
+	0xd8, /* gamma_x_27 */
+	0xe0, /* gamma_x_28 */
+	0xe8, /* gamma_x_29 */
+	0xf0, /* gamma_x_30 */
+	0xf8, /* gamma_x_31 */
+	0x01, /* gamma_x_32 */
+	0x00,
+	0x00, /* gamma_y_0 */
+	0x08, /* gamma_y_1 */
+	0x10, /* gamma_y_2 */
+	0x18, /* gamma_y_3 */
+	0x20, /* gamma_y_4 */
+	0x28, /* gamma_y_5 */
+	0x30, /* gamma_y_6 */
+	0x38, /* gamma_y_7 */
+	0x40, /* gamma_y_8 */
+	0x48, /* gamma_y_9 */
+	0x50, /* gamma_y_10 */
+	0x58, /* gamma_y_11 */
+	0x60, /* gamma_y_12 */
+	0x68, /* gamma_y_13 */
+	0x70, /* gamma_y_14 */
+	0x78, /* gamma_y_15 */
+	0x80, /* gamma_y_16 */
+	0x88, /* gamma_y_17 */
+	0x90, /* gamma_y_18 */
+	0x98, /* gamma_y_19 */
+	0xa0, /* gamma_y_20 */
+	0xa8, /* gamma_y_21 */
+	0xb0, /* gamma_y_22 */
+	0xb8, /* gamma_y_23 */
+	0xc0, /* gamma_y_24 */
+	0xc8, /* gamma_y_25 */
+	0xd0, /* gamma_y_26 */
+	0xd8, /* gamma_y_27 */
+	0xe0, /* gamma_y_28 */
+	0xe8, /* gamma_y_29 */
+	0xf0, /* gamma_y_30 */
+	0xf8, /* gamma_y_31 */
+	0x01, /* gamma_y_32 */
+	0x00,
+};
+
+static unsigned char AUTO_GALLERY_SWA_3[] = {
+	0xDD,
+	0x01, /* mdnie_en */
+	0x00, /* mask 00 0000 */
+	0xf0, /* ascr algo aolce gamut 00 00 00 00 */
+	0x00, /* v_partial_on 000 */
+	0x7f, /* partial_en ascr_cc_cs_de_nr_lce_gamut */
+	0x00, /* roi_en */
+	0x00, /* roi_block */
+	0x00, /* roi_sx */
+	0x00, /* roi_sx */
+	0x00, /* roi_sy */
+	0x00, /* roi_sy */
+	0x00, /* roi_ex */
+	0x00, /* roi_ex */
+	0x00, /* roi_ey */
+	0x00, /* roi_ey */
+	0xff, /* trans_on trans_block 000 0000 */
+	0x04, /* trans_slope */
+	0x01, /* trans_interval */
+	/* end */
+};
+
 /******************** VIDEO ********************/
 static unsigned char STANDARD_VIDEO_1[] = {
 	/* start */
@@ -4967,1057 +5183,6 @@ static unsigned char AUTO_VIDEO_3[] = {
 	/* end */
 };
 
-/******************** VT ********************/
-static unsigned char STANDARD_VT_1[] = {
-	/* start */
-	0xDF,
-	0x11, /* linear_on ascr_skin_on 0000 0000 */
-	0x6a, /* ascr_skin_cb */
-	0x9a, /* ascr_skin_cr */
-	0x25, /* ascr_dist_up */
-	0x1a, /* ascr_dist_down */
-	0x16, /* ascr_dist_right */
-	0x2a, /* ascr_dist_left */
-	0x00, /* ascr_div_up 20 */
-	0x37,
-	0x5a,
-	0x00, /* ascr_div_down */
-	0x4e,
-	0xc5,
-	0x00, /* ascr_div_right */
-	0x5d,
-	0x17,
-	0x00, /* ascr_div_left */
-	0x30,
-	0xc3,
-	0xf8, /* ascr_skin_Rr */
-	0x2b, /* ascr_skin_Rg */
-	0x2c, /* ascr_skin_Rb */
-	0xf6, /* ascr_skin_Yr */
-	0xef, /* ascr_skin_Yg */
-	0x00, /* ascr_skin_Yb */
-	0xff, /* ascr_skin_Mr */
-	0x00, /* ascr_skin_Mg */
-	0xe8, /* ascr_skin_Mb */
-	0xf9, /* ascr_skin_Wr */
-	0xf9, /* ascr_skin_Wg */
-	0xef, /* ascr_skin_Wb */
-	0x00, /* ascr_Cr */
-	0xf8, /* ascr_Rr */
-	0xf0, /* ascr_Cg */
-	0x2b, /* ascr_Rg */
-	0xea, /* ascr_Cb */
-	0x2c, /* ascr_Rb */
-	0xff, /* ascr_Mr */
-	0x00, /* ascr_Gr */
-	0x3c, /* ascr_Mg */
-	0xec, /* ascr_Gg */
-	0xe8, /* ascr_Mb */
-	0x2f, /* ascr_Gb */
-	0xf6, /* ascr_Yr */
-	0x2c, /* ascr_Br */
-	0xef, /* ascr_Yg */
-	0x2b, /* ascr_Bg */
-	0x40, /* ascr_Yb */
-	0xe3, /* ascr_Bb */
-	0xff, /* ascr_Wr */
-	0x00, /* ascr_Kr */
-	0xf7, /* ascr_Wg */
-	0x00, /* ascr_Kg */
-	0xef, /* ascr_Wb */
-	0x00, /* ascr_Kb */
-};
-
-static unsigned char STANDARD_VT_2[] = {
-	0xDE,
-	0x00, /* gamut_gamma_on gamut_blk_shift 0000 0000 */
-	0x40, /* gamut_scale */
-	0x04, /* gamut_r1 */
-	0x00,
-	0x00, /* gamut_r2 */
-	0x00,
-	0x00, /* gamut_r3 */
-	0x00,
-	0x00, /* gamut_g1 */
-	0x00,
-	0x04, /* gamut_g2 */
-	0x00,
-	0x00, /* gamut_g3 */
-	0x00,
-	0x00, /* gamut_b1 */
-	0x00,
-	0x00, /* gamut_b2 */
-	0x00,
-	0x04, /* gamut_b3 */
-	0x00,
-	0x06, /* ove_SLCE_gain 0 00 0000 */
-	0x0c, /* ove_color_gain 00 0000 */
-	0x00, /* ove_min_ref_offset */
-	0x96,
-	0xf0, /* ove_illum_gain */
-	0x01, /* ove_ref_offset 9 */
-	0x0e,
-	0x01, /* ove_ref_gain 9 */
-	0x00,
-	0x66, /* ove_block_size h v 000 000 */
-	0x00, /* ove_dark_th 000 */
-	0x17, /* ove_black reduct_slope 0 0000 */
-	0x02, /* nr fa de cs gamma 0 0000 */
-	0xff, /* nr_mask_th */
-	0x00, /* de_gain 10 */
-	0x00,
-	0x07, /* de_maxplus 11 */
-	0xff,
-	0x07, /* de_maxminus 11 */
-	0xff,
-	0x14, /* fa_edge_th */
-	0x00, /* fa_step_p 10 */
-	0x02,
-	0x00, /* fa_step_n 10 */
-	0x02,
-	0x01, /* fa_max_de_gain 10 */
-	0xf4,
-	0x08, /* fa_pcl_ppi 14 */
-	0x8a,
-	0x20, /* fa_os_cnt_10_co */
-	0x2d, /* fa_os_cnt_20_co */
-	0x04, /* fa_edge_cnt */
-	0x0f, /* fa_AVG_y_cnt */
-	0x01, /* cs_gain 10 */
-	0x20,
-	0x00, /* gamma_x_0 */
-	0x08, /* gamma_x_1 */
-	0x10, /* gamma_x_2 */
-	0x18, /* gamma_x_3 */
-	0x20, /* gamma_x_4 */
-	0x28, /* gamma_x_5 */
-	0x30, /* gamma_x_6 */
-	0x38, /* gamma_x_7 */
-	0x40, /* gamma_x_8 */
-	0x48, /* gamma_x_9 */
-	0x50, /* gamma_x_10 */
-	0x58, /* gamma_x_11 */
-	0x60, /* gamma_x_12 */
-	0x68, /* gamma_x_13 */
-	0x70, /* gamma_x_14 */
-	0x78, /* gamma_x_15 */
-	0x80, /* gamma_x_16 */
-	0x88, /* gamma_x_17 */
-	0x90, /* gamma_x_18 */
-	0x98, /* gamma_x_19 */
-	0xa0, /* gamma_x_20 */
-	0xa8, /* gamma_x_21 */
-	0xb0, /* gamma_x_22 */
-	0xb8, /* gamma_x_23 */
-	0xc0, /* gamma_x_24 */
-	0xc8, /* gamma_x_25 */
-	0xd0, /* gamma_x_26 */
-	0xd8, /* gamma_x_27 */
-	0xe0, /* gamma_x_28 */
-	0xe8, /* gamma_x_29 */
-	0xf0, /* gamma_x_30 */
-	0xf8, /* gamma_x_31 */
-	0x01, /* gamma_x_32 */
-	0x00,
-	0x00, /* gamma_y_0 */
-	0x08, /* gamma_y_1 */
-	0x10, /* gamma_y_2 */
-	0x18, /* gamma_y_3 */
-	0x20, /* gamma_y_4 */
-	0x28, /* gamma_y_5 */
-	0x30, /* gamma_y_6 */
-	0x38, /* gamma_y_7 */
-	0x40, /* gamma_y_8 */
-	0x48, /* gamma_y_9 */
-	0x50, /* gamma_y_10 */
-	0x58, /* gamma_y_11 */
-	0x60, /* gamma_y_12 */
-	0x68, /* gamma_y_13 */
-	0x70, /* gamma_y_14 */
-	0x78, /* gamma_y_15 */
-	0x80, /* gamma_y_16 */
-	0x88, /* gamma_y_17 */
-	0x90, /* gamma_y_18 */
-	0x98, /* gamma_y_19 */
-	0xa0, /* gamma_y_20 */
-	0xa8, /* gamma_y_21 */
-	0xb0, /* gamma_y_22 */
-	0xb8, /* gamma_y_23 */
-	0xc0, /* gamma_y_24 */
-	0xc8, /* gamma_y_25 */
-	0xd0, /* gamma_y_26 */
-	0xd8, /* gamma_y_27 */
-	0xe0, /* gamma_y_28 */
-	0xe8, /* gamma_y_29 */
-	0xf0, /* gamma_y_30 */
-	0xf8, /* gamma_y_31 */
-	0x01, /* gamma_y_32 */
-	0x00,
-};
-
-static unsigned char STANDARD_VT_3[] = {
-	0xDD,
-	0x01, /* mdnie_en */
-	0x00, /* mask 00 0000 */
-	0xf0, /* ascr algo aolce gamut 00 00 00 00 */
-	0x00, /* v_partial_on 000 */
-	0x7f, /* partial_en ascr_cc_cs_de_nr_lce_gamut */
-	0x00, /* roi_en */
-	0x00, /* roi_block */
-	0x00, /* roi_sx */
-	0x00, /* roi_sx */
-	0x00, /* roi_sy */
-	0x00, /* roi_sy */
-	0x00, /* roi_ex */
-	0x00, /* roi_ex */
-	0x00, /* roi_ey */
-	0x00, /* roi_ey */
-	0xff, /* trans_on trans_block 000 0000 */
-	0x04, /* trans_slope */
-	0x01, /* trans_interval */
-	/* end */
-};
-
-static unsigned char NATURAL_VT_1[] = {
-	/* start */
-	0xDF,
-	0x11, /* linear_on ascr_skin_on 0000 0000 */
-	0x6a, /* ascr_skin_cb */
-	0x9a, /* ascr_skin_cr */
-	0x25, /* ascr_dist_up */
-	0x1a, /* ascr_dist_down */
-	0x16, /* ascr_dist_right */
-	0x2a, /* ascr_dist_left */
-	0x00, /* ascr_div_up 20 */
-	0x37,
-	0x5a,
-	0x00, /* ascr_div_down */
-	0x4e,
-	0xc5,
-	0x00, /* ascr_div_right */
-	0x5d,
-	0x17,
-	0x00, /* ascr_div_left */
-	0x30,
-	0xc3,
-	0xd9, /* ascr_skin_Rr */
-	0x25, /* ascr_skin_Rg */
-	0x25, /* ascr_skin_Rb */
-	0xf6, /* ascr_skin_Yr */
-	0xef, /* ascr_skin_Yg */
-	0x00, /* ascr_skin_Yb */
-	0xdf, /* ascr_skin_Mr */
-	0x00, /* ascr_skin_Mg */
-	0xe2, /* ascr_skin_Mb */
-	0xff, /* ascr_skin_Wr */
-	0xf7, /* ascr_skin_Wg */
-	0xef, /* ascr_skin_Wb */
-	0x8c, /* ascr_Cr */
-	0xd9, /* ascr_Rr */
-	0xf3, /* ascr_Cg */
-	0x25, /* ascr_Rg */
-	0xea, /* ascr_Cb */
-	0x25, /* ascr_Rb */
-	0xdf, /* ascr_Mr */
-	0x87, /* ascr_Gr */
-	0x34, /* ascr_Mg */
-	0xec, /* ascr_Gg */
-	0xe2, /* ascr_Mb */
-	0x4b, /* ascr_Gb */
-	0xf6, /* ascr_Yr */
-	0x2a, /* ascr_Br */
-	0xef, /* ascr_Yg */
-	0x2b, /* ascr_Bg */
-	0x51, /* ascr_Yb */
-	0xde, /* ascr_Bb */
-	0xff, /* ascr_Wr */
-	0x00, /* ascr_Kr */
-	0xf7, /* ascr_Wg */
-	0x00, /* ascr_Kg */
-	0xef, /* ascr_Wb */
-	0x00, /* ascr_Kb */
-};
-
-static unsigned char NATURAL_VT_2[] = {
-	0xDE,
-	0x00, /* gamut_gamma_on gamut_blk_shift 0000 0000 */
-	0x40, /* gamut_scale */
-	0x04, /* gamut_r1 */
-	0x00,
-	0x00, /* gamut_r2 */
-	0x00,
-	0x00, /* gamut_r3 */
-	0x00,
-	0x00, /* gamut_g1 */
-	0x00,
-	0x04, /* gamut_g2 */
-	0x00,
-	0x00, /* gamut_g3 */
-	0x00,
-	0x00, /* gamut_b1 */
-	0x00,
-	0x00, /* gamut_b2 */
-	0x00,
-	0x04, /* gamut_b3 */
-	0x00,
-	0x06, /* ove_SLCE_gain 0 00 0000 */
-	0x0c, /* ove_color_gain 00 0000 */
-	0x00, /* ove_min_ref_offset */
-	0x96,
-	0xf0, /* ove_illum_gain */
-	0x01, /* ove_ref_offset 9 */
-	0x0e,
-	0x01, /* ove_ref_gain 9 */
-	0x00,
-	0x66, /* ove_block_size h v 000 000 */
-	0x00, /* ove_dark_th 000 */
-	0x17, /* ove_black reduct_slope 0 0000 */
-	0x00, /* nr fa de cs gamma 0 0000 */
-	0xff, /* nr_mask_th */
-	0x00, /* de_gain 10 */
-	0x00,
-	0x07, /* de_maxplus 11 */
-	0xff,
-	0x07, /* de_maxminus 11 */
-	0xff,
-	0x14, /* fa_edge_th */
-	0x00, /* fa_step_p 10 */
-	0x02,
-	0x00, /* fa_step_n 10 */
-	0x02,
-	0x01, /* fa_max_de_gain 10 */
-	0xf4,
-	0x08, /* fa_pcl_ppi 14 */
-	0x8a,
-	0x20, /* fa_os_cnt_10_co */
-	0x2d, /* fa_os_cnt_20_co */
-	0x04, /* fa_edge_cnt */
-	0x0f, /* fa_AVG_y_cnt */
-	0x01, /* cs_gain 10 */
-	0x20,
-	0x00, /* gamma_x_0 */
-	0x08, /* gamma_x_1 */
-	0x10, /* gamma_x_2 */
-	0x18, /* gamma_x_3 */
-	0x20, /* gamma_x_4 */
-	0x28, /* gamma_x_5 */
-	0x30, /* gamma_x_6 */
-	0x38, /* gamma_x_7 */
-	0x40, /* gamma_x_8 */
-	0x48, /* gamma_x_9 */
-	0x50, /* gamma_x_10 */
-	0x58, /* gamma_x_11 */
-	0x60, /* gamma_x_12 */
-	0x68, /* gamma_x_13 */
-	0x70, /* gamma_x_14 */
-	0x78, /* gamma_x_15 */
-	0x80, /* gamma_x_16 */
-	0x88, /* gamma_x_17 */
-	0x90, /* gamma_x_18 */
-	0x98, /* gamma_x_19 */
-	0xa0, /* gamma_x_20 */
-	0xa8, /* gamma_x_21 */
-	0xb0, /* gamma_x_22 */
-	0xb8, /* gamma_x_23 */
-	0xc0, /* gamma_x_24 */
-	0xc8, /* gamma_x_25 */
-	0xd0, /* gamma_x_26 */
-	0xd8, /* gamma_x_27 */
-	0xe0, /* gamma_x_28 */
-	0xe8, /* gamma_x_29 */
-	0xf0, /* gamma_x_30 */
-	0xf8, /* gamma_x_31 */
-	0x01, /* gamma_x_32 */
-	0x00,
-	0x00, /* gamma_y_0 */
-	0x08, /* gamma_y_1 */
-	0x10, /* gamma_y_2 */
-	0x18, /* gamma_y_3 */
-	0x20, /* gamma_y_4 */
-	0x28, /* gamma_y_5 */
-	0x30, /* gamma_y_6 */
-	0x38, /* gamma_y_7 */
-	0x40, /* gamma_y_8 */
-	0x48, /* gamma_y_9 */
-	0x50, /* gamma_y_10 */
-	0x58, /* gamma_y_11 */
-	0x60, /* gamma_y_12 */
-	0x68, /* gamma_y_13 */
-	0x70, /* gamma_y_14 */
-	0x78, /* gamma_y_15 */
-	0x80, /* gamma_y_16 */
-	0x88, /* gamma_y_17 */
-	0x90, /* gamma_y_18 */
-	0x98, /* gamma_y_19 */
-	0xa0, /* gamma_y_20 */
-	0xa8, /* gamma_y_21 */
-	0xb0, /* gamma_y_22 */
-	0xb8, /* gamma_y_23 */
-	0xc0, /* gamma_y_24 */
-	0xc8, /* gamma_y_25 */
-	0xd0, /* gamma_y_26 */
-	0xd8, /* gamma_y_27 */
-	0xe0, /* gamma_y_28 */
-	0xe8, /* gamma_y_29 */
-	0xf0, /* gamma_y_30 */
-	0xf8, /* gamma_y_31 */
-	0x01, /* gamma_y_32 */
-	0x00,
-};
-
-static unsigned char NATURAL_VT_3[] = {
-	0xDD,
-	0x01, /* mdnie_en */
-	0x00, /* mask 00 0000 */
-	0xf0, /* ascr algo aolce gamut 00 00 00 00 */
-	0x00, /* v_partial_on 000 */
-	0x7f, /* partial_en ascr_cc_cs_de_nr_lce_gamut */
-	0x00, /* roi_en */
-	0x00, /* roi_block */
-	0x00, /* roi_sx */
-	0x00, /* roi_sx */
-	0x00, /* roi_sy */
-	0x00, /* roi_sy */
-	0x00, /* roi_ex */
-	0x00, /* roi_ex */
-	0x00, /* roi_ey */
-	0x00, /* roi_ey */
-	0xff, /* trans_on trans_block 000 0000 */
-	0x04, /* trans_slope */
-	0x01, /* trans_interval */
-	/* end */
-};
-
-static unsigned char DYNAMIC_VT_1[] = {
-	/* start */
-	0xDF,
-	0x11, /* linear_on ascr_skin_on 0000 0000 */
-	0x6a, /* ascr_skin_cb */
-	0x9a, /* ascr_skin_cr */
-	0x25, /* ascr_dist_up */
-	0x1a, /* ascr_dist_down */
-	0x16, /* ascr_dist_right */
-	0x2a, /* ascr_dist_left */
-	0x00, /* ascr_div_up 20 */
-	0x37,
-	0x5a,
-	0x00, /* ascr_div_down */
-	0x4e,
-	0xc5,
-	0x00, /* ascr_div_right */
-	0x5d,
-	0x17,
-	0x00, /* ascr_div_left */
-	0x30,
-	0xc3,
-	0xe8, /* ascr_skin_Rr */
-	0x00, /* ascr_skin_Rg */
-	0x00, /* ascr_skin_Rb */
-	0xf6, /* ascr_skin_Yr */
-	0xed, /* ascr_skin_Yg */
-	0x00, /* ascr_skin_Yb */
-	0xf0, /* ascr_skin_Mr */
-	0x00, /* ascr_skin_Mg */
-	0xe8, /* ascr_skin_Mb */
-	0xff, /* ascr_skin_Wr */
-	0xf9, /* ascr_skin_Wg */
-	0xef, /* ascr_skin_Wb */
-	0x5a, /* ascr_Cr */
-	0xe8, /* ascr_Rr */
-	0xf7, /* ascr_Cg */
-	0x00, /* ascr_Rg */
-	0xec, /* ascr_Cb */
-	0x00, /* ascr_Rb */
-	0xf0, /* ascr_Mr */
-	0x4f, /* ascr_Gr */
-	0x00, /* ascr_Mg */
-	0xec, /* ascr_Gg */
-	0xe8, /* ascr_Mb */
-	0x00, /* ascr_Gb */
-	0xf6, /* ascr_Yr */
-	0x2e, /* ascr_Br */
-	0xed, /* ascr_Yg */
-	0x2b, /* ascr_Bg */
-	0x00, /* ascr_Yb */
-	0xe6, /* ascr_Bb */
-	0xff, /* ascr_Wr */
-	0x00, /* ascr_Kr */
-	0xf7, /* ascr_Wg */
-	0x00, /* ascr_Kg */
-	0xef, /* ascr_Wb */
-	0x00, /* ascr_Kb */
-};
-
-static unsigned char DYNAMIC_VT_2[] = {
-	0xDE,
-	0x00, /* gamut_gamma_on gamut_blk_shift 0000 0000 */
-	0x40, /* gamut_scale */
-	0x04, /* gamut_r1 */
-	0x00,
-	0x00, /* gamut_r2 */
-	0x00,
-	0x00, /* gamut_r3 */
-	0x00,
-	0x00, /* gamut_g1 */
-	0x00,
-	0x04, /* gamut_g2 */
-	0x00,
-	0x00, /* gamut_g3 */
-	0x00,
-	0x00, /* gamut_b1 */
-	0x00,
-	0x00, /* gamut_b2 */
-	0x00,
-	0x04, /* gamut_b3 */
-	0x00,
-	0x06, /* ove_SLCE_gain 0 00 0000 */
-	0x0c, /* ove_color_gain 00 0000 */
-	0x00, /* ove_min_ref_offset */
-	0x96,
-	0xf0, /* ove_illum_gain */
-	0x01, /* ove_ref_offset 9 */
-	0x0e,
-	0x01, /* ove_ref_gain 9 */
-	0x00,
-	0x66, /* ove_block_size h v 000 000 */
-	0x00, /* ove_dark_th 000 */
-	0x17, /* ove_black reduct_slope 0 0000 */
-	0x00, /* nr fa de cs gamma 0 0000 */
-	0xff, /* nr_mask_th */
-	0x00, /* de_gain 10 */
-	0x00,
-	0x07, /* de_maxplus 11 */
-	0xff,
-	0x07, /* de_maxminus 11 */
-	0xff,
-	0x14, /* fa_edge_th */
-	0x00, /* fa_step_p 10 */
-	0x02,
-	0x00, /* fa_step_n 10 */
-	0x02,
-	0x01, /* fa_max_de_gain 10 */
-	0xf4,
-	0x08, /* fa_pcl_ppi 14 */
-	0x8a,
-	0x20, /* fa_os_cnt_10_co */
-	0x2d, /* fa_os_cnt_20_co */
-	0x04, /* fa_edge_cnt */
-	0x0f, /* fa_AVG_y_cnt */
-	0x01, /* cs_gain 10 */
-	0x20,
-	0x00, /* gamma_x_0 */
-	0x08, /* gamma_x_1 */
-	0x10, /* gamma_x_2 */
-	0x18, /* gamma_x_3 */
-	0x20, /* gamma_x_4 */
-	0x28, /* gamma_x_5 */
-	0x30, /* gamma_x_6 */
-	0x38, /* gamma_x_7 */
-	0x40, /* gamma_x_8 */
-	0x48, /* gamma_x_9 */
-	0x50, /* gamma_x_10 */
-	0x58, /* gamma_x_11 */
-	0x60, /* gamma_x_12 */
-	0x68, /* gamma_x_13 */
-	0x70, /* gamma_x_14 */
-	0x78, /* gamma_x_15 */
-	0x80, /* gamma_x_16 */
-	0x88, /* gamma_x_17 */
-	0x90, /* gamma_x_18 */
-	0x98, /* gamma_x_19 */
-	0xa0, /* gamma_x_20 */
-	0xa8, /* gamma_x_21 */
-	0xb0, /* gamma_x_22 */
-	0xb8, /* gamma_x_23 */
-	0xc0, /* gamma_x_24 */
-	0xc8, /* gamma_x_25 */
-	0xd0, /* gamma_x_26 */
-	0xd8, /* gamma_x_27 */
-	0xe0, /* gamma_x_28 */
-	0xe8, /* gamma_x_29 */
-	0xf0, /* gamma_x_30 */
-	0xf8, /* gamma_x_31 */
-	0x01, /* gamma_x_32 */
-	0x00,
-	0x00, /* gamma_y_0 */
-	0x08, /* gamma_y_1 */
-	0x10, /* gamma_y_2 */
-	0x18, /* gamma_y_3 */
-	0x20, /* gamma_y_4 */
-	0x28, /* gamma_y_5 */
-	0x30, /* gamma_y_6 */
-	0x38, /* gamma_y_7 */
-	0x40, /* gamma_y_8 */
-	0x48, /* gamma_y_9 */
-	0x50, /* gamma_y_10 */
-	0x58, /* gamma_y_11 */
-	0x60, /* gamma_y_12 */
-	0x68, /* gamma_y_13 */
-	0x70, /* gamma_y_14 */
-	0x78, /* gamma_y_15 */
-	0x80, /* gamma_y_16 */
-	0x88, /* gamma_y_17 */
-	0x90, /* gamma_y_18 */
-	0x98, /* gamma_y_19 */
-	0xa0, /* gamma_y_20 */
-	0xa8, /* gamma_y_21 */
-	0xb0, /* gamma_y_22 */
-	0xb8, /* gamma_y_23 */
-	0xc0, /* gamma_y_24 */
-	0xc8, /* gamma_y_25 */
-	0xd0, /* gamma_y_26 */
-	0xd8, /* gamma_y_27 */
-	0xe0, /* gamma_y_28 */
-	0xe8, /* gamma_y_29 */
-	0xf0, /* gamma_y_30 */
-	0xf8, /* gamma_y_31 */
-	0x01, /* gamma_y_32 */
-	0x00,
-};
-
-static unsigned char DYNAMIC_VT_3[] = {
-	0xDD,
-	0x01, /* mdnie_en */
-	0x00, /* mask 00 0000 */
-	0xf0, /* ascr algo aolce gamut 00 00 00 00 */
-	0x00, /* v_partial_on 000 */
-	0x7f, /* partial_en ascr_cc_cs_de_nr_lce_gamut */
-	0x00, /* roi_en */
-	0x00, /* roi_block */
-	0x00, /* roi_sx */
-	0x00, /* roi_sx */
-	0x00, /* roi_sy */
-	0x00, /* roi_sy */
-	0x00, /* roi_ex */
-	0x00, /* roi_ex */
-	0x00, /* roi_ey */
-	0x00, /* roi_ey */
-	0xff, /* trans_on trans_block 000 0000 */
-	0x04, /* trans_slope */
-	0x01, /* trans_interval */
-	/* end */
-};
-
-static unsigned char MOVIE_VT_1[] = {
-	/* start */
-	0xDF,
-	0x00, /* linear_on ascr_skin_on 0000 0000 */
-	0x67, /* ascr_skin_cb */
-	0xa9, /* ascr_skin_cr */
-	0x0c, /* ascr_dist_up */
-	0x0c, /* ascr_dist_down */
-	0x0c, /* ascr_dist_right */
-	0x0c, /* ascr_dist_left */
-	0x00, /* ascr_div_up 20 */
-	0xaa,
-	0xab,
-	0x00, /* ascr_div_down */
-	0xaa,
-	0xab,
-	0x00, /* ascr_div_right */
-	0xaa,
-	0xab,
-	0x00, /* ascr_div_left */
-	0xaa,
-	0xab,
-	0xff, /* ascr_skin_Rr */
-	0x00, /* ascr_skin_Rg */
-	0x00, /* ascr_skin_Rb */
-	0xff, /* ascr_skin_Yr */
-	0xff, /* ascr_skin_Yg */
-	0x00, /* ascr_skin_Yb */
-	0xff, /* ascr_skin_Mr */
-	0x00, /* ascr_skin_Mg */
-	0xff, /* ascr_skin_Mb */
-	0xff, /* ascr_skin_Wr */
-	0xff, /* ascr_skin_Wg */
-	0xff, /* ascr_skin_Wb */
-	0x00, /* ascr_Cr */
-	0xff, /* ascr_Rr */
-	0xff, /* ascr_Cg */
-	0x00, /* ascr_Rg */
-	0xff, /* ascr_Cb */
-	0x00, /* ascr_Rb */
-	0xff, /* ascr_Mr */
-	0x00, /* ascr_Gr */
-	0x00, /* ascr_Mg */
-	0xff, /* ascr_Gg */
-	0xff, /* ascr_Mb */
-	0x00, /* ascr_Gb */
-	0xff, /* ascr_Yr */
-	0x00, /* ascr_Br */
-	0xff, /* ascr_Yg */
-	0x00, /* ascr_Bg */
-	0x00, /* ascr_Yb */
-	0xff, /* ascr_Bb */
-	0xff, /* ascr_Wr */
-	0x00, /* ascr_Kr */
-	0xff, /* ascr_Wg */
-	0x00, /* ascr_Kg */
-	0xff, /* ascr_Wb */
-	0x00, /* ascr_Kb */
-};
-
-static unsigned char MOVIE_VT_2[] = {
-	0xDE,
-	0x00, /* gamut_gamma_on gamut_blk_shift 0000 0000 */
-	0x40, /* gamut_scale */
-	0x04, /* gamut_r1 */
-	0x00,
-	0x00, /* gamut_r2 */
-	0x00,
-	0x00, /* gamut_r3 */
-	0x00,
-	0x00, /* gamut_g1 */
-	0x00,
-	0x04, /* gamut_g2 */
-	0x00,
-	0x00, /* gamut_g3 */
-	0x00,
-	0x00, /* gamut_b1 */
-	0x00,
-	0x00, /* gamut_b2 */
-	0x00,
-	0x04, /* gamut_b3 */
-	0x00,
-	0x06, /* ove_SLCE_gain 0 00 0000 */
-	0x0c, /* ove_color_gain 00 0000 */
-	0x00, /* ove_min_ref_offset */
-	0x96,
-	0xf0, /* ove_illum_gain */
-	0x01, /* ove_ref_offset 9 */
-	0x0e,
-	0x01, /* ove_ref_gain 9 */
-	0x00,
-	0x66, /* ove_block_size h v 000 000 */
-	0x00, /* ove_dark_th 000 */
-	0x17, /* ove_black reduct_slope 0 0000 */
-	0x00, /* nr fa de cs gamma 0 0000 */
-	0xff, /* nr_mask_th */
-	0x00, /* de_gain 10 */
-	0x00,
-	0x07, /* de_maxplus 11 */
-	0xff,
-	0x07, /* de_maxminus 11 */
-	0xff,
-	0x14, /* fa_edge_th */
-	0x00, /* fa_step_p 10 */
-	0x02,
-	0x00, /* fa_step_n 10 */
-	0x02,
-	0x01, /* fa_max_de_gain 10 */
-	0xf4,
-	0x08, /* fa_pcl_ppi 14 */
-	0x8a,
-	0x20, /* fa_os_cnt_10_co */
-	0x2d, /* fa_os_cnt_20_co */
-	0x04, /* fa_edge_cnt */
-	0x0f, /* fa_AVG_y_cnt */
-	0x01, /* cs_gain 10 */
-	0x00,
-	0x00, /* gamma_x_0 */
-	0x08, /* gamma_x_1 */
-	0x10, /* gamma_x_2 */
-	0x18, /* gamma_x_3 */
-	0x20, /* gamma_x_4 */
-	0x28, /* gamma_x_5 */
-	0x30, /* gamma_x_6 */
-	0x38, /* gamma_x_7 */
-	0x40, /* gamma_x_8 */
-	0x48, /* gamma_x_9 */
-	0x50, /* gamma_x_10 */
-	0x58, /* gamma_x_11 */
-	0x60, /* gamma_x_12 */
-	0x68, /* gamma_x_13 */
-	0x70, /* gamma_x_14 */
-	0x78, /* gamma_x_15 */
-	0x80, /* gamma_x_16 */
-	0x88, /* gamma_x_17 */
-	0x90, /* gamma_x_18 */
-	0x98, /* gamma_x_19 */
-	0xa0, /* gamma_x_20 */
-	0xa8, /* gamma_x_21 */
-	0xb0, /* gamma_x_22 */
-	0xb8, /* gamma_x_23 */
-	0xc0, /* gamma_x_24 */
-	0xc8, /* gamma_x_25 */
-	0xd0, /* gamma_x_26 */
-	0xd8, /* gamma_x_27 */
-	0xe0, /* gamma_x_28 */
-	0xe8, /* gamma_x_29 */
-	0xf0, /* gamma_x_30 */
-	0xf8, /* gamma_x_31 */
-	0x01, /* gamma_x_32 */
-	0x00,
-	0x00, /* gamma_y_0 */
-	0x08, /* gamma_y_1 */
-	0x10, /* gamma_y_2 */
-	0x18, /* gamma_y_3 */
-	0x20, /* gamma_y_4 */
-	0x28, /* gamma_y_5 */
-	0x30, /* gamma_y_6 */
-	0x38, /* gamma_y_7 */
-	0x40, /* gamma_y_8 */
-	0x48, /* gamma_y_9 */
-	0x50, /* gamma_y_10 */
-	0x58, /* gamma_y_11 */
-	0x60, /* gamma_y_12 */
-	0x68, /* gamma_y_13 */
-	0x70, /* gamma_y_14 */
-	0x78, /* gamma_y_15 */
-	0x80, /* gamma_y_16 */
-	0x88, /* gamma_y_17 */
-	0x90, /* gamma_y_18 */
-	0x98, /* gamma_y_19 */
-	0xa0, /* gamma_y_20 */
-	0xa8, /* gamma_y_21 */
-	0xb0, /* gamma_y_22 */
-	0xb8, /* gamma_y_23 */
-	0xc0, /* gamma_y_24 */
-	0xc8, /* gamma_y_25 */
-	0xd0, /* gamma_y_26 */
-	0xd8, /* gamma_y_27 */
-	0xe0, /* gamma_y_28 */
-	0xe8, /* gamma_y_29 */
-	0xf0, /* gamma_y_30 */
-	0xf8, /* gamma_y_31 */
-	0x01, /* gamma_y_32 */
-	0x00,
-};
-
-static unsigned char MOVIE_VT_3[] = {
-	0xDD,
-	0x01, /* mdnie_en */
-	0x00, /* mask 00 0000 */
-	0x00, /* ascr algo aolce gamut 00 00 00 00 */
-	0x00, /* v_partial_on 000 */
-	0x7f, /* partial_en ascr_cc_cs_de_nr_lce_gamut */
-	0x00, /* roi_en */
-	0x00, /* roi_block */
-	0x00, /* roi_sx */
-	0x00, /* roi_sx */
-	0x00, /* roi_sy */
-	0x00, /* roi_sy */
-	0x00, /* roi_ex */
-	0x00, /* roi_ex */
-	0x00, /* roi_ey */
-	0x00, /* roi_ey */
-	0xff, /* trans_on trans_block 000 0000 */
-	0x04, /* trans_slope */
-	0x01, /* trans_interval */
-	/* end */
-};
-
-static unsigned char AUTO_VT_1[] = {
-	/* start */
-	0xDF,
-	0x01, /* linear_on ascr_skin_on 0000 0000 */
-	0x6a, /* ascr_skin_cb */
-	0x9a, /* ascr_skin_cr */
-	0x25, /* ascr_dist_up */
-	0x1a, /* ascr_dist_down */
-	0x16, /* ascr_dist_right */
-	0x2a, /* ascr_dist_left */
-	0x00, /* ascr_div_up 20 */
-	0x37,
-	0x5a,
-	0x00, /* ascr_div_down */
-	0x4e,
-	0xc5,
-	0x00, /* ascr_div_right */
-	0x5d,
-	0x17,
-	0x00, /* ascr_div_left */
-	0x30,
-	0xc3,
-	0xff, /* ascr_skin_Rr */
-	0x48, /* ascr_skin_Rg */
-	0x5b, /* ascr_skin_Rb */
-	0xff, /* ascr_skin_Yr */
-	0xf9, /* ascr_skin_Yg */
-	0x00, /* ascr_skin_Yb */
-	0xd8, /* ascr_skin_Mr */
-	0x00, /* ascr_skin_Mg */
-	0xd9, /* ascr_skin_Mb */
-	0xff, /* ascr_skin_Wr */
-	0xff, /* ascr_skin_Wg */
-	0xff, /* ascr_skin_Wb */
-	0x00, /* ascr_Cr */
-	0xe0, /* ascr_Rr */
-	0xff, /* ascr_Cg */
-	0x00, /* ascr_Rg */
-	0xf6, /* ascr_Cb */
-	0x00, /* ascr_Rb */
-	0xd8, /* ascr_Mr */
-	0x3b, /* ascr_Gr */
-	0x00, /* ascr_Mg */
-	0xff, /* ascr_Gg */
-	0xd9, /* ascr_Mb */
-	0x00, /* ascr_Gb */
-	0xff, /* ascr_Yr */
-	0x14, /* ascr_Br */
-	0xf9, /* ascr_Yg */
-	0x00, /* ascr_Bg */
-	0x00, /* ascr_Yb */
-	0xff, /* ascr_Bb */
-	0xff, /* ascr_Wr */
-	0x00, /* ascr_Kr */
-	0xff, /* ascr_Wg */
-	0x00, /* ascr_Kg */
-	0xff, /* ascr_Wb */
-	0x00, /* ascr_Kb */
-};
-
-static unsigned char AUTO_VT_2[] = {
-	0xDE,
-	0x00, /* gamut_gamma_on gamut_blk_shift 0000 0000 */
-	0x40, /* gamut_scale */
-	0x04, /* gamut_r1 */
-	0x00,
-	0x00, /* gamut_r2 */
-	0x00,
-	0x00, /* gamut_r3 */
-	0x00,
-	0x00, /* gamut_g1 */
-	0x00,
-	0x04, /* gamut_g2 */
-	0x00,
-	0x00, /* gamut_g3 */
-	0x00,
-	0x00, /* gamut_b1 */
-	0x00,
-	0x00, /* gamut_b2 */
-	0x00,
-	0x04, /* gamut_b3 */
-	0x00,
-	0x06, /* ove_SLCE_gain 0 00 0000 */
-	0x0c, /* ove_color_gain 00 0000 */
-	0x00, /* ove_min_ref_offset */
-	0x96,
-	0xf0, /* ove_illum_gain */
-	0x01, /* ove_ref_offset 9 */
-	0x0e,
-	0x01, /* ove_ref_gain 9 */
-	0x00,
-	0x66, /* ove_block_size h v 000 000 */
-	0x00, /* ove_dark_th 000 */
-	0x17, /* ove_black reduct_slope 0 0000 */
-	0x0c, /* nr fa de cs gamma 0 0000 */
-	0xff, /* nr_mask_th */
-	0x00, /* de_gain 10 */
-	0x28,
-	0x00, /* de_maxplus 11 */
-	0xa0,
-	0x00, /* de_maxminus 11 */
-	0xa0,
-	0x14, /* fa_edge_th */
-	0x00, /* fa_step_p 10 */
-	0x01,
-	0x00, /* fa_step_n 10 */
-	0x01,
-	0x00, /* fa_max_de_gain 10 */
-	0x28,
-	0x00, /* fa_pcl_ppi 14 */
-	0x01,
-	0x28, /* fa_os_cnt_10_co */
-	0x3c, /* fa_os_cnt_20_co */
-	0x04, /* fa_edge_cnt */
-	0x0f, /* fa_AVG_y_cnt */
-	0x01, /* cs_gain 10 */
-	0x20,
-	0x00, /* gamma_x_0 */
-	0x08, /* gamma_x_1 */
-	0x10, /* gamma_x_2 */
-	0x18, /* gamma_x_3 */
-	0x20, /* gamma_x_4 */
-	0x28, /* gamma_x_5 */
-	0x30, /* gamma_x_6 */
-	0x38, /* gamma_x_7 */
-	0x40, /* gamma_x_8 */
-	0x48, /* gamma_x_9 */
-	0x50, /* gamma_x_10 */
-	0x58, /* gamma_x_11 */
-	0x60, /* gamma_x_12 */
-	0x68, /* gamma_x_13 */
-	0x70, /* gamma_x_14 */
-	0x78, /* gamma_x_15 */
-	0x80, /* gamma_x_16 */
-	0x88, /* gamma_x_17 */
-	0x90, /* gamma_x_18 */
-	0x98, /* gamma_x_19 */
-	0xa0, /* gamma_x_20 */
-	0xa8, /* gamma_x_21 */
-	0xb0, /* gamma_x_22 */
-	0xb8, /* gamma_x_23 */
-	0xc0, /* gamma_x_24 */
-	0xc8, /* gamma_x_25 */
-	0xd0, /* gamma_x_26 */
-	0xd8, /* gamma_x_27 */
-	0xe0, /* gamma_x_28 */
-	0xe8, /* gamma_x_29 */
-	0xf0, /* gamma_x_30 */
-	0xf8, /* gamma_x_31 */
-	0x01, /* gamma_x_32 */
-	0x00,
-	0x00, /* gamma_y_0 */
-	0x08, /* gamma_y_1 */
-	0x10, /* gamma_y_2 */
-	0x18, /* gamma_y_3 */
-	0x20, /* gamma_y_4 */
-	0x28, /* gamma_y_5 */
-	0x30, /* gamma_y_6 */
-	0x38, /* gamma_y_7 */
-	0x40, /* gamma_y_8 */
-	0x48, /* gamma_y_9 */
-	0x50, /* gamma_y_10 */
-	0x58, /* gamma_y_11 */
-	0x60, /* gamma_y_12 */
-	0x68, /* gamma_y_13 */
-	0x70, /* gamma_y_14 */
-	0x78, /* gamma_y_15 */
-	0x80, /* gamma_y_16 */
-	0x88, /* gamma_y_17 */
-	0x90, /* gamma_y_18 */
-	0x98, /* gamma_y_19 */
-	0xa0, /* gamma_y_20 */
-	0xa8, /* gamma_y_21 */
-	0xb0, /* gamma_y_22 */
-	0xb8, /* gamma_y_23 */
-	0xc0, /* gamma_y_24 */
-	0xc8, /* gamma_y_25 */
-	0xd0, /* gamma_y_26 */
-	0xd8, /* gamma_y_27 */
-	0xe0, /* gamma_y_28 */
-	0xe8, /* gamma_y_29 */
-	0xf0, /* gamma_y_30 */
-	0xf8, /* gamma_y_31 */
-	0x01, /* gamma_y_32 */
-	0x00,
-};
-
-static unsigned char AUTO_VT_3[] = {
-	0xDD,
-	0x01, /* mdnie_en */
-	0x00, /* mask 00 0000 */
-	0xf0, /* ascr algo aolce gamut 00 00 00 00 */
-	0x00, /* v_partial_on 000 */
-	0x7f, /* partial_en ascr_cc_cs_de_nr_lce_gamut */
-	0x00, /* roi_en */
-	0x00, /* roi_block */
-	0x00, /* roi_sx */
-	0x00, /* roi_sx */
-	0x00, /* roi_sy */
-	0x00, /* roi_sy */
-	0x00, /* roi_ex */
-	0x00, /* roi_ex */
-	0x00, /* roi_ey */
-	0x00, /* roi_ey */
-	0xff, /* trans_on trans_block 000 0000 */
-	0x04, /* trans_slope */
-	0x01, /* trans_interval */
-	/* end */
-};
-
 /******************** CAMERA ********************/
 static unsigned char STANDARD_CAMERA_1[] = {
 	/* start */
@@ -7047,6 +6212,216 @@ static unsigned char AUTO_CAMERA_2[] = {
 };
 
 static unsigned char AUTO_CAMERA_3[] = {
+	0xDD,
+	0x01, /* mdnie_en */
+	0x00, /* mask 00 0000 */
+	0xf0, /* ascr algo aolce gamut 00 00 00 00 */
+	0x00, /* v_partial_on 000 */
+	0x7f, /* partial_en ascr_cc_cs_de_nr_lce_gamut */
+	0x00, /* roi_en */
+	0x00, /* roi_block */
+	0x00, /* roi_sx */
+	0x00, /* roi_sx */
+	0x00, /* roi_sy */
+	0x00, /* roi_sy */
+	0x00, /* roi_ex */
+	0x00, /* roi_ex */
+	0x00, /* roi_ey */
+	0x00, /* roi_ey */
+	0xff, /* trans_on trans_block 000 0000 */
+	0x04, /* trans_slope */
+	0x01, /* trans_interval */
+	/* end */
+};
+
+static unsigned char AUTO_CAMERA_SWA_1[] = {
+	/* start */
+	0xDF,
+	0x01, /* linear_on ascr_skin_on 0000 0000 */
+	0x6a, /* ascr_skin_cb */
+	0x9a, /* ascr_skin_cr */
+	0x25, /* ascr_dist_up */
+	0x1a, /* ascr_dist_down */
+	0x16, /* ascr_dist_right */
+	0x2a, /* ascr_dist_left */
+	0x00, /* ascr_div_up 20 */
+	0x37,
+	0x5a,
+	0x00, /* ascr_div_down */
+	0x4e,
+	0xc5,
+	0x00, /* ascr_div_right */
+	0x5d,
+	0x17,
+	0x00, /* ascr_div_left */
+	0x30,
+	0xc3,
+	0xff, /* ascr_skin_Rr */
+	0x1a, /* ascr_skin_Rg */
+	0x38, /* ascr_skin_Rb */
+	0xff, /* ascr_skin_Yr */
+	0xf9, /* ascr_skin_Yg */
+	0x00, /* ascr_skin_Yb */
+	0xd8, /* ascr_skin_Mr */
+	0x00, /* ascr_skin_Mg */
+	0xd9, /* ascr_skin_Mb */
+	0xff, /* ascr_skin_Wr */
+	0xff, /* ascr_skin_Wg */
+	0xff, /* ascr_skin_Wb */
+	0x00, /* ascr_Cr */
+	0xe0, /* ascr_Rr */
+	0xff, /* ascr_Cg */
+	0x0a, /* ascr_Rg */
+	0xf6, /* ascr_Cb */
+	0x0a, /* ascr_Rb */
+	0xd8, /* ascr_Mr */
+	0x3b, /* ascr_Gr */
+	0x00, /* ascr_Mg */
+	0xff, /* ascr_Gg */
+	0xd9, /* ascr_Mb */
+	0x00, /* ascr_Gb */
+	0xff, /* ascr_Yr */
+	0x14, /* ascr_Br */
+	0xf9, /* ascr_Yg */
+	0x00, /* ascr_Bg */
+	0x00, /* ascr_Yb */
+	0xff, /* ascr_Bb */
+	0xf4, /* ascr_Wr */
+	0x00, /* ascr_Kr */
+	0xf2, /* ascr_Wg */
+	0x00, /* ascr_Kg */
+	0xff, /* ascr_Wb */
+	0x00, /* ascr_Kb */
+};
+
+static unsigned char AUTO_CAMERA_SWA_2[] = {
+	0xDE,
+	0x00, /* gamut_gamma_on gamut_blk_shift 0000 0000 */
+	0x40, /* gamut_scale */
+	0x04, /* gamut_r1 */
+	0x00,
+	0x00, /* gamut_r2 */
+	0x00,
+	0x00, /* gamut_r3 */
+	0x00,
+	0x00, /* gamut_g1 */
+	0x00,
+	0x04, /* gamut_g2 */
+	0x00,
+	0x00, /* gamut_g3 */
+	0x00,
+	0x00, /* gamut_b1 */
+	0x00,
+	0x00, /* gamut_b2 */
+	0x00,
+	0x04, /* gamut_b3 */
+	0x00,
+	0x06, /* ove_SLCE_gain 0 00 0000 */
+	0x0c, /* ove_color_gain 00 0000 */
+	0x00, /* ove_min_ref_offset */
+	0x96,
+	0xf0, /* ove_illum_gain */
+	0x01, /* ove_ref_offset 9 */
+	0x0e,
+	0x01, /* ove_ref_gain 9 */
+	0x00,
+	0x66, /* ove_block_size h v 000 000 */
+	0x00, /* ove_dark_th 000 */
+	0x17, /* ove_black reduct_slope 0 0000 */
+	0x0c, /* nr fa de cs gamma 0 0000 */
+	0xff, /* nr_mask_th */
+	0x00, /* de_gain 10 */
+	0x28,
+	0x00, /* de_maxplus 11 */
+	0xa0,
+	0x00, /* de_maxminus 11 */
+	0xa0,
+	0x14, /* fa_edge_th */
+	0x00, /* fa_step_p 10 */
+	0x01,
+	0x00, /* fa_step_n 10 */
+	0x01,
+	0x00, /* fa_max_de_gain 10 */
+	0x28,
+	0x00, /* fa_pcl_ppi 14 */
+	0x01,
+	0x28, /* fa_os_cnt_10_co */
+	0x3c, /* fa_os_cnt_20_co */
+	0x04, /* fa_edge_cnt */
+	0x0f, /* fa_AVG_y_cnt */
+	0x01, /* cs_gain 10 */
+	0x20,
+	0x00, /* gamma_x_0 */
+	0x08, /* gamma_x_1 */
+	0x10, /* gamma_x_2 */
+	0x18, /* gamma_x_3 */
+	0x20, /* gamma_x_4 */
+	0x28, /* gamma_x_5 */
+	0x30, /* gamma_x_6 */
+	0x38, /* gamma_x_7 */
+	0x40, /* gamma_x_8 */
+	0x48, /* gamma_x_9 */
+	0x50, /* gamma_x_10 */
+	0x58, /* gamma_x_11 */
+	0x60, /* gamma_x_12 */
+	0x68, /* gamma_x_13 */
+	0x70, /* gamma_x_14 */
+	0x78, /* gamma_x_15 */
+	0x80, /* gamma_x_16 */
+	0x88, /* gamma_x_17 */
+	0x90, /* gamma_x_18 */
+	0x98, /* gamma_x_19 */
+	0xa0, /* gamma_x_20 */
+	0xa8, /* gamma_x_21 */
+	0xb0, /* gamma_x_22 */
+	0xb8, /* gamma_x_23 */
+	0xc0, /* gamma_x_24 */
+	0xc8, /* gamma_x_25 */
+	0xd0, /* gamma_x_26 */
+	0xd8, /* gamma_x_27 */
+	0xe0, /* gamma_x_28 */
+	0xe8, /* gamma_x_29 */
+	0xf0, /* gamma_x_30 */
+	0xf8, /* gamma_x_31 */
+	0x01, /* gamma_x_32 */
+	0x00,
+	0x00, /* gamma_y_0 */
+	0x08, /* gamma_y_1 */
+	0x10, /* gamma_y_2 */
+	0x18, /* gamma_y_3 */
+	0x20, /* gamma_y_4 */
+	0x28, /* gamma_y_5 */
+	0x30, /* gamma_y_6 */
+	0x38, /* gamma_y_7 */
+	0x40, /* gamma_y_8 */
+	0x48, /* gamma_y_9 */
+	0x50, /* gamma_y_10 */
+	0x58, /* gamma_y_11 */
+	0x60, /* gamma_y_12 */
+	0x68, /* gamma_y_13 */
+	0x70, /* gamma_y_14 */
+	0x78, /* gamma_y_15 */
+	0x80, /* gamma_y_16 */
+	0x88, /* gamma_y_17 */
+	0x90, /* gamma_y_18 */
+	0x98, /* gamma_y_19 */
+	0xa0, /* gamma_y_20 */
+	0xa8, /* gamma_y_21 */
+	0xb0, /* gamma_y_22 */
+	0xb8, /* gamma_y_23 */
+	0xc0, /* gamma_y_24 */
+	0xc8, /* gamma_y_25 */
+	0xd0, /* gamma_y_26 */
+	0xd8, /* gamma_y_27 */
+	0xe0, /* gamma_y_28 */
+	0xe8, /* gamma_y_29 */
+	0xf0, /* gamma_y_30 */
+	0xf8, /* gamma_y_31 */
+	0x01, /* gamma_y_32 */
+	0x00,
+};
+
+static unsigned char AUTO_CAMERA_SWA_3[] = {
 	0xDD,
 	0x01, /* mdnie_en */
 	0x00, /* mask 00 0000 */
@@ -11777,7 +11152,7 @@ static unsigned char LOCAL_CE_2[] = {
 	0x04, /* gamut_b3 */
 	0x00,
 	0x06, /* ove_SLCE_gain 0 00 0000 */
-	0x0c, /* ove_color_gain 00 0000 */
+	0x18, /* ove_color_gain 00 0000 */
 	0x00, /* ove_min_ref_offset */
 	0x96,
 	0xf0, /* ove_illum_gain */
@@ -11788,7 +11163,7 @@ static unsigned char LOCAL_CE_2[] = {
 	0x66, /* ove_block_size h v 000 000 */
 	0x00, /* ove_dark_th 000 */
 	0x17, /* ove_black reduct_slope 0 0000 */
-	0x00, /* nr fa de cs gamma 0 0000 */
+	0x01, /* nr fa de cs gamma 0 0000 */
 	0xff, /* nr_mask_th */
 	0x00, /* de_gain 10 */
 	0x00,
@@ -11846,37 +11221,37 @@ static unsigned char LOCAL_CE_2[] = {
 	0x01, /* gamma_x_32 */
 	0x00,
 	0x00, /* gamma_y_0 */
-	0x08, /* gamma_y_1 */
-	0x10, /* gamma_y_2 */
-	0x18, /* gamma_y_3 */
-	0x20, /* gamma_y_4 */
-	0x28, /* gamma_y_5 */
-	0x30, /* gamma_y_6 */
-	0x38, /* gamma_y_7 */
-	0x40, /* gamma_y_8 */
-	0x48, /* gamma_y_9 */
-	0x50, /* gamma_y_10 */
-	0x58, /* gamma_y_11 */
-	0x60, /* gamma_y_12 */
-	0x68, /* gamma_y_13 */
-	0x70, /* gamma_y_14 */
-	0x78, /* gamma_y_15 */
-	0x80, /* gamma_y_16 */
-	0x88, /* gamma_y_17 */
-	0x90, /* gamma_y_18 */
-	0x98, /* gamma_y_19 */
-	0xa0, /* gamma_y_20 */
-	0xa8, /* gamma_y_21 */
-	0xb0, /* gamma_y_22 */
-	0xb8, /* gamma_y_23 */
-	0xc0, /* gamma_y_24 */
-	0xc8, /* gamma_y_25 */
-	0xd0, /* gamma_y_26 */
-	0xd8, /* gamma_y_27 */
-	0xe0, /* gamma_y_28 */
-	0xe8, /* gamma_y_29 */
-	0xf0, /* gamma_y_30 */
-	0xf8, /* gamma_y_31 */
+	0x0f, /* gamma_y_1 */
+	0x1a, /* gamma_y_2 */
+	0x25, /* gamma_y_3 */
+	0x2f, /* gamma_y_4 */
+	0x38, /* gamma_y_5 */
+	0x41, /* gamma_y_6 */
+	0x4a, /* gamma_y_7 */
+	0x52, /* gamma_y_8 */
+	0x5b, /* gamma_y_9 */
+	0x63, /* gamma_y_10 */
+	0x6b, /* gamma_y_11 */
+	0x73, /* gamma_y_12 */
+	0x7a, /* gamma_y_13 */
+	0x82, /* gamma_y_14 */
+	0x8a, /* gamma_y_15 */
+	0x91, /* gamma_y_16 */
+	0x98, /* gamma_y_17 */
+	0xa0, /* gamma_y_18 */
+	0xa7, /* gamma_y_19 */
+	0xae, /* gamma_y_20 */
+	0xb5, /* gamma_y_21 */
+	0xbc, /* gamma_y_22 */
+	0xc3, /* gamma_y_23 */
+	0xca, /* gamma_y_24 */
+	0xd1, /* gamma_y_25 */
+	0xd8, /* gamma_y_26 */
+	0xdf, /* gamma_y_27 */
+	0xe5, /* gamma_y_28 */
+	0xec, /* gamma_y_29 */
+	0xf3, /* gamma_y_30 */
+	0xf9, /* gamma_y_31 */
 	0x01, /* gamma_y_32 */
 	0x00,
 };
@@ -11994,19 +11369,28 @@ static struct mdnie_table main_table[SCENARIO_MAX][MODE_MAX] = {
 		MDNIE_SET(AUTO_CAMERA),
 		MDNIE_SET(AUTO_EBOOK)
 	},
-	[GALLERY_MODE] = {
+	[CAMERA_SWA_MODE] = {
+		MDNIE_SET(DYNAMIC_CAMERA),
+		MDNIE_SET(STANDARD_CAMERA),
+		MDNIE_SET(NATURAL_CAMERA),
+		MDNIE_SET(MOVIE_CAMERA),
+		MDNIE_SET(AUTO_CAMERA_SWA),
+		MDNIE_SET(AUTO_EBOOK)
+	},
+	[CAMERA_MODE] = {
 		MDNIE_SET(DYNAMIC_GALLERY),
 		MDNIE_SET(STANDARD_GALLERY),
 		MDNIE_SET(NATURAL_GALLERY),
 		MDNIE_SET(MOVIE_GALLERY),
 		MDNIE_SET(AUTO_GALLERY),
 		MDNIE_SET(AUTO_EBOOK)
-	}, {
-		MDNIE_SET(DYNAMIC_VT),
-		MDNIE_SET(STANDARD_VT),
-		MDNIE_SET(NATURAL_VT),
-		MDNIE_SET(MOVIE_VT),
-		MDNIE_SET(AUTO_VT),
+	},
+	[GALLERY_SWA_MODE] = {
+		MDNIE_SET(DYNAMIC_GALLERY),
+		MDNIE_SET(STANDARD_GALLERY),
+		MDNIE_SET(NATURAL_GALLERY),
+		MDNIE_SET(MOVIE_GALLERY),
+		MDNIE_SET(AUTO_GALLERY_SWA),
 		MDNIE_SET(AUTO_EBOOK)
 	}, {
 		MDNIE_SET(DYNAMIC_BROWSER),
@@ -12068,6 +11452,7 @@ static struct mdnie_tune tune_info = {
 	.get_hbm_index = get_hbm_index,
 	.trans_info = &trans_info,
 	.night_info = &night_info,
-	.color_offset = {NULL, color_offset_f1, color_offset_f2, color_offset_f3, color_offset_f4}
+	.color_offset = {NULL, color_offset_f1, color_offset_f2, color_offset_f3, color_offset_f4},
+	.wrgb_swa = &wrgb_swa,
 };
 #endif

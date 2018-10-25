@@ -5,6 +5,11 @@
 #include <linux/input/sec_cmd.h>
 #include <linux/wakelock.h>
 
+#include <linux/input/sec_tclm_v2.h>
+#ifdef CONFIG_INPUT_TOUCHSCREEN_TCLMV2
+#define TCLM_CONCEPT
+#endif
+
 #undef CONFIG_EXYNOS_DECON_FB
 
 #undef FTS_SUPPORT_TOUCH_KEY
@@ -12,7 +17,6 @@
 #undef FTS_SUPPORT_STRINGLIB
 #define USE_OPEN_CLOSE
 #define SEC_TSP_FACTORY_TEST
-#define PAT_CONTROL
 #define USE_POR_AFTER_I2C_RETRY
 /* glove mode */
 #define CONFIG_GLOVE_TOUCH
@@ -39,7 +43,7 @@
 #define CONFIG_OFFSET_BIN_D3				0x3F022
 
 #define FTS_SEC_IX1_TX_MULTIPLIER			(2)
-#define FTS_SEC_IX1_RX_MULTIPLIER			(1)
+#define FTS_SEC_IX1_RX_MULTIPLIER			(2)
 
 #define PRESSURE_SENSOR_COUNT				3
 
@@ -208,32 +212,6 @@
 #define FTS_BOOT_CRC_OKAY			0
 #define FTS_BOOT_CRC_FAIL			1
 
-#ifdef PAT_CONTROL
-/*---------------------------------------
-	<<< apply to server >>>
-	0x00 : no action
-	0x01 : clear nv
-	0x02 : pat magic
-	0x03 : rfu
-
-	<<< use for temp bin >>>
-	0x05 : forced clear nv & f/w update  before pat magic, eventhough same f/w
-	0x06 : rfu
-  ---------------------------------------*/
-#define PAT_CONTROL_NONE  		0x00
-#define PAT_CONTROL_CLEAR_NV 		0x01
-#define PAT_CONTROL_PAT_MAGIC 		0x02
-#define PAT_CONTROL_FORCE_UPDATE	0x05
-
-#define PAT_COUNT_ZERO			0x00
-#define PAT_ONE_LCIA			0x01
-#define PAT_MAX_LCIA			0x80
-#define PAT_MAGIC_NUMBER		0x83
-#define PAT_MAX_MAGIC			0xC5
-#define PAT_EXT_FACT			0xE0
-#define PAT_MAX_EXT 			0xF5
-#endif
-
 #ifdef FTS_SUPPORT_TOUCH_KEY
 /* TSP Key Feature*/
 #define KEY_PRESS       1
@@ -396,6 +374,16 @@ enum {
 	SPECIAL_EVENT_TYPE_AOD_HOMEKEY_RELEASE_NO_HAPTIC	= 0x0E
 };
 
+enum fts_ito_test_mode {
+	OPEN_TEST = 0,
+	OPEN_SHORT_CRACK_TEST,
+	SAVE_MISCAL_REF_RAW,
+};
+
+enum fts_miscal_test_result {
+	MISCAL_PASS = 0,
+	MISCAL_FAIL,
+};
 
 /* ----------------------------------------
  * write 0xE4 [ 11 | 10 | 01 | 00 ]
@@ -436,6 +424,34 @@ struct fts_ts_test_result {
 #define TEST_OCTA_FAIL		1
 #define TEST_OCTA_PASS		2
 
+enum offset_fac_position {
+	OFFSET_FAC_NOSAVE		= 0,	// FW index 0
+	OFFSET_FAC_SUB			= 1,	// FW Index 2
+	OFFSET_FAC_MAIN			= 2,	// FW Index 3
+	OFFSET_FAC_SVC			= 3,	// FW Index 4
+};
+
+enum offset_fw_position {
+	OFFSET_FW_NOSAVE		= 0,
+	OFFSET_FW_SDC			= 1,
+	OFFSET_FW_SUB			= 2,
+	OFFSET_FW_MAIN			= 3,
+	OFFSET_FW_SVC			= 4,
+};
+
+#define FTS_ITO_RESULT_PRINT_SIZE	1024
+
+struct fts_sec_panel_test_result {
+	u8 flag;
+	u8 num_of_test;
+	u16 max_of_tx_gap;
+	u16 max_of_rx_gap;
+	u8 tx_of_txmax_gap;
+	u8 rx_of_txmax_gap;
+	u8 tx_of_rxmax_gap;
+	u8 rx_of_rxmax_gap;
+} __packed;
+
 struct fts_i2c_platform_data {
 	bool support_hover;
 	bool support_glove;
@@ -446,8 +462,6 @@ struct fts_i2c_platform_data {
 	int max_y;
 	int use_pressure;
 	unsigned char panel_revision;	/* to identify panel info */
-	int pat_function;	/*  copyed by dt, select function for suitable process  - pat_control */
-	int afe_base;		/*  set f/w version when afe is fixed			- pat_control */
 	const char *firmware_name;
 	const char *project_name;
 	const char *model_name;
@@ -509,10 +523,15 @@ struct fts_ts_info {
 	int SenseChannelLength;
 	int ForceChannelLength;
 	short *pFrame;
+	short *miscal_ref_raw;
+	u8 miscal_result;
 	unsigned char *cx_data;
+	u8 *ito_result;
 #endif
 	struct fts_ts_test_result test_result;
 	unsigned char disassemble_count;
+	u8 fac_nv;
+	struct sec_tclm_data *tdata;
 
 	bool hover_ready;
 	bool hover_enabled;
@@ -609,15 +628,12 @@ struct fts_ts_info {
 	struct mutex device_mutex;
 	bool touch_stopped;
 	bool reinit_done;
+	bool info_work_done;
 
 	unsigned char data[FTS_EVENT_SIZE * FTS_FIFO_MAX];
 	unsigned char ddi_type;
 
 	const char *firmware_name;
-
-	unsigned char cal_count;		/* calibration count   		- pat_control */
-	unsigned short tune_fix_ver;	/* calibration version which f/w based on  - pat_control */
-	bool external_factory;
 
 	u8 grip_edgehandler_direction;
 	int grip_edgehandler_start_y;
@@ -652,8 +668,8 @@ struct fts_ts_info {
 	unsigned int max_z_value;
 	unsigned int min_z_value;
 	unsigned int sum_z_value;
-	unsigned char pressure_cal_base;
-	unsigned char pressure_cal_delta;
+
+	u8 factory_position;
 
 	int (*stop_device)(struct fts_ts_info *info, bool lpmode);
 	int (*start_device)(struct fts_ts_info *info);
@@ -673,19 +689,16 @@ struct fts_ts_info {
 #endif
 };
 
+int get_nvm_data_by_size(struct fts_ts_info *info, u8 offset, int length, u8 *nvdata);
+int set_nvm_data_by_size(struct fts_ts_info *info, u8 offset, int length, u8 *buf);
 int fts_fw_update_on_probe(struct fts_ts_info *info);
 int fts_fw_update_on_hidden_menu(struct fts_ts_info *info, int update_type);
 void fts_fw_init(struct fts_ts_info *info, bool boot);
-void fts_execute_autotune(struct fts_ts_info *info);
+void fts_execute_autotune(struct fts_ts_info *info, bool IsSaving);
 int fts_fw_wait_for_event(struct fts_ts_info *info, unsigned char eid);
 int fts_fw_wait_for_event_D3(struct fts_ts_info *info, unsigned char eid0, unsigned char eid1);
 int fts_fw_wait_for_specific_event(struct fts_ts_info *info, unsigned char eid0, unsigned char eid1, unsigned char eid2);
 int fts_irq_enable(struct fts_ts_info *info, bool enable);
-#ifdef PAT_CONTROL
-int fts_set_calibration_information(struct fts_ts_info *info, unsigned char count, unsigned short version);
-int fts_get_calibration_information(struct fts_ts_info *info);
-int fts_ts_tclm(struct fts_ts_info *info, bool boot, bool run_force);
-#endif
 int fts_get_tsp_test_result(struct fts_ts_info *info);
 int fts_read_pressure_data(struct fts_ts_info *info);
 int fts_interrupt_set(struct fts_ts_info *info, int enable);
@@ -693,12 +706,14 @@ void fts_release_all_finger(struct fts_ts_info *info);
 void fts_delay(unsigned int ms);
 int fts_read_analog_chip_id(struct fts_ts_info *info, unsigned char id);
 
+#ifdef TCLM_CONCEPT
+int sec_tclm_data_read(struct i2c_client *client, int address);
+int sec_tclm_data_write(struct i2c_client *client);
+int sec_tclm_execute_force_calibration(struct i2c_client *client, int cal_mode);
+#endif
 int set_nvm_data(struct fts_ts_info *info, unsigned char type, unsigned char *buf);
 int get_nvm_data(struct fts_ts_info *info, int type, unsigned char *nvdata);
-int fts_set_factory_debug_information(struct fts_ts_info *info, unsigned char base, unsigned char delta, unsigned char checksum);
-int fts_get_factory_debug_information(struct fts_ts_info *info);
-
-int fts_panel_ito_test(struct fts_ts_info *info);
+int fts_panel_ito_test(struct fts_ts_info *info, int testmode);
 
 #ifndef CONFIG_SEC_SYSFS
 extern struct class *sec_class;
@@ -712,6 +727,10 @@ extern int tui_force_close(uint32_t arg);
 #endif
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 extern int get_lcd_attached(char *mode);
+#endif
+
+#if defined(CONFIG_EXYNOS_DECON_LCD)
+extern unsigned int lcdtype;
 #endif
 
 #if defined(CONFIG_EXYNOS_DECON_FB)

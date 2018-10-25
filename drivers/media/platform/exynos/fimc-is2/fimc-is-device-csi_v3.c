@@ -1576,8 +1576,22 @@ static int csi_stream_on(struct v4l2_subdev *subdev,
 
 	spin_lock(&csi_dma->barrier);
 	/* common dma register setting */
-	if (atomic_inc_return(&csi_dma->rcount) == 1)
-		csi_hw_s_dma_common(csi_dma->base_reg);
+	if (atomic_inc_return(&csi_dma->rcount) == 1) {
+		if (csi_dma->use_split) {
+			u32 dma_ch;
+
+			ret = get_dma(device, &dma_ch);
+			if (ret) {
+				spin_unlock(&csi_dma->barrier);
+				goto p_err;
+			}
+			/* set CSIS DMA SRAM - 10KB */
+			csi_hw_s_dma_common_dynamic(csi_dma->base_reg, 10 * SZ_1K, dma_ch);
+		} else {
+			csi_hw_s_dma_common(csi_dma->base_reg);
+		}
+		minfo("[CSI] set CSIS DMA(split:%d)\n", csi, csi_dma->use_split);
+	}
 	spin_unlock(&csi_dma->barrier);
 
 	csi_hw_enable(base_reg);
@@ -1976,6 +1990,7 @@ int fimc_is_csi_dma_probe(struct fimc_is_device_csi_dma *csi_dma, struct platfor
 {
 	int ret = 0;
 	struct resource *mem_res;
+	struct fimc_is_core *core = (struct fimc_is_core *)platform_get_drvdata(pdev);
 
 	/* Get SFR base register */
 	mem_res = platform_get_resource(pdev, IORESOURCE_MEM, IORESOURCE_CSIS_DMA);
@@ -1994,6 +2009,7 @@ int fimc_is_csi_dma_probe(struct fimc_is_device_csi_dma *csi_dma, struct platfor
 		goto err_get_base;
 	}
 
+	csi_dma->use_split = core->use_csi_dma_split;
 	atomic_set(&csi_dma->rcount, 0);
 
 	spin_lock_init(&csi_dma->barrier);

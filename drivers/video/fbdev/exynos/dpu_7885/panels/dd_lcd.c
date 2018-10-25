@@ -630,6 +630,9 @@ static int help_show(struct seq_file *m, void *unused)
 	seq_puts(m, "* If you insist, we eliminate these function immediately\n");
 	seq_puts(m, "------------------------------------------------------------\n");
 	seq_puts(m, "\n");
+	seq_puts(m, "---------- usage\n");
+	seq_puts(m, "# cd /d/dd_lcd\n");
+	seq_puts(m, "\n");
 	seq_puts(m, "---------- rx usage\n");
 	seq_puts(m, "# echo cmd len > rx\n");
 	seq_puts(m, "# echo (datatype:) cmd len (pos) > rx\n");
@@ -704,6 +707,7 @@ static int help_show(struct seq_file *m, void *unused)
 	seq_puts(m, "= check current tx_dump status\n");
 	seq_puts(m, "\n");
 	seq_puts(m, "---------- usage summary\n");
+	seq_puts(m, "# cd /d/dd_lcd\n");
 	seq_puts(m, "# echo 29 > tx\n");
 	seq_puts(m, "# cat tx\n");
 	seq_puts(m, "# echo a1 4 > rx\n");

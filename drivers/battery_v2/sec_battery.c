@@ -119,6 +119,7 @@ static struct device_attribute sec_battery_attrs[] = {
 	SEC_BATTERY_ATTR(batt_after_manufactured),
 #endif
 #endif
+	SEC_BATTERY_ATTR(fg_cycle_check_value),
 	SEC_BATTERY_ATTR(batt_wpc_temp),
 	SEC_BATTERY_ATTR(batt_wpc_temp_adc),
 	SEC_BATTERY_ATTR(batt_coil_temp), /* Wireless Coil therm */
@@ -426,7 +427,22 @@ static void sec_bat_get_charging_current_by_siop(struct sec_battery_info *batter
 {
 	int usb_charging_current = battery->pdata->default_usb_output_current;
 
-	if (battery->siop_level == 3) {
+	if (battery->pdata->siop_default_power > 0) {
+		if (battery->siop_level < 100) {
+			int new_charging_current,
+				now_input_power = *input_current * battery->input_voltage;
+
+			if (now_input_power > battery->pdata->siop_default_power) {
+				*input_current = battery->pdata->siop_default_power / battery->input_voltage;
+				new_charging_current =
+					(battery->pdata->siop_default_power * 1000) /
+					(battery->pdata->chg_float_voltage / battery->pdata->chg_float_voltage_conv);
+
+				if (*charging_current > new_charging_current)
+					*charging_current = new_charging_current;
+			}
+		}
+	} else if (battery->siop_level == 3) {
 		/* side sync scenario : siop_level 3 */
 		if (is_nv_wireless_type(battery->cable_type)) {
 			if (*input_current > battery->pdata->siop_wireless_input_limit_current)
@@ -1827,8 +1843,15 @@ static bool sec_bat_set_aging_step(struct sec_battery_info *battery, int step)
 		battery->pdata->chg_float_voltage;
 	if (!battery->swelling_mode) {
 		value.intval = battery->pdata->chg_float_voltage;
-		psy_do_property(battery->pdata->charger_name, set,
-			POWER_SUPPLY_PROP_VOLTAGE_MAX, value);
+		if (!battery->charging_block) {
+			sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_CHARGING_OFF);
+			psy_do_property(battery->pdata->charger_name, set,
+				POWER_SUPPLY_PROP_VOLTAGE_MAX, value);
+			sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_CHARGING);
+		} else {
+			psy_do_property(battery->pdata->charger_name, set,
+				POWER_SUPPLY_PROP_VOLTAGE_MAX, value);
+		}
 	}
 
 	/* full/recharge condition */
@@ -3092,7 +3115,8 @@ static void sec_bat_swelling_fullcharged_check(struct sec_battery_info *battery)
 
 		if ((battery->current_now > 0 && battery->current_now < topoff_current) &&
 			(battery->current_avg > 0 && battery->current_avg < topoff_current) &&
-			((battery->pdata->swelling_drop_float_voltage - 100) < battery->voltage_now)) {
+			(((battery->pdata->swelling_drop_float_voltage / battery->pdata->chg_float_voltage_conv) - 100)
+				< battery->voltage_now)) {
 			value.intval = POWER_SUPPLY_STATUS_FULL;
 		}
 		break;
@@ -3932,7 +3956,7 @@ static void sec_bat_check_input_voltage(struct sec_battery_info *battery)
 #endif
 	battery->max_charge_power = battery->charge_power;
 
-	pr_info("%s: battery->input_voltage : %dV, %dmW, %dmW)\n", __func__,
+	pr_info("%s: battery->input_voltage : %dV, %dmW, %dmW\n", __func__,
 		battery->input_voltage, battery->charge_power, battery->max_charge_power);
 }
 
@@ -4024,6 +4048,10 @@ static void sec_bat_cable_work(struct work_struct *work)
 		sec_bat_set_current_event(battery, 0, SEC_BAT_CURRENT_EVENT_AFC);
 		battery->aicl_current = 0;
 		sec_bat_set_charging_current(battery);
+#if defined(CONFIG_SEC_FACTORY)
+		wake_lock(&battery->monitor_wake_lock);
+		queue_delayed_work(battery->monitor_wqueue, &battery->monitor_work, 0);
+#endif
 		goto end_of_cable_work;
 	}
 
@@ -4719,6 +4747,7 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 					POWER_SUPPLY_EXT_PROP_INBAT_VOLTAGE_FGSRC_SWITCHING, value);
 
 			for (j = 0; j < 5; j++) {
+				mdelay(200);
 				psy_do_property(battery->pdata->fuelgauge_name, get,
 					POWER_SUPPLY_PROP_VOLTAGE_NOW, value);
 				ocv_data[j] = value.intval;
@@ -4823,6 +4852,9 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		break;
 #endif
 #endif
+	case FG_CYCLE_CHECK_VALUE:
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", battery->pdata->fg_cycle_check_value);
+		break;
 	case BATT_WPC_TEMP:
 		if (battery->pdata->wpc_thermal_source) {
 			sec_bat_get_value_by_adc(battery,
@@ -5881,6 +5913,8 @@ ssize_t sec_bat_store_attrs(
 		}
 		break;
 #endif
+	case FG_CYCLE_CHECK_VALUE:
+		break;
 	case BATT_WPC_TEMP:
 	case BATT_WPC_TEMP_ADC:
 	case BATT_COIL_TEMP:
@@ -6311,8 +6345,13 @@ ssize_t sec_bat_store_attrs(
 
 				pr_info("%s: %s\n", __func__, buf);
 				for (i = CISD_DATA_RESET_ALG; i < CISD_DATA_MAX_PER_DAY; i++) {
-					sscanf(p, "%10d%n", &pcisd->data[i], &x);
-					p += x;
+					if (sscanf(p, "%10d%n", &pcisd->data[i], &x) > 0)
+						p += (size_t)x;
+					else {
+						pr_info("%s: NO DATA (cisd_data)\n", __func__);
+						temp_data[CISD_DATA_RESET_ALG] = -1;
+						break;
+					}
 				}
 
 				pr_info("%s: %s cisd data\n", __func__,
@@ -6728,16 +6767,24 @@ static int sec_bat_set_property(struct power_supply *psy,
 		battery->block_water_event = val->intval;
 		break;
 #endif
+	case POWER_SUPPLY_PROP_ENERGY_NOW:
+		value.intval = val->intval;
+		psy_do_property(battery->pdata->charger_name, set, psp, value);
+		break;
 	case POWER_SUPPLY_PROP_MAX ... POWER_SUPPLY_EXT_PROP_MAX:
 		switch (ext_psp) {
 		case POWER_SUPPLY_EXT_PROP_AICL_CURRENT:
 			battery->aicl_current = val->intval;
 			battery->max_charge_power = battery->charge_power = battery->input_voltage * val->intval;
-			pr_info("%s: aicl : %dmA, %dmW)\n", __func__,
+			pr_info("%s: aicl : %dmA, %dmW\n", __func__,
 				battery->aicl_current, battery->charge_power);
 #if defined(CONFIG_BATTERY_CISD)
 			battery->cisd.data[CISD_DATA_AICL_COUNT]++;
 			battery->cisd.data[CISD_DATA_AICL_COUNT_PER_DAY]++;
+#endif
+#if defined(CONFIG_MULTI_CHARGING)
+			value.intval = val->intval;
+			psy_do_property(battery->pdata->charger_name, set, psp, value);
 #endif
 			break;
 		case POWER_SUPPLY_EXT_PROP_SYSOVLO:
@@ -7388,6 +7435,11 @@ static int sec_bat_cable_check(struct sec_battery_info *battery,
 		if (is_hv_wire_type(battery->cable_type) &&
 			(battery->chg_limit || battery->vbus_chg_by_siop)) {
 			current_cable_type = SEC_BATTERY_CABLE_HV_TA_CHG_LIMIT;
+#if defined(CONFIG_CCIC_NOTIFIER)
+		} else if (battery->current_event & SEC_BAT_CURRENT_EVENT_AFC &&
+			battery->pdic_info.sink_status.rp_currentlvl == RP_CURRENT_LEVEL_DEFAULT) {
+			current_cable_type = SEC_BATTERY_CABLE_PREPARE_TA;
+#endif
 		} else {
 			current_cable_type = SEC_BATTERY_CABLE_TA;
 		}
@@ -9120,7 +9172,7 @@ static int sec_bat_parse_dt(struct device *dev,
 	ret = of_property_read_u32(np, "battery,wa_float_voltage",
 				(unsigned int *)&pdata->wa_float_voltage);
 	if (ret) {
-		pdata->wa_float_voltage = 4050;
+		pdata->wa_float_voltage = 4050 * pdata->chg_float_voltage_conv;
 		pr_info("%s: wa float voltage is Empty\n", __func__);
 	}
 
@@ -9199,7 +9251,7 @@ static int sec_bat_parse_dt(struct device *dev,
 	ret = of_property_read_u32(np, "battery,swelling_high_temp_current",
 					&pdata->swelling_high_temp_current);
 	if (ret) {
-		pr_info("%s: swelling_low_temp_current is Empty, Default value 1300mA\n", __func__);
+		pr_info("%s: swelling_high_temp_current is Empty, Default value 1300mA\n", __func__);
 		pdata->swelling_high_temp_current = 1300;
 	}
 
@@ -9214,25 +9266,25 @@ static int sec_bat_parse_dt(struct device *dev,
 					&pdata->swelling_wc_high_temp_current);
 	if (ret) {
 		pr_info("%s: swelling_wc_high_temp_current is Empty, Default value 600mA\n", __func__);
-		pdata->swelling_low_temp_current = 600;
+		pdata->swelling_wc_high_temp_current = 600;
 	}
 
 	ret = of_property_read_u32(np, "battery,swelling_wc_low_temp_current",
 					&pdata->swelling_wc_low_temp_current);
 	if (ret) {
 		pr_info("%s: swelling_wc_low_temp_current is Empty, Default value 600mA\n", __func__);
-		pdata->swelling_low_temp_current = 600;
+		pdata->swelling_wc_low_temp_current = 600;
 	}
 
 	ret = of_property_read_u32(np, "battery,swelling_drop_float_voltage",
 		(unsigned int *)&pdata->swelling_drop_float_voltage);
 	if (ret) {
 		pr_info("%s: swelling drop float voltage is Empty, Default value 4250mV\n", __func__);
-		pdata->swelling_drop_float_voltage = 4250;
+		pdata->swelling_drop_float_voltage = 4250 * pdata->chg_float_voltage_conv;
 		pdata->swelling_drop_voltage_condition = 4250;
 	} else {
-		pdata->swelling_drop_voltage_condition = (pdata->swelling_drop_float_voltage > 10000) ?
-			(pdata->swelling_drop_float_voltage / 10) : (pdata->swelling_drop_float_voltage);
+		pdata->swelling_drop_voltage_condition =
+			pdata->swelling_drop_float_voltage / pdata->chg_float_voltage_conv;
 		pr_info("%s : swelling drop voltage(set : %d, condition : %d)\n", __func__,
 			pdata->swelling_drop_float_voltage, pdata->swelling_drop_voltage_condition);
 	}
@@ -9342,6 +9394,20 @@ static int sec_bat_parse_dt(struct device *dev,
 		pr_err("%s: [Long life] there is not age_data\n", __func__);
 	}
 #endif
+	
+	ret = of_property_read_u32(np, "battery,fg_cycle_check_value",
+			&pdata->fg_cycle_check_value);
+	if (ret) {
+		pr_err("%s: fg_cycle_check_value set default(1000)\n", __func__);
+		pdata->fg_cycle_check_value = 1000;
+	}
+
+	ret = of_property_read_u32(np, "battery,siop_default_power",
+			&pdata->siop_default_power);
+	if (ret) {
+		pr_err("%s: siop_default_power is Empty\n", __func__);
+		pdata->siop_default_power = 0;
+	}
 
 	ret = of_property_read_u32(np, "battery,siop_event_check_type",
 			&pdata->siop_event_check_type);

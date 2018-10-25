@@ -17,6 +17,9 @@
 #include <linux/ktime.h>
 #include <linux/wakelock.h>
 #include <linux/sensor/sensors_core.h>
+#ifdef CONFIG_SENSORS_LSM6DSL_SUPPORT_VDIS
+#include <linux/kthread.h>
+#endif
 
 #define LSM6DSL_DEV_NAME		"LSM6DSL"
 #define VENDOR_NAME			"STM"
@@ -225,9 +228,14 @@ struct lsm6dsl_data {
 	ktime_t gyro_delay;
 
 	struct work_struct acc_work;
-	struct work_struct gyro_work;
 	struct work_struct data_work;
-
+#ifdef CONFIG_SENSORS_LSM6DSL_SUPPORT_VDIS	
+	struct kthread_worker gyro_worker;
+	struct kthread_work gyro_work;
+	struct task_struct *gyro_task;
+#else
+	struct work_struct gyro_work;
+#endif
 	struct workqueue_struct *accel_wq;
 	struct workqueue_struct *gyro_wq;
 	struct workqueue_struct *irq_wq;

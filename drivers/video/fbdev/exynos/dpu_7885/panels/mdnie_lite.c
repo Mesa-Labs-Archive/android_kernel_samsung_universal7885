@@ -158,6 +158,7 @@ static void update_color_position(struct mdnie_info *mdnie, unsigned int idx)
 	u8 mode, scenario;
 	mdnie_t *wbuf;
 	struct mdnie_scr_info *scr_info = mdnie->tune->scr_info;
+	struct rgb_info *wrgb_swa = mdnie->tune->wrgb_swa;
 
 	dev_info(mdnie->dev, "%s: %d\n", __func__, idx);
 
@@ -179,6 +180,13 @@ static void update_color_position(struct mdnie_info *mdnie, unsigned int idx)
 					wbuf[scr_info->wb] = mdnie->tune->coordinate_table[mode][idx * 3 + 2] + mdnie->wrgb_balance.b;
 				}
 #endif
+			}
+			if (scenario == CAMERA_SWA_MODE || scenario == GALLERY_SWA_MODE) {
+				if (mode == AUTO) {
+					wbuf[scr_info->wr] -= (unsigned char)wrgb_swa->r;
+					wbuf[scr_info->wg] -= (unsigned char)wrgb_swa->g;
+					wbuf[scr_info->wb] -= (unsigned char)wrgb_swa->b;
+				}
 			}
 			if (mode == AUTO && scenario == UI_MODE) {
 				mdnie->wrgb_default.r = mdnie->tune->coordinate_table[mode][idx * 3 + 0];
@@ -561,6 +569,7 @@ static ssize_t whiteRGB_store(struct device *dev,
 	int white_r, white_g, white_b;
 	int ret;
 	struct mdnie_scr_info *scr_info = mdnie->tune->scr_info;
+	struct rgb_info *wrgb_swa = mdnie->tune->wrgb_swa;
 
 	ret = sscanf(buf, "%8d %8d %8d", &white_r, &white_g, &white_b);
 	if (ret < 0)
@@ -592,6 +601,11 @@ static ssize_t whiteRGB_store(struct device *dev,
 			mdnie->wrgb_balance.r = white_r;
 			mdnie->wrgb_balance.g = white_g;
 			mdnie->wrgb_balance.b = white_b;
+		}
+		if (scenario == CAMERA_SWA_MODE || scenario == GALLERY_SWA_MODE) {
+			wbuf[scr_info->wr] -= (unsigned char)wrgb_swa->r;
+			wbuf[scr_info->wg] -= (unsigned char)wrgb_swa->g;
+			wbuf[scr_info->wb] -= (unsigned char)wrgb_swa->b;
 		}
 	}
 
@@ -685,6 +699,7 @@ static ssize_t mdnie_ldu_store(struct device *dev,
 	unsigned int idx;
 	int ret;
 	struct mdnie_scr_info *scr_info = mdnie->tune->scr_info;
+	struct rgb_info *wrgb_swa = mdnie->tune->wrgb_swa;
 
 	ret = kstrtouint(buf, 0, &idx);
 	if (ret < 0)
@@ -717,6 +732,13 @@ static ssize_t mdnie_ldu_store(struct device *dev,
 					wbuf[scr_info->wr] = mdnie->tune->adjust_ldu_table[mode][idx * 3 + 0];
 					wbuf[scr_info->wg] = mdnie->tune->adjust_ldu_table[mode][idx * 3 + 1];
 					wbuf[scr_info->wb] = mdnie->tune->adjust_ldu_table[mode][idx * 3 + 2];
+				}
+			}
+			if (scenario == CAMERA_SWA_MODE || scenario == GALLERY_SWA_MODE) {
+				if (mode == AUTO) {
+					wbuf[scr_info->wr] -= (unsigned char)wrgb_swa->r;
+					wbuf[scr_info->wg] -= (unsigned char)wrgb_swa->g;
+					wbuf[scr_info->wb] -= (unsigned char)wrgb_swa->b;
 				}
 			}
 		}
