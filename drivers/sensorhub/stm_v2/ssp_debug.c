@@ -167,17 +167,19 @@ void sync_sensor_state(struct ssp_data *data)
 	u32 uSensorCnt;
 	int ret = 0;
 
+#ifdef CONFIG_SENSORS_SSP_GYROSCOPE
 	gyro_open_calibration(data);
 	ret = set_gyro_cal(data);
 	if (ret < 0) {
 		ssp_errf("set_gyro_cal failed\n");
 	}
-
+#endif
+#ifdef CONFIG_SENSORS_SSP_ACCELOMETER
 	ret = set_accel_cal(data);
 	if (ret < 0) {
 		ssp_errf("set_accel_cal failed\n");
 	}
-
+#endif
 	udelay(10);
 
 	for (uSensorCnt = 0; uSensorCnt < SENSOR_TYPE_MAX; uSensorCnt++) {
@@ -201,33 +203,11 @@ void sync_sensor_state(struct ssp_data *data)
 		make_command(data, ADD_SENSOR, SENSOR_TYPE_PROXIMITY_RAW, buf, 8);
 	}
 
+#ifdef CONFIG_SENSORS_SSP_LIGHT
 	set_light_coef(data);
+#endif 
+#ifdef CONFIG_SENSORS_SSP_PROXIMITY
 	set_proximity_threshold(data);
-	data->buf[SENSOR_TYPE_PROXIMITY].prox = 0;
-	report_sensor_data(data, SENSOR_TYPE_PROXIMITY,
-	                   &data->buf[SENSOR_TYPE_PROXIMITY]);
-
-#if 0
-	if (sec_debug_get_debug_level() > 0) {
-		data->is_mcu_dump_mode = true;
-		ssp_info("Mcu Dump Enabled");
-	}
-
-	ret = ssp_send_status(data, MSG2SSP_AP_MCU_SET_DUMPMODE,
-	                      data->is_mcu_dump_mode);
-	if (ret < 0) {
-		ssp_errf("MSG2SSP_AP_MCU_SET_DUMPMODE failed");
-	}
-
-#else
-#if 0
-	data->is_mcu_dump_mode = sec_debug_is_enabled();
-	ret = ssp_send_status(data, MSG2SSP_AP_MCU_SET_DUMPMODE,
-	                      data->is_mcu_dump_mode);
-	if (ret < 0) {
-		ssp_errf("MSG2SSP_AP_MCU_SET_DUMPMODE failed");
-	}
-#endif
 #endif
 }
 
@@ -402,6 +382,7 @@ static void debug_work_func(struct work_struct *work)
 
 	data->cnt_irq = 0;
 
+#ifdef CONFIG_SENSORS_SSP_GYROSCOPE
 	if (data->first_gyro_cal == true) {
 		int ret = 0;
 		gyro_open_calibration(data);
@@ -411,6 +392,7 @@ static void debug_work_func(struct work_struct *work)
 		}
 		data->first_gyro_cal = false;
 	}
+#endif
 }
 
 static void debug_timer_func(unsigned long ptr)

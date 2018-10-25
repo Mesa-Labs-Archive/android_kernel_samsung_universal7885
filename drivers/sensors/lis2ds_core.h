@@ -183,6 +183,8 @@ struct lis2ds_data {
 	struct mutex mutex_enable;
 
 	struct regulator *reg_vdd;
+
+	int lis2ds_ldo_pin;
 };
 
 int lis2ds_common_probe(struct lis2ds_data *cdata, int irq, u16 bustype);

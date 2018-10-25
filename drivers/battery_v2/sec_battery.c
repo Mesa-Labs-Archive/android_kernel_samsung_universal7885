@@ -1321,9 +1321,11 @@ static bool sec_bat_battery_cable_check(struct sec_battery_info *battery)
 	}
 
 	if (battery->pdata->recovery_cable) {
-		if (!battery->slate_mode && (battery->cable_type == SEC_BATTERY_CABLE_NONE &&
-				battery->wire_status != SEC_BATTERY_CABLE_NONE)) {
-			pr_info("%s: Recover from abnormal condition\n",__func__);	
+		if (!battery->slate_mode && ((battery->cable_type == SEC_BATTERY_CABLE_NONE &&
+				battery->wire_status != SEC_BATTERY_CABLE_NONE) ||
+				(battery->cable_type != SEC_BATTERY_CABLE_NONE &&
+				battery->wire_status == SEC_BATTERY_CABLE_NONE))) {
+			pr_info("%s: Recover from abnormal condition\n",__func__);
 			wake_lock(&battery->cable_wake_lock);
 			queue_delayed_work(battery->monitor_wqueue, &battery->cable_work, 0);
 		}
@@ -3202,13 +3204,17 @@ static void sec_bat_check_slowcharging_work(struct work_struct *work)
 #if defined(CONFIG_CCIC_NOTIFIER)
 	if (battery->pdic_info.sink_status.rp_currentlvl == RP_CURRENT_LEVEL_DEFAULT &&
 		battery->cable_type == SEC_BATTERY_CABLE_USB) {
+#else
+	if (battery->cable_type == SEC_BATTERY_CABLE_USB) {
+#endif
+
 		if (!get_usb_enumeration_state() &&
 			(battery->current_event & SEC_BAT_CURRENT_EVENT_USB_100MA)) {
 			sec_bat_set_misc_event(battery, BATT_MISC_EVENT_TIMEOUT_OPEN_TYPE, 0);
 			battery->max_charge_power = battery->input_voltage * battery->current_max;
 		}
 	}
-#endif
+
 	dev_info(battery->dev, "%s:\n", __func__);
 }
 
@@ -3564,6 +3570,95 @@ safety_time_end:
 		__func__, battery->expired_time, battery->cal_safety_time);
 }
 
+#if defined(CONFIG_FG_FULLCAP_FROM_BATTERY)
+static void sec_bat_measure_capacity(struct sec_battery_info *battery, struct timespec c_ts)
+{
+	static struct timespec old_ts = {0, };
+	struct capacity_measure_info * info = &(battery->capacity_info);
+	unsigned long time_diff = c_ts.tv_sec - old_ts.tv_sec;
+	char *state[] = {
+		"None",
+		"Off",
+		"Measuring",
+		"Updating",
+		"Updated",
+	};
+	char data[512];
+	static int design_cap = 0;
+
+	if (!design_cap) {
+		union power_supply_propval val;
+		val.intval = SEC_BATTERY_CAPACITY_FULL;
+		psy_do_property(battery->pdata->fuelgauge_name, get,
+			POWER_SUPPLY_PROP_ENERGY_NOW, val);
+		design_cap = val.intval;
+	}
+
+	if (battery->status == POWER_SUPPLY_STATUS_DISCHARGING ||
+		battery->status == POWER_SUPPLY_STATUS_NOT_CHARGING) {
+		if (info->status == CAPACITY_MEASURE_UPDATING) {
+			int current_capacity;
+			current_capacity = design_cap * (info->start_soc * 3600 / 100);
+			info->capacity_full = info->capacity_rep + current_capacity;
+			info->status = CAPACITY_MEASURE_UPDATED;
+			sprintf(data, "full capacity: %dmAs, %dmAh, charged cap: %dmAs, start_soc: %d, asoc: %d\n",
+				info->capacity_full, info->capacity_full/3600, info->capacity_rep, info->start_soc,
+				(info->capacity_rep / 3600 * 100 * 100/((100-info->start_soc) * design_cap)));
+			pr_info("%s : %s\n", __func__, data);
+		}
+		if (info->status != CAPACITY_MEASURE_NONE) {
+			info->status = CAPACITY_MEASURE_NONE;
+			sprintf(data, "charger removed, battery status: %s\n", sec_bat_status_str[battery->status]);
+			pr_info("%s : %s\n", __func__, data);
+		}
+		return;
+	}
+
+	if (info->status == CAPACITY_MEASURE_OFF || info->status == CAPACITY_MEASURE_UPDATED)
+		return;
+
+	if (info->status == CAPACITY_MEASURE_NONE &&
+			battery->status == POWER_SUPPLY_STATUS_CHARGING) {
+		if (battery->capacity > 30) {
+			sprintf(data, "Do not count due to battery level(%d) high\n", battery->capacity);
+			pr_info("%s : %s\n", __func__, data);
+			info->status = CAPACITY_MEASURE_OFF;
+		} else {
+			info->status = CAPACITY_MEASURING;
+			info->capacity_rep = 0;
+			info->start_soc = battery->capacity;
+			old_ts = c_ts;
+			sprintf(data, "current_cap: %dmAs, start_soc: %d%%, cable: %s, Design Capacity: %d\n",
+				info->capacity_rep, info->start_soc, sec_cable_type[battery->cable_type], design_cap);
+			pr_info("%s : %s, time: %ld\n", __func__, data, c_ts.tv_sec);
+		}
+		return;
+	}
+	if (info->status == CAPACITY_MEASURE_NONE || time_diff == 0)
+		return;
+
+	info->capacity_rep += time_diff * battery->current_avg;
+	if (battery->status == POWER_SUPPLY_STATUS_FULL) {
+		info->status = CAPACITY_MEASURE_UPDATING;
+		if (battery->charging_mode == SEC_BATTERY_CHARGING_NONE) {
+			int current_capacity;
+			current_capacity = design_cap * (info->start_soc * 3600 / 100);
+			info->capacity_full = info->capacity_rep + current_capacity;
+			info->status = CAPACITY_MEASURE_UPDATED;
+			sprintf(data, "Full capacity: %dmAs, %dmAh, charged cap: %dmAs, start_soc: %d, asoc: %d\n",
+				info->capacity_full, info->capacity_full / 3600, info->capacity_rep, info->start_soc,
+				(info->capacity_rep / 3600 * 100 * 100/((100-info->start_soc) * design_cap)));
+			pr_info("%s : %s\n", __func__, data);
+			sprintf(data, "charging stopped, battery status: %s\n", sec_bat_status_str[battery->status]);
+			pr_info("%s : %s\n", __func__, data);
+		}
+	}
+	old_ts = c_ts;
+	pr_info("%s : current_cap: %d, status: %s, time_diff: %ld\n",
+		__func__, info->capacity_rep, state[info->status], time_diff);
+}
+#endif
+
 static void sec_bat_monitor_work(
 				struct work_struct *work)
 {
@@ -3625,6 +3720,11 @@ static void sec_bat_monitor_work(
 	old_ts = c_ts;
 
 	sec_bat_get_battery_info(battery);
+
+#if defined(CONFIG_FG_FULLCAP_FROM_BATTERY)
+	sec_bat_measure_capacity(battery, c_ts);
+#endif
+
 #if defined(CONFIG_BATTERY_CISD)
 	sec_bat_cisd_check(battery);
 #endif
@@ -4458,6 +4558,9 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 						__func__, battery->pdata->fuelgauge_name);
 			} else {
 				if (psy_fg->desc->get_property != NULL) {
+#if defined(CONFIG_FUELGAUGE_ASOC_FROM_CYCLES)
+					value.intval = battery->batt_cycle;
+#endif
 					ret = psy_fg->desc->get_property(psy_fg,
 							POWER_SUPPLY_PROP_ENERGY_FULL, &value);
 					if (ret < 0) {
@@ -4977,11 +5080,15 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 	case CISD_FULLCAPREP_MAX:
 		{
 			union power_supply_propval fullcaprep_val;
+#if defined(CONFIG_FG_FULLCAP_FROM_BATTERY)
+			struct capacity_measure_info * info = &(battery->capacity_info);
 
+			fullcaprep_val.intval = info->capacity_full / 3600;
+#else
 			fullcaprep_val.intval = SEC_BATTERY_CAPACITY_FULL;
 			psy_do_property(battery->pdata->fuelgauge_name, get,
 				POWER_SUPPLY_PROP_ENERGY_NOW, fullcaprep_val);
-
+#endif
 			i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
 					fullcaprep_val.intval);
 		}
@@ -6696,6 +6803,8 @@ static int sec_bat_set_property(struct power_supply *psy,
 			}
 			sec_bat_set_charging_current(battery);
 			break;
+		case POWER_SUPPLY_EXT_PROP_HV_DISABLE:
+			break;
 		default:
 			return -EINVAL;
 		}
@@ -7908,6 +8017,9 @@ static int batt_handle_notification(struct notifier_block *nb,
 			queue_delayed_work(battery->monitor_wqueue, &battery->monitor_work, 0);
 		}
 	}
+
+	/* clear timeout event */
+	sec_bat_set_misc_event(battery, BATT_MISC_EVENT_TIMEOUT_OPEN_TYPE, true);
 
 #if defined(CONFIG_CCIC_NOTIFIER)
 	/* If PD cable is already attached, return this function */

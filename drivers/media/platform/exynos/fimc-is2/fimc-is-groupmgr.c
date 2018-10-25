@@ -2452,9 +2452,11 @@ int fimc_is_group_buffer_queue(struct fimc_is_groupmgr *groupmgr,
 #if defined (USE_AP_PDAF)
 	/* PAF */
 	if ((cis_data->companion_data.paf_stat_enable == false) &&
-		(sensor_peri->cis.use_pdaf == true )){
+		(sensor_peri->cis.use_pdaf == true )) {
 		frame->shot->uctl.companionUd.paf_mode = COMPANION_PAF_OFF;
 	}
+#else
+	frame->shot->uctl.companionUd.paf_mode = COMPANION_PAF_OFF;
 #endif
 #if defined(USE_SENSOR_WDR)
 	/* WDR */
@@ -2967,7 +2969,7 @@ p_skip_sync:
 		int mif_qos;
 		struct fimc_is_core *core = (struct fimc_is_core *)platform_get_drvdata(device->pdev);
 #endif
-		
+
 		mutex_lock(&resourcemgr->dvfs_ctrl.lock);
 
 		/* try to find dynamic scenario to apply */

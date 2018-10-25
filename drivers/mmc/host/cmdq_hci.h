@@ -279,6 +279,7 @@ struct cmdq_host_ops {
 	void (*int_mask_set)(struct mmc_host *mmc, bool enable);
 	void (*sicd_control)(struct mmc_host *mmc, bool enable);
 	void (*transferred_cnt)(struct mmc_host *mmc, struct mmc_request *mrq);
+	void (*resume_skip)(struct mmc_host *mmc);
 };
 
 static inline void cmdq_writel(struct cmdq_host *host, u32 val, int reg)

@@ -15,6 +15,9 @@
 #include <sound/soc.h>
 #include <linux/switch.h>
 #include <linux/iio/consumer.h>
+#ifdef CONFIG_SND_SOC_COD30XX_EXT_ANT
+#include <linux/wakelock.h>
+#endif
 
 #define CONFIG_SND_SOC_SAMSUNG_VERBOSE_DEBUG 1
 
@@ -25,6 +28,8 @@ extern int cod3035x_jack_mic_register(struct snd_soc_codec *codec);
 #define LEGACY_MODE_1   1
 #define DNC_MODE		2
 #define AVC_MODE		3
+
+#define MODEL_FLAG_EP_DC_OFFSET_SWEEP	0x01
 
 #define COD3035X_OTP_MAX_REG		0x0f
 #define COD3035X_MAX_REGISTER		0xf6
@@ -41,11 +46,24 @@ extern int cod3035x_jack_mic_register(struct snd_soc_codec *codec);
 #define MIC2_FLAG	BIT(1)
 #define MIC1_FLAG	BIT(0)
 
+#ifdef CONFIG_SND_SOC_COD30XX_EXT_ANT
+#define JACK_OUT		0
+#define JACK_3POLE		1
+#define JACK_4POLE		2
+#define JACK_ANT		3
+#define JACK_ANT_3POLE	4
+#define JACK_ANT_4POLE	5
+#endif
+
 struct cod3035x_jack_det {
 	bool jack_det;
 	bool mic_det;
 	bool water_det;
 	bool button_det;
+#ifdef CONFIG_SND_SOC_COD30XX_EXT_ANT
+	bool ant_det;
+	bool ant_irq;
+#endif
 	bool surge_det;
 	unsigned int button_code;
 	int privious_button_state;
@@ -72,6 +90,11 @@ struct cod3035x_priv {
 
 	int num_inputs;
 	int int_gpio;
+
+#ifdef CONFIG_SND_SOC_COD30XX_EXT_ANT
+	int ant_det_gpio;
+	int ant_adc_range;
+#endif
 
 	struct pinctrl *pinctrl;
 	unsigned int spk_ena:2;
@@ -127,6 +150,11 @@ struct cod3035x_priv {
 	unsigned int rvol;
 	unsigned int mic_status;
 	unsigned int rcv_drv_current;
+	unsigned int model_feature_flag;
+
+#ifdef CONFIG_SND_SOC_COD30XX_EXT_ANT
+	struct wake_lock jack_wake_lock;
+#endif
 };
 
 /*

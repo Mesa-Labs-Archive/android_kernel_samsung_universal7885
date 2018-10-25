@@ -66,6 +66,7 @@ enum power_supply_ext_property {
 #if defined(CONFIG_FUELGAUGE_S2MU004) || defined(CONFIG_FUELGAUGE_S2MU005)
 	POWER_SUPPLY_EXT_PROP_UPDATE_BATTERY_DATA,
 #endif
+	POWER_SUPPLY_EXT_PROP_HV_DISABLE,
 };
 
 enum sec_battery_usb_conf {
@@ -596,7 +597,7 @@ struct sec_charging_current {
 
 #if defined(CONFIG_BATTERY_AGE_FORECAST)
 struct sec_age_data {
-	int cycle;
+	unsigned int cycle;
 	unsigned int float_voltage;
 	unsigned int recharge_condition_vcell;
 	unsigned int full_condition_vcell;

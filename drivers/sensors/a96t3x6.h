@@ -22,6 +22,11 @@
 #define MODEL_NAME	"A96T3X6"
 #define MODULE_NAME	"grip_sensor"
 
+#define NOTIFY_CABLE_USB	0x01
+#define NOTIFY_CABLE_OTG	0x03
+#define NOTIFY_CABLE_TA		0x25
+#define NOTIFY_CABLE_TA_FAC	0x27
+
 /* registers */
 #define REG_LED_CONTROL	0x00
 #define REG_FW_VER		0x01

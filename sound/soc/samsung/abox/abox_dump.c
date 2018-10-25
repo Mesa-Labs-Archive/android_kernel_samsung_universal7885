@@ -184,10 +184,10 @@ static int __init samsung_abox_dump_late_initcall(void)
 {
 	pr_info("%s\n", __func__);
 
-	debugfs_create_file("dump_auto_start", 0666,
+	debugfs_create_file("dump_auto_start", 0660,
 			abox_dbg_get_root_dir(), NULL,
 			&abox_dump_auto_start_fops);
-	debugfs_create_file("dump_auto_stop", 0666,
+	debugfs_create_file("dump_auto_stop", 0660,
 			abox_dbg_get_root_dir(), NULL,
 			&abox_dump_auto_stop_fops);
 

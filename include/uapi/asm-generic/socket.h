@@ -92,4 +92,8 @@
 #define SO_SET_DNS_UID 56
 /* END_OF_KNOX_NPA */
 
+/* START_OF_KNOX_NPA */
+#define SO_SET_DNS_PID		58
+/* END_OF_KNOX_NPA */
+
 #endif /* __ASM_GENERIC_SOCKET_H */

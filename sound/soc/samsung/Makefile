@@ -115,4 +115,5 @@ obj-$(CONFIG_SND_SOC_SAMSUNG_ESPRESSO8890_CLEARWATER) += snd-soc-espresso8890-cl
 obj-$(CONFIG_SND_SOC_SAMSUNG_EXYNOS8895_MOON) += exynos8895_madera.o
 obj-$(CONFIG_SND_SOC_SAMSUNG_EXYNOS8895) += exynos8895_sound.o exynos8895_vts_sound.o
 obj-$(CONFIG_SND_SOC_SAMSUNG_EXYNOS7885_COD3035) += exynos7885_cod3035.o jack_cod3035_sysfs_cb.o
+obj-$(CONFIG_SND_SOC_SAMSUNG_EXYNOS7885_COD3035_MULTI) += exynos7885_cod3035_multi.o jack_cod3035_sysfs_cb.o
 obj-$(CONFIG_SND_SOC_SAMSUNG_AUDIO) += sec_audio_sysfs.o

@@ -5076,6 +5076,58 @@ static void get_ssr(void *device_data)
 	return;
 }
 
+static void run_ssr_read_all(void *device_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
+	struct bt532_ts_info *info = container_of(sec, struct bt532_ts_info, sec);
+	struct i2c_client *client = info->client;
+	struct tsp_raw_data *raw_data = info->raw_data;
+	char buff[16] = { 0 };
+	char all_cmdbuff[info->cap_info.y_node_num*6];
+	s32 j;
+	int ret;
+
+#if ESD_TIMER_INTERVAL
+	esd_timer_stop(misc_info);
+	write_reg(client, BT532_PERIODICAL_INTERRUPT_INTERVAL, 0);
+	write_cmd(client, BT532_CLEAR_INT_STATUS_CMD);
+#endif
+	sec_cmd_set_default_result(sec);
+
+	ret = ts_set_touchmode(DEF_RAW_SELF_SSR_DATA_MODE);
+	if (ret < 0) {
+		ts_set_touchmode(TOUCH_POINT_MODE);
+		goto out;
+	}
+	get_raw_data(info, (u8 *)raw_data->ssr_data, 1);
+	ts_set_touchmode(TOUCH_POINT_MODE);
+
+	memset(all_cmdbuff,0,sizeof(char)*(info->cap_info.y_node_num*6));	//size 6  ex(12000,)
+
+	for (j = 0; j < info->cap_info.y_node_num; j++) {
+		sprintf(buff, "%u,", raw_data->ssr_data[j]);
+		strcat(all_cmdbuff, buff);
+	}
+
+	sec_cmd_set_cmd_result(sec, all_cmdbuff,
+			strnlen(all_cmdbuff, sizeof(all_cmdbuff)));
+	sec->cmd_state = SEC_CMD_STATUS_OK;
+
+out:
+	if (ret < 0) {
+		snprintf(buff, sizeof(buff), "%s", "FAIL");
+		sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+		sec->cmd_state = SEC_CMD_STATUS_FAIL;
+	}
+
+#if ESD_TIMER_INTERVAL
+	esd_timer_start(CHECK_ESD_TIMER, misc_info);
+	write_reg(client, BT532_PERIODICAL_INTERRUPT_INTERVAL,
+		SCAN_RATE_HZ * ESD_TIMER_INTERVAL);
+#endif
+	return;
+}
+
 static void run_selfdnd_h_gap_read(void *device_data)
 {
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
@@ -7585,8 +7637,9 @@ static struct sec_cmd sec_cmds[] = {
 	{SEC_CMD("run_selfdnd_read", run_selfdnd_read),},
 	{SEC_CMD("get_selfdnd", get_selfdnd),},
 	{SEC_CMD("run_selfdnd_read_all", run_selfdnd_read_all),},
-	{SEC_CMD("run_ssr_read", run_ssr_read),},
+	{SEC_CMD("run_ssr_read", run_ssr_read),},	/* self_saturation_rx */
 	{SEC_CMD("get_ssr", get_ssr),},
+	{SEC_CMD("run_self_saturation_rx_read_all", run_ssr_read_all),},
 	{SEC_CMD("run_selfdnd_h_gap_read", run_selfdnd_h_gap_read),},
 	{SEC_CMD("get_selfdnd_h_gap", get_selfdnd_h_gap),},
 	{SEC_CMD("run_selfdnd_h_gap_read_all", run_selfdnd_h_gap_read_all),},

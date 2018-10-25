@@ -119,6 +119,7 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_TAS571X if I2C
 	select SND_SOC_TFA9872 if I2C
 	select SND_SOC_TFA9879 if I2C
+	select SND_SOC_TFA9896 if I2C
 	select SND_SOC_TLV320AIC23_I2C if I2C
 	select SND_SOC_TLV320AIC23_SPI if SPI_MASTER
 	select SND_SOC_TLV320AIC26 if SPI_MASTER
@@ -457,6 +458,12 @@ config SND_SOC_COD3035X
     tristate
     default y
 
+config SND_SOC_COD30XX_EXT_ANT
+	bool "ISDB-T External antenna"
+	default n
+	help
+	  Support for ISDB-T External antenna.
+
 config SND_SOC_JZ4740_CODEC
 	select REGMAP_MMIO
 	tristate
@@ -710,6 +717,10 @@ config SND_SOC_TFA9872
 
 config SND_SOC_TFA9879
 	tristate "NXP Semiconductors TFA9879 amplifier"
+	depends on I2C
+
+config SND_SOC_TFA9896
+	tristate "NXP Semiconductors TFA9896 amplifier"
 	depends on I2C
 
 config SND_SOC_TLV320AIC23

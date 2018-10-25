@@ -60,10 +60,12 @@ static int uart_open_file(struct dbmdx_uart_private *p)
 	struct file *fp;
 	int attempt = 0;
 	unsigned long timeout = jiffies + msecs_to_jiffies(60000);
+	struct filename fname;
 
 	if (p->uart_open)
 		goto out_ok;
 
+	fname.name = p->pdata->uart_dev;
 	/*
 	 * Wait for the device node to appear in the filesystem. This can take
 	 * some time if the kernel is still booting up and filesystems are
@@ -75,8 +77,7 @@ static int uart_open_file(struct dbmdx_uart_private *p)
 			"%s(): probing for tty on %s (attempt %d)\n",
 			 __func__, p->pdata->uart_dev, ++attempt);
 
-		fp = filp_open(p->pdata->uart_dev,
-				O_RDWR | O_NONBLOCK | O_NOCTTY, 0);
+		fp = file_open_name(&fname, O_RDWR | O_NONBLOCK | O_NOCTTY, 0);
 
 		err = PTR_ERR(fp);
 	} while (time_before(jiffies, timeout) && (err == -ENOENT) &&
@@ -116,9 +117,12 @@ static int uart_open_file_noprobe(struct dbmdx_uart_private *p)
 	struct file *fp;
 	int attempt = 0;
 	unsigned long timeout = jiffies + msecs_to_jiffies(1000);
+	struct filename fname;
 
 	if (p->uart_open)
 		goto out;
+
+	fname.name = p->pdata->uart_dev;
 
 	/*
 	 * Wait for the device node to appear in the filesystem. This can take
@@ -132,9 +136,7 @@ static int uart_open_file_noprobe(struct dbmdx_uart_private *p)
 			"%s(): probing for tty on %s (attempt %d)\n",
 			 __func__, p->pdata->uart_dev, ++attempt);
 
-		fp = filp_open(p->pdata->uart_dev,
-				O_RDWR | O_NONBLOCK | O_NOCTTY, 0);
-
+		fp = file_open_name(&fname, O_RDWR | O_NONBLOCK | O_NOCTTY, 0);
 		err = PTR_ERR(fp);
 	} while (time_before(jiffies, timeout) && IS_ERR_OR_NULL(fp));
 
@@ -330,8 +332,7 @@ ssize_t uart_write_data_no_sync(struct dbmdx_private *p, const void *buf,
 						min_t(size_t,
 							count, max_size));
 		if (ret < 0) {
-			dev_err(uart_p->dev,
-				"%s: uart_write_data_no_sync failed ret=%d\n",
+			dev_err(uart_p->dev, "%s: Failed ret=%d\n",
 				__func__, ret);
 			break;
 		}
@@ -464,8 +465,9 @@ ssize_t send_uart_cmd_va(struct dbmdx_private *p, u32 command,
 
 		ret = 0;
 
-		/* the sleep command cannot be ack'ed before the device goes
-		 * to sleep */
+		/* The sleep command cannot be ack'ed before the device goes
+		 * to sleep
+		 */
 		if (command == DBMDX_VA_SET_POWER_STATE_SLEEP)
 			goto out;
 
@@ -523,8 +525,7 @@ int send_uart_cmd_boot(struct dbmdx_private *p,  u32 command)
 	u8 send[3];
 	int ret;
 
-	dev_info(uart_p->dev, "%s: send_uart_cmd_boot = %x\n",
-		__func__, command);
+	dev_info(uart_p->dev, "%s: command = %x\n", __func__, command);
 
 	send[0] = (command >> 16) & 0xff;
 	send[1] = (command >>  8) & 0xff;
@@ -533,8 +534,7 @@ int send_uart_cmd_boot(struct dbmdx_private *p,  u32 command)
 	ret = uart_write_data(p, send, 2);
 
 	if (ret != 2) {
-		dev_err(uart_p->dev, "%s: send_uart_cmd_boot ret = %d\n",
-			__func__, ret);
+		dev_err(uart_p->dev, "%s: ret = %d\n",	__func__, ret);
 		return ret;
 	}
 
@@ -659,7 +659,7 @@ int uart_verify_chip_id(struct dbmdx_private *p)
 		(recv_chip_rev_id_low != chip_rev_id_low_b))) {
 
 		dev_err(uart_p->dev,
-			"%s: Wrong chip ID: Recieved 0x%2x%2x Expected: 0x%2x%2x | 0x%2x%2x\n",
+			"%s: Wrong chip ID: Received 0x%2x%2x Expected: 0x%2x%2x | 0x%2x%2x\n",
 				__func__,
 				recv_chip_rev_id_high,
 				recv_chip_rev_id_low,
@@ -744,7 +744,7 @@ int uart_wait_for_ok(struct dbmdx_private *p)
 			__func__, ret);
 		goto out;
 	}
-	ret = strncmp(match , resp, 2);
+	ret = strncmp(match, resp, 2);
 	if (ret)
 		dev_err(uart_p->dev,
 			"%s: result = %d : %2.2x:%2.2x:%2.2x\n",
@@ -854,7 +854,7 @@ static void uart_transport_enable(struct dbmdx_private *p, bool enable)
 	if (enable) {
 
 #ifdef CONFIG_PM_WAKELOCKS
-		wake_lock(&uart_p->ps_nosuspend_wl);
+		__pm_stay_awake(&uart_p->ps_nosuspend_wl);
 #endif
 		ret = wait_event_interruptible(dbmdx_wq,
 			uart_p->interface_enabled);
@@ -911,7 +911,8 @@ static void uart_transport_enable(struct dbmdx_private *p, bool enable)
 
 		if (p->power_mode == DBMDX_PM_SLEEPING)
 			/* It takes up to 100ms
-			to PLL to stabilize after hibernation */
+			 * to PLL to stabilize after hibernation
+			 */
 			msleep(DBMDX_MSLEEP_UART_WAKEUP);
 
 		ret = uart_configure_tty(uart_p,
@@ -940,7 +941,7 @@ static void uart_transport_enable(struct dbmdx_private *p, bool enable)
 
 	} else {
 #ifdef CONFIG_PM_WAKELOCKS
-		wake_unlock(&uart_p->ps_nosuspend_wl);
+		__pm_relax(&uart_p->ps_nosuspend_wl);
 #endif
 		p->wakeup_release(p);
 
@@ -995,13 +996,12 @@ int uart_wait_till_alive(struct dbmdx_private *p)
 	int ret = 0;
 	u16 response;
 	unsigned long stimeout = jiffies + msecs_to_jiffies(1000);
-#if 0
-	msleep(DBMDX_MSLEEP_UART_WAIT_TILL_ALIVE);
-#endif
+
 	uart_flush_rx_fifo(uart_p);
 
 	/* Poll to wait for firmware completing its wakeup procedure:
-	 * Read the firmware ID number () */
+	 * Read the firmware ID number
+	 */
 	do {
 		/* check if chip is alive */
 		ret = send_uart_cmd_va(p, DBMDX_VA_FW_ID, &response);
@@ -1019,14 +1019,14 @@ int uart_wait_till_alive(struct dbmdx_private *p)
 	ret = (ret >= 0 ? 1 : 0);
 
 	if (!ret)
-		dev_err(p->dev, "%s(): failed = 0x%d\n", __func__,
-			ret);
+		dev_err(p->dev, "%s(): failed = 0x%x\n", __func__, ret);
 
 	return ret;
 }
 
 /* This function sets the uart speed and also can set the software flow
- * control according to the define */
+ * control according to the define
+ */
 int uart_set_speed_host_only(struct dbmdx_private *p, int index)
 {
 	struct dbmdx_uart_private *uart_p =
@@ -1407,8 +1407,8 @@ int uart_common_probe(struct platform_device *pdev, const char threadnamefmt[])
 	atomic_set(&p->stop_uart_probing, 0);
 
 #ifdef CONFIG_PM_WAKELOCKS
-	wake_lock_init(&p->ps_nosuspend_wl, WAKE_LOCK_SUSPEND,
-		"dbmdx_nosuspend_wakelock_uart");
+	wakeup_source_init(&p->ps_nosuspend_wl,
+					"dbmdx_nosuspend_wakelock_uart");
 #endif
 
 	/* fill in chip interface functions */
@@ -1472,7 +1472,7 @@ int uart_common_remove(struct platform_device *pdev)
 	dev_set_drvdata(p->dev, NULL);
 
 #ifdef CONFIG_PM_WAKELOCKS
-	wake_lock_destroy(&p->ps_nosuspend_wl);
+	wakeup_source_trash(&p->ps_nosuspend_wl);
 #endif
 
 	uart_close_file(p);

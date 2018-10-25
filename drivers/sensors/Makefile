@@ -19,8 +19,13 @@ obj-$(CONFIG_SENSORS_YAS539)		+= yas_mag_drv-yas539.o yas_mag_kernel.o
 # optical_sensor
 obj-$(CONFIG_SENSORS_GP2AP070S)	    += gp2ap070s.o
 obj-$(CONFIG_SENSORS_STK3013)       += stk3013.o
+obj-$(CONFIG_SENSORS_CM36658)	    += cm36658.o
 obj-$(CONFIG_SENSORS_CM36686)       += cm36686.o
 obj-$(CONFIG_SENSORS_CM36672P)	    += cm36672p.o
+obj-$(CONFIG_SENSORS_CM3323)	      += cm3323.o
 obj-$(CONFIG_SENSORS_TMD3725)       += tmd3725.o
 #grip_sensor
 obj-$(CONFIG_SENSORS_A96T3X6)		+= a96t3x6.o
+obj-$(CONFIG_SENSORS_A96T3X6_SUB)	+= a96t3x6_sub.o
+obj-$(CONFIG_SENSORS_A96T3X6_WIFI)	+= a96t3x6_wifi.o
+obj-$(CONFIG_SENSORS_TC3XXK)  		+= tc3xxk.o

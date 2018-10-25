@@ -60,6 +60,9 @@ struct dbmdx_platform_data {
 	const char			*va_preboot_firmware_name;
 	const char			*vqe_firmware_name;
 	const char			*vqe_non_overlay_firmware_name;
+#ifdef DBMDX_VA_NS_SUPPORT
+	const char			*va_asrp_params_firmware_name;
+#endif
 	int				firmware_id;
 
 	int				clock_rates[DBMDX_NR_OF_CLKS];
@@ -70,6 +73,13 @@ struct dbmdx_platform_data {
 
 	unsigned int			va_cfg_values;
 	u32				*va_cfg_value;
+
+#ifdef DBMDX_VA_NS_SUPPORT
+	unsigned int			va_ns_supported;
+	unsigned int			va_ns_cfg_values;
+	unsigned int			va_ns_num_of_configs;
+	u32				*va_ns_cfg_value;
+#endif
 
 	unsigned int			vqe_cfg_values;
 	u32				*vqe_cfg_value;

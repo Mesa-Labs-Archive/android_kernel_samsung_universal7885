@@ -979,7 +979,11 @@ int sensor_3p8sp_cis_adjust_frame_duration(struct v4l2_subdev *subdev,
 	dbg_sensor(1, "[%s](vsync cnt = %d) adj duration, frame duraion(%d), min_frame_us(%d)\n",
 			__func__, cis_data->sen_vsync_count, frame_duration, cis_data->min_frame_us_time);
 
-	*target_duration = MAX(frame_duration, cis_data->min_frame_us_time);
+	if(input_exposure_time <= cis_data->min_frame_us_time)
+		*target_duration = cis_data->min_frame_us_time;
+	else
+		*target_duration = MAX(frame_duration, cis_data->min_frame_us_time);
+
 
 #ifdef DEBUG_SENSOR_TIME
 	do_gettimeofday(&end);
