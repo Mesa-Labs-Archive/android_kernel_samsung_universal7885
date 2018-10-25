@@ -217,8 +217,11 @@ int fimc_is_hw_group_open(void *group_data)
 	case GROUP_ID_3AA1:
 	case GROUP_ID_ISP0:
 	case GROUP_ID_MCS0:
-		leader->constraints_width = 5376;
-		leader->constraints_height = 4032;
+		/* width & height constraint_size both increase upto 24MP width(5760)
+		 * because it may use rotation and height also set upto 5760
+		 */
+		leader->constraints_width = 5760;
+		leader->constraints_height = 5760;
 		break;
 	case GROUP_ID_VRA0:
 		leader->constraints_width = 640;
@@ -1023,4 +1026,39 @@ u32 fimc_is_hw_find_settle(u32 mipi_speed)
 	}
 
 	return fimc_is_csi_settle_table[m + 1];
+}
+
+unsigned int get_dma(struct fimc_is_device_sensor *device, u32 *dma_ch)
+{
+	struct fimc_is_core *core;
+	struct fimc_is_device_csi *csi;
+	u32 open_sensor_count = 0;
+	int i;
+	int ret = 0;
+
+	/* fimc-is-v6_20 CSIS DMA is mapped 1:1 of each CSIS
+	 * ex> CSIS0 - DMA0, CSIS3 - DMA3
+	 * so dma_ch is delivered by CSIS channel(instance)
+	 */
+	*dma_ch = 0;
+	core = device->private_data;
+	for (i = 0; i < FIMC_IS_SENSOR_COUNT; i++) {
+		if (test_bit(FIMC_IS_SENSOR_OPEN, &(core->sensor[i].state))) {
+			open_sensor_count++;
+			csi = (struct fimc_is_device_csi *)v4l2_get_subdevdata(core->sensor[i].subdev_csi);
+			if (!csi) {
+				err("csi is NULL");
+				BUG();
+			}
+
+			*dma_ch |= (1 << csi->instance);
+		}
+	}
+
+	if (open_sensor_count != 1 && open_sensor_count != 2) {
+		err("invalid open sensor limit(%d)", open_sensor_count);
+		ret = -EINVAL;
+	}
+
+	return ret;
 }

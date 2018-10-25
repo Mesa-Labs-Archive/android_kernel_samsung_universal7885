@@ -470,6 +470,7 @@ static int mmc_srpmb_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, ctx);
 	wake_lock_init(&ctx->wakelock, WAKE_LOCK_SUSPEND, "srpmb");
+	spin_lock_init(&ctx->lock);
 
 	return 0;
 

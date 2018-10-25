@@ -164,13 +164,13 @@ int regmap_com_to(struct regmap_desc *pdesc, int port)
 	struct regmap_ops *pops = pdesc->regmapops;
 	int uattr, ret;
 
+#if IS_ENABLED(CONFIG_HICCUP_CHARGER)
+	if (pdesc->muic->is_hiccup_mode)
+		port = GND_PATH;
+#endif
 	pops->ioctl(pdesc, GET_COM_VAL, &port, &uattr);
-#if defined(CONFIG_MUIC_UNIVERSAL_MAX77849)
-	 ret = regmap_write_value(pdesc, uattr, port);
-#else
 	uattr |= _ATTR_OVERWRITE_M;
 	ret = regmap_write_value(pdesc, uattr, port);
-#endif
 
 	_REGMAP_TRACE(pdesc, 'w', ret, uattr, port);
 

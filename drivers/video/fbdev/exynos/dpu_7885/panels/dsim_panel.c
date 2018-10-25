@@ -33,6 +33,10 @@ struct dsim_lcd_driver *mipi_lcd_driver = &s6e8aa5_mipi_lcd_driver;
 struct dsim_lcd_driver *mipi_lcd_driver = &s6e8aa5_mipi_lcd_driver;
 #elif IS_ENABLED(CONFIG_EXYNOS_DECON_LCD_SN65DSI86_GVIEW2)
 struct dsim_lcd_driver *mipi_lcd_driver = &sn65dsi86_hx8876_mipi_lcd_driver;
+#elif IS_ENABLED(CONFIG_EXYNOS_DECON_LCD_S6E3FA7_A7Y18)
+struct dsim_lcd_driver *mipi_lcd_driver = &s6e3fa7_mipi_lcd_driver;
+#elif IS_ENABLED(CONFIG_EXYNOS_DECON_LCD_TD4101_J2COREPELTE)
+struct dsim_lcd_driver *mipi_lcd_driver = &td4101_mipi_lcd_driver;
 #else
 struct dsim_lcd_driver *mipi_lcd_driver = &s6e3fa3_mipi_lcd_driver;
 #endif

@@ -107,18 +107,18 @@ static u32 reg_table[57][8] = {
 static s32 fc8180_write(HANDLE handle, u8 addr, u8 data)
 {
 	s32 res;
-
+	ms_wait(1);
 	res = tuner_i2c_write(handle, addr, 1, &data, 1);
-
+	ms_wait(1);
 	return res;
 }
 
 static s32 fc8180_read(HANDLE handle, u8 addr, u8 *data)
 {
 	s32 res;
-
+	ms_wait(1);
 	res = tuner_i2c_read(handle, addr, 1, data, 1);
-
+	ms_wait(1);
 	return res;
 }
 

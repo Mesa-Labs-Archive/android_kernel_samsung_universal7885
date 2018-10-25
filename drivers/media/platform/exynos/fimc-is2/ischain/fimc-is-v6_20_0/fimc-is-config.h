@@ -134,6 +134,14 @@
 #define I2C_MUTEX_UNLOCK(lock)
 #endif
 
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+/* init AWB */
+#define ENABLE_INIT_AWB
+#define WB_GAIN_COUNT		(4)
+#define INIT_AWB_COUNT_REAR	(3)
+#define INIT_AWB_COUNT_FRONT	(7)
+#endif
+
 /* #define ENABLE_DBG_EVENT_PRINT */
 
 #endif

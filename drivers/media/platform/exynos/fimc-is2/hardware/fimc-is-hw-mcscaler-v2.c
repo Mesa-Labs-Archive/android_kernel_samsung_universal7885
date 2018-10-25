@@ -885,6 +885,7 @@ config:
 	msdbg_hw(2, "shot: hw_mcsc_out_configured[0x%lx]\n", instance, hw_ip,
 		hw_mcsc_out_configured);
 
+	hw_mcsc->instance = instance;
 	clear_bit(HW_MCSC_OUT_CLEARED_ALL, &hw_mcsc_out_configured);
 	set_bit(HW_CONFIG, &hw_ip->state);
 
@@ -984,7 +985,6 @@ int fimc_is_hw_mcsc_update_param(struct fimc_is_hw_ip *hw_ip,
 		control_cmd = true;
 		msdbg_hw(2, "update_param: hw_ip->instance(%d), control_cmd(%d)\n",
 			instance, hw_ip, hw_mcsc->instance, control_cmd);
-		hw_mcsc->instance = instance;
 	}
 
 	if (control_cmd || (lindex & LOWBIT_OF(PARAM_MCS_INPUT))

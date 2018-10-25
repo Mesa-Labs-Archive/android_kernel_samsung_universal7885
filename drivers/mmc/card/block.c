@@ -55,7 +55,7 @@
 #include "../host/dw_mmc-exynos.h"
 
 #ifdef CONFIG_MMC_SUPPORT_STLOG
-#include <linux/stlog.h>
+#include <linux/fslog.h>
 #else
 #define ST_LOG(fmt,...)
 #endif
@@ -3720,9 +3720,9 @@ reset:
 	pm_runtime_mark_last_busy(&card->dev);
 	clear_bit(CMDQ_STATE_ERR, &ctx_info->curr_state);
 	clear_bit(CMDQ_STATE_ERR_HOST, &ctx_info->curr_state);
+	set_bit(CMDQ_STATE_ERR_RCV_DONE, &ctx_info->curr_state);
 	clear_bit(CMDQ_STATE_DCMD_ACTIVE, &ctx_info->curr_state);
 	printk("\n\n=============== CQ RECOVERY END ======================\n\n");
-	set_bit(CMDQ_STATE_ERR_RCV_DONE, &ctx_info->curr_state);
 	wake_up(&ctx_info->wait);
 	mmc_put_card(card);
 }

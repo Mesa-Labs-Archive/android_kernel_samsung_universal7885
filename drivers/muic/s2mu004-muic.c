@@ -58,6 +58,8 @@
 #include <soc/samsung/exynos-modem-ctrl.h>
 #endif
 
+#include <linux/fb.h>
+
 #define ENUM_STR(x) {case(x): return #x; }
 static const char *mode_to_str(enum s2mu004_muic_mode n)
 {
@@ -2618,6 +2620,26 @@ EXIT_DRY_STATE:
 	wake_unlock(&muic_data->water_dry_wake_lock);
 	mutex_unlock(&muic_data->water_dry_mutex);
 }
+
+static void s2mu004_muic_sleep_dry_checker(struct work_struct *work)
+{
+	struct s2mu004_muic_data *muic_data =
+		container_of(work, struct s2mu004_muic_data, sleep_dry_checker.work);
+	struct timeval time;
+	long duration;
+
+	if (muic_data->water_status == S2MU004_WATER_MUIC_CCIC_STABLE && muic_data->lcd_on) {
+		if (!s2mu004_muic_get_vbus_state(muic_data)) {
+			do_gettimeofday(&time);
+			duration = (long)time.tv_sec - muic_data->dry_chk_time;
+			pr_info("%s dry check duration : (%ld)\n", __func__, duration);
+			if (duration > muic_data->dry_duration_sec || duration < 0) {
+				cancel_delayed_work(&muic_data->water_dry_handler);
+				schedule_delayed_work(&muic_data->water_dry_handler, 0);
+			}
+		}
+	}
+}
 #endif
 
 #ifdef	CONFIG_CCIC_S2MU004
@@ -2887,6 +2909,34 @@ static void s2mu004_muic_init_interface(struct s2mu004_muic_data *muic_data,
 	muic_pdata->muic_if = muic_if;
 }
 
+static int muic_fb_notifier_event(struct notifier_block *this,
+        unsigned long val, void *v)
+{
+	struct fb_event *evdata = v;
+	struct s2mu004_muic_data *muic_data =
+		container_of(this, struct s2mu004_muic_data, fb_notifier);
+	int fb_blank = 0;
+
+	if (evdata->info->node)
+		return NOTIFY_DONE;
+
+	switch (val) {
+	case FB_EVENT_BLANK:
+		break;
+	default:
+		return NOTIFY_DONE;
+	}
+
+	fb_blank = *(int *)evdata->data;
+
+	if (fb_blank == FB_BLANK_UNBLANK) {
+		pr_info("%s: lcd on\n", __func__);
+		muic_data->lcd_on = true;
+	} else
+		muic_data->lcd_on = false;
+
+	return NOTIFY_DONE;
+}
 
 static int s2mu004_muic_probe(struct platform_device *pdev)
 {
@@ -2933,6 +2983,11 @@ static int s2mu004_muic_probe(struct platform_device *pdev)
 #endif
 
 	s2mu004_muic_init_drvdata(muic_data, s2mu004, pdev, mfd_pdata);
+
+	muic_data->fb_notifier.priority = -1;
+       muic_data->fb_notifier.notifier_call = muic_fb_notifier_event;
+       fb_register_client(&muic_data->fb_notifier);
+
 #if defined(CONFIG_OF)
 	ret = of_s2mu004_muic_dt(&pdev->dev, muic_data);
 	if (ret < 0)
@@ -3026,6 +3081,7 @@ static int s2mu004_muic_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&muic_data->water_dry_handler, s2mu004_muic_water_dry_handler);
 	INIT_DELAYED_WORK(&muic_data->water_detect_handler, s2mu004_muic_water_detect_handler);
 	INIT_DELAYED_WORK(&muic_data->incomplete_check, s2mu004_muic_incomplete_chk_handler);
+	INIT_DELAYED_WORK(&muic_data->sleep_dry_checker, s2mu004_muic_sleep_dry_checker);
 #endif
 	INIT_DELAYED_WORK(&muic_data->dcd_recheck, s2mu004_muic_dcd_recheck);
 	s2mu004_muic_irq_thread(-1, muic_data);
@@ -3108,6 +3164,10 @@ static int s2mu004_muic_suspend(struct device *dev)
 
 	muic_pdata->suspended = true;
 
+	if (muic_data->water_status == S2MU004_WATER_MUIC_CCIC_STABLE) {
+		cancel_delayed_work(&muic_data->sleep_dry_checker);
+	}
+
 	return 0;
 }
 
@@ -3115,8 +3175,6 @@ static int s2mu004_muic_resume(struct device *dev)
 {
 	struct s2mu004_muic_data *muic_data = dev_get_drvdata(dev);
 	struct muic_platform_data *muic_pdata = muic_data->pdata;
-	struct timeval time;
-	long duration;
 
 	muic_pdata->suspended = false;
 
@@ -3129,15 +3187,9 @@ static int s2mu004_muic_resume(struct device *dev)
 	}
 
 	if (muic_data->water_status == S2MU004_WATER_MUIC_CCIC_STABLE) {
-		if (!s2mu004_muic_get_vbus_state(muic_data)) {
-			do_gettimeofday(&time);
-			duration = (long)time.tv_sec - muic_data->dry_chk_time;
-			pr_info("%s dry check duration : (%ld)\n", __func__, duration);
-			if (duration > muic_data->dry_duration_sec || duration < 0) {
-				cancel_delayed_work(&muic_data->water_dry_handler);
-				schedule_delayed_work(&muic_data->water_dry_handler, 0);
-			}
-		}
+		cancel_delayed_work(&muic_data->sleep_dry_checker);
+		schedule_delayed_work(&muic_data->sleep_dry_checker,
+			msecs_to_jiffies(WATER_WAKEUP_WAIT_DURATION_MS));
 	}
 
 	return 0;

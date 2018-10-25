@@ -231,6 +231,13 @@ typedef struct {
 	unsigned int factory_step;
 } ois_shared_data;
 
+struct wb_gains {
+	u32 gr;
+	u32 r;
+	u32 b;
+	u32 gb;
+};
+
 typedef struct {
 	/** The length of a frame is specified as a number of lines, frame_length_lines.
 	  @remarks
@@ -379,6 +386,10 @@ struct fimc_is_cis_ops {
 	int (*cis_retention_prepare)(struct v4l2_subdev *subdev);
 	int (*cis_retention_crc_check)(struct v4l2_subdev *subdev);
 #endif
+	int (*cis_set_wb_gains)(struct v4l2_subdev *subdev, struct wb_gains wb_gains);
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+	int (*cis_set_initial_exposure)(struct v4l2_subdev *subdev);
+#endif
 };
 
 struct fimc_is_sensor_ctl
@@ -429,6 +440,13 @@ struct fimc_is_sensor_ctl
 
 	// Frame number that indicating shot. Currntly, it is not used.
 	/* (14) */  bool shot_frame_number;
+
+	/* For WB(White Balance) gain update */
+	struct wb_gains wb_gains;
+	bool update_wb_gains;
+
+	/* force_update set when need to update w/o DDK or RTA */
+	bool force_update;
 };
 
 typedef enum fimc_is_sensor_adjust_direction_ {
@@ -731,6 +749,15 @@ struct fimc_is_cis_interface_ops {
 	/* Set sensor 3a mode - OTF/M2M */
 	int (*set_sensor_3a_mode)(struct fimc_is_sensor_interface *itf,
 					u32 mode);
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+	int (*get_initial_exposure_gain_of_sensor)(struct fimc_is_sensor_interface *itf,
+		u32 *long_expo,
+		u32 *long_again,
+		u32 *long_dgain,
+		u32 *short_expo,
+		u32 *short_again,
+		u32 *short_dgain);
+#endif
 };
 
 struct fimc_is_cis_ext_interface_ops {
@@ -752,7 +779,15 @@ struct fimc_is_cis_ext_interface_ops {
 struct fimc_is_cis_ext2_interface_ops {
 	int (*set_long_term_expo_mode)(struct fimc_is_sensor_interface *itf,
 				struct fimc_is_long_term_expo_mode *long_term_expo_mode);
-	void *reserved[20];
+	int (*set_low_noise_mode)(struct fimc_is_sensor_interface *itf, u32 mode);
+	int (*get_sensor_max_dynamic_fps)(struct fimc_is_sensor_interface *itf, u32 *max_dynamic_fps);
+	int (*get_static_mem)(int ctrl_id, void **mem, int *size);
+	int (*request_wb_gain)(struct fimc_is_sensor_interface *itf,
+				u32 gr_gain, u32 r_gain, u32 b_gain, u32 gb_gain);
+	int (*set_sensor_info_mfhdr_mode_change)(struct fimc_is_sensor_interface *itf,
+				u32 count, u32 *long_expo, u32 *long_again, u32 *long_dgain,
+				u32 *expo, u32 *again, u32 *dgain);
+	void *reserved[15];
 };
 
 struct fimc_is_cis_event_ops {

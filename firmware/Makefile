@@ -160,6 +160,7 @@ fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_INCELL_TS) += tsp_sec/s6d7at01a01_j7topelte.
 fw-shipped-$(CONFIG_TOUCHSCREEN_SYNAPTICS_I2C_TD4X00) += tsp_synaptics/td4100_j3poplte.fw tsp_synaptics/td4100_j3poplte_recovery.fw \
 														tsp_synaptics/td4100_j7pop.fw tsp_synaptics/td4100_j7pop_recovery.fw \
 														tsp_synaptics/td4100_j3top.fw tsp_synaptics/td4100_j3top_recovery.fw
+fw-shipped-$(CONFIG_TOUCHSCREEN_SYNAPTICS_I2C_TD4X00_J2CORESPR) += tsp_synaptics/td4101_j2corepelte_spr.fw tsp_synaptics/td4101_j2corepelte_spr_recovery.fw
 fw-shipped-$(CONFIG_TOUCHSCREEN_IST40XX) += tsp_imagis/ist40xx_a7_2018.fw tsp_imagis/ist40xx_a7_2018_cmcs.bin
 
 TSPFIRMWARE_DIRECTORY = firmware/tsp_zinitix

@@ -93,6 +93,9 @@ static void dpu_bts_find_max_disp_freq(struct decon_device *decon,
 	if (decon->bts.max_disp_freq < disp_op_freq)
 		decon->bts.max_disp_freq = disp_op_freq;
 
+	if (decon->bts.max_disp_freq < decon->bts.disp_freq_minlock)
+		decon->bts.max_disp_freq = decon->bts.disp_freq_minlock;
+
 	DPU_DEBUG_BTS("MAX DISP CH FREQ = %d\n", decon->bts.max_disp_freq);
 }
 
@@ -206,6 +209,19 @@ void dpu_bts_update_bw(struct decon_device *decon, struct decon_reg_data *regs,
 	DPU_DEBUG_BTS("%s -\n", __func__);
 }
 
+void dpu_bts_update_qos_disp(struct decon_device *decon, u32 disp_freq)
+{
+	if (pm_qos_request_active(&decon->bts.disp_qos)) {
+		pm_qos_update_request(&decon->bts.disp_qos, disp_freq);
+
+		decon->bts.disp_freq_minlock = disp_freq;
+		DPU_INFO_BTS("%s: decon%d, disp_freq(Khz): %u\n", __func__,
+			decon->id, disp_freq);
+	} else
+		decon_err( "%s: decon%d, not active\n", __func__, decon->id);
+
+}
+
 void dpu_bts_release_bw(struct decon_device *decon)
 {
 	struct bts_bw bw = { 0, };
@@ -247,6 +263,7 @@ void dpu_bts_init(struct decon_device *decon)
 
 	pm_qos_add_request(&decon->bts.disp_qos, PM_QOS_DISPLAY_THROUGHPUT, 0);
 
+	decon->bts.disp_freq_minlock = 0;
 }
 
 void dpu_bts_deinit(struct decon_device *decon)
@@ -261,5 +278,6 @@ struct decon_bts_ops decon_bts_control = {
 	.bts_calc_bw		= dpu_bts_calc_bw,
 	.bts_update_bw		= dpu_bts_update_bw,
 	.bts_release_bw		= dpu_bts_release_bw,
+	.bts_update_qos_disp	= dpu_bts_update_qos_disp,
 	.bts_deinit		= dpu_bts_deinit,
 };

@@ -10,6 +10,15 @@ config CAMERA_EEPROM_SUPPORT_FRONT
         default n
         help
           Enable eeprom for front cam.
+config CAMERA_EEPROM_SUPPORT_REAR3
+        bool "Enable eeprom for 3rdrear cam"
+        depends on VENDER_MCD
+        default n
+        help
+          Enable EEPROM for 3rd rear cam in triple camera.
+          This project has 3 rear camera and each camera has EEPROM for 1st one,
+          OTPROM for 2nd one and EEPROM for 3rd camera.
+          This option support EEPROM for 3rd rear camera.
 config COMPANION_USE
         bool "Use companion"
         depends on VENDER_MCD
@@ -160,3 +169,9 @@ config CAMERA_OTPROM_SUPPORT_FRONT
         default n
         help
           This camera is otp front project.
+config CAMERA_OTPROM_SUPPORT_REAR
+        bool "This camera is otp rear project"
+        depends on VENDER_MCD
+        default n
+        help
+          This camera is otp rear project.

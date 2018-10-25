@@ -762,6 +762,138 @@ int csi_hw_s_dma_common(u32 __iomem *base_reg)
 	return 0;
 }
 
+#define CSIS_DMA_MINIMUM_SIZE	(4) /* guided minimum value of split */
+int csi_hw_s_dma_common_dynamic(u32 __iomem *base_reg, size_t size, unsigned int dma_ch)
+{
+	u32 val;
+	u32 sram0_split, sram1_split;
+	u32 max;
+	u32 arb_pri_0, arb_pri_1;
+	u32 sram_matrix;
+
+	if (!base_reg)
+		return 0;
+
+	/* Common DMA Control register */
+	/* CSIS_DMA_F_IP_PROCESSING : 1 = Q-channel clock enable  */
+	/* CSIS_DMA_F_IP_PROCESSING : 0 = Q-channel clock disable */
+	val = fimc_is_hw_get_reg(base_reg, &csi_dma_regs[CSIS_DMA_R_COMMON_DMA_CTRL]);
+	val = fimc_is_hw_set_field_value(val, &csi_dma_fields[CSIS_DMA_F_IP_PROCESSING], 0x1);
+	fimc_is_hw_set_reg(base_reg, &csi_dma_regs[CSIS_DMA_R_COMMON_DMA_CTRL], val);
+
+	/* set default value */
+	max = (unsigned int)(size / 16);
+	sram0_split = max / 2;
+	sram1_split = max / 2;
+	arb_pri_0 = 0, arb_pri_1 = 0;
+	sram_matrix = 0;
+
+	/* Change CSIS DMA parameters
+	 * - adjust SRAM size to adjust CSIS DMA sizes more effieient
+	 * ex> if CSIS0 only -> set SRAM_0 split set to use CSIS0 max size
+	 *     if CSIS0 & CSIS2 -> set each SRAM_0, SRAM_1 set to use CSIS0, CSIS2 max size
+	 *     if CSIS0 & CSIS1 -> change SRAM matrix for use SRAM_0, SRAM_1 itelately,
+	 *                         then set SRAM split
+	 */
+	switch (dma_ch) {
+	case (1 << 0): /* DMA0 only */
+		sram0_split = max;
+		arb_pri_0 = 1;
+		break;
+	case (1 << 1): /* DMA1 only */
+		sram0_split = CSIS_DMA_MINIMUM_SIZE;
+		arb_pri_0 = 2;
+		break;
+	case (1 << 2): /* DMA2 only */
+		sram1_split = max;
+		arb_pri_1 = 1;
+		break;
+	case (1 << 3): /* DMA3 only */
+		sram1_split = CSIS_DMA_MINIMUM_SIZE;
+		arb_pri_1 = 2;
+		break;
+	case ((1 << 0) | (1 << 2)): /* DMA0 & DMA2 */
+		sram0_split = max;
+		sram1_split = max;
+		arb_pri_0 = 1;
+		arb_pri_1 = 1;
+		break;
+	case ((1 << 0) | (1 << 3)): /* DMA0 & DMA3 */
+		sram0_split = max;
+		sram1_split = CSIS_DMA_MINIMUM_SIZE;
+		arb_pri_0 = 1;
+		arb_pri_1 = 2;
+		break;
+	case ((1 << 1) | (1 << 2)): /* DMA1 & DMA2 */
+		sram0_split = CSIS_DMA_MINIMUM_SIZE;
+		sram1_split = max;
+		arb_pri_0 = 2;
+		arb_pri_1 = 1;
+		break;
+	case ((1 << 1) | (1 << 3)): /* DMA1 & DMA3 */
+		sram0_split = CSIS_DMA_MINIMUM_SIZE;
+		sram1_split = CSIS_DMA_MINIMUM_SIZE;
+		arb_pri_0 = 2;
+		arb_pri_1 = 2;
+		break;
+	case ((1 << 0) | (1 << 1)): /* DMA0 & DMA1 -> change DMA matrix */
+		sram_matrix = 2;
+		sram0_split = max;
+		sram1_split = max;
+		/* TODO: arb_pri value set when matrix is modified */
+		break;
+	case ((1 << 2) | (1 << 3)): /* DMA2 & DMA3 -> change DMA matrix */
+		sram_matrix = 2;
+		sram0_split = CSIS_DMA_MINIMUM_SIZE;
+		sram1_split = CSIS_DMA_MINIMUM_SIZE;
+		/* TODO: arb_pri value set when matrix is modified */
+		break;
+	default:
+		/* TODO: support over 3 CSI use case if need */
+		warn("invalid CSI dma_ch(%x)\n", dma_ch);
+		break;
+	}
+
+	info("[CSI] DMA split(matrix:%d, 0:%x, 1:%x), priority(0:%x, 1:%x)\n",
+		sram_matrix, sram0_split, sram1_split, arb_pri_0, arb_pri_1);
+
+	/* Common DMA Arbitration Priority register */
+	/* CSIS_DMA_F_DMA_ARB_PRI_1 : 1 = CSIS2 DMA has a high priority */
+	/* CSIS_DMA_F_DMA_ARB_PRI_1 : 2 = CSIS3 DMA has a high priority */
+	/* CSIS_DMA_F_DMA_ARB_PRI_0 : 1 = CSIS0 DMA has a high priority */
+	/* CSIS_DMA_F_DMA_ARB_PRI_0 : 2 = CSIS1 DMA has a high priority */
+	val = fimc_is_hw_get_reg(base_reg, &csi_dma_regs[CSIS_DMA_R_COMMON_DMA_ARB_PRI]);
+	val = fimc_is_hw_set_field_value(val, &csi_dma_fields[CSIS_DMA_F_DMA_ARB_PRI_1], arb_pri_1);
+	val = fimc_is_hw_set_field_value(val, &csi_dma_fields[CSIS_DMA_F_DMA_ARB_PRI_0], arb_pri_0);
+	fimc_is_hw_set_reg(base_reg, &csi_dma_regs[CSIS_DMA_R_COMMON_DMA_ARB_PRI], val);
+
+	/* Common DMA SRAM split register */
+	/* CSIS_DMA_F_DMA_SRAM1_SPLIT : internal SRAM1 is 10KB (640 * 16 bytes) */
+	/* CSIS_DMA_F_DMA_SRAM0_SPLIT : internal SRAM0 is 10KB (640 * 16 bytes) */
+	/* This register can be set between 0 to 640 */
+	val = fimc_is_hw_get_reg(base_reg, &csi_dma_regs[CSIS_DMA_R_COMMON_DMA_SRAM_SPLIT]);
+	val = fimc_is_hw_set_field_value(val, &csi_dma_fields[CSIS_DMA_F_DMA_SRAM1_SPLIT], sram1_split);
+	val = fimc_is_hw_set_field_value(val, &csi_dma_fields[CSIS_DMA_F_DMA_SRAM0_SPLIT], sram0_split);
+	fimc_is_hw_set_reg(base_reg, &csi_dma_regs[CSIS_DMA_R_COMMON_DMA_SRAM_SPLIT], val);
+
+	/* Common DMA Martix register */
+	/* CSIS_DMA_F_DMA_MATRIX : Under Table see */
+	/*       CSIS0      CSIS1      CSIS2      CSIS3  */
+	/* 0  : SRAM0_0    SRAM0_1    SRAM1_0    SRAM1_1 */
+	/* 2  : SRAM0_0    SRAM1_0    SRAM0_1    SRAM1_1 */
+	/* 5  : SRAM0_0    SRAM1_1    SRAM1_0    SRAM0_1 */
+	/* 14 : SRAM1_0    SRAM0_1    SRAM0_0    SRAM1_1 */
+	/* 16 : SRAM1_0    SRAM1_1    SRAM0_0    SRAM0_1 */
+	/* 17 : SRAM1_0    SRAM1_1    SRAM0_1    SRAM0_0 */
+	/* 22 : SRAM1_1    SRAM1_0    SRAM0_0    SRAM0_1 */
+	/* 23 : SRAM1_1    SRAM1_0    SRAM0_1    SRAM0_0 */
+	val = fimc_is_hw_get_reg(base_reg, &csi_dma_regs[CSIS_DMA_R_COMMON_DMA_MATRIX]);
+	val = fimc_is_hw_set_field_value(val, &csi_dma_fields[CSIS_DMA_F_DMA_MATRIX], sram_matrix);
+	fimc_is_hw_set_reg(base_reg, &csi_dma_regs[CSIS_DMA_R_COMMON_DMA_MATRIX], val);
+
+	return 0;
+}
+
 int csi_hw_enable(u32 __iomem *base_reg)
 {
 	/* update shadow */

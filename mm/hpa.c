@@ -79,6 +79,12 @@ static int hpa_killer(void)
 		p = find_lock_task_mm(tsk);
 		if (!p)
 			continue;
+		
+		if (p->state & TASK_UNINTERRUPTIBLE) {
+			task_unlock(p);
+			continue;
+		}
+
 
 		if (test_tsk_thread_flag(p, TIF_MEMDIE) &&
 		    time_before_eq(jiffies, hpa_deathpending_timeout)) {

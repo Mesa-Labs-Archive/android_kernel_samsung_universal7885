@@ -614,7 +614,6 @@ int init_debugfs_backlight(struct backlight_device *bd, unsigned int *table, str
 
 	if (!debugfs_root) {
 		debugfs_root = debugfs_create_dir("dd_backlight", NULL);
-		debugfs_create_file("_help", S_IRUSR, debugfs_root, bl, &help_fops);
 
 		bl = kzalloc(sizeof(struct bl_info), GFP_KERNEL);
 		bl->bd = bd;
@@ -622,10 +621,11 @@ int init_debugfs_backlight(struct backlight_device *bd, unsigned int *table, str
 		bl->brightness_reset = kmemdup(bl->brightness_table, bd->props.max_brightness * sizeof(unsigned int), GFP_KERNEL);
 		make_bl_default_point(bl);
 
+		debugfs_create_file("_help", S_IRUSR, debugfs_root, bl, &help_fops);
 		debugfs_create_file("bl_tuning", S_IRUSR | S_IWUSR, debugfs_root, bl, &bl_tuning_fops);
 	}
 
-	for (i2c_count = 0; i2c_count < MAX_I2C_CLIENT && clients[i2c_count]; i2c_count++) {
+	for (i2c_count = 0; i2c_count < MAX_I2C_CLIENT && clients && clients[i2c_count]; i2c_count++) {
 		list_for_each_entry(ic, &client_list, client_node) {
 			if (ic->client == clients[i2c_count]) {
 				dbg_info("%s %s already exist\n", dev_name(&clients[i2c_count]->adapter->dev), dev_name(&clients[i2c_count]->dev));

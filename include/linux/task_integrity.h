@@ -21,6 +21,7 @@
 #include <linux/spinlock.h>
 #include <linux/sched.h>
 #include <linux/list.h>
+#include <linux/dcache.h>
 
 struct linux_binprm;
 struct task_integrity;

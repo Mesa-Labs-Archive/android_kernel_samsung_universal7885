@@ -37,6 +37,10 @@
 extern void trustedui_mode_on(void);
 extern void trustedui_mode_off(void);
 #endif
+#if defined(CONFIG_TOUCHSCREEN_IST40XX)
+extern void trustedui_mode_ist_on(void);
+extern void trustedui_mode_ist_off(void);
+#endif
 
 /* I2C register for reset */
 #define HSI2C7_PA_BASE_ADDRESS	0x14E10000
@@ -64,6 +68,7 @@ extern int decon_lpd_block_exit(struct decon_device *decon);
 #ifdef CONFIG_TRUSTED_UI_TOUCH_ENABLE
 static int tsp_irq_num = 718; // default value
 
+#if defined(CONFIG_TOUCHSCREEN_SEC_TS) || defined(CONFIG_TOUCHSCREEN_IST40XX)
 static void tui_delay(unsigned int ms)
 {
 	if (ms < 20)
@@ -71,6 +76,7 @@ static void tui_delay(unsigned int ms)
 	else
 		msleep(ms);
 }
+#endif
 
 void trustedui_set_tsp_irq(int irq_num)
 {
@@ -376,8 +382,11 @@ uint32_t hal_tui_deactivate(void)
 	tui_delay(5);
 	trustedui_mode_on();
 	tui_delay(95);
-#else
-	tui_delay(1);
+#endif
+#if defined(CONFIG_TOUCHSCREEN_IST40XX)
+	tui_delay(5);
+	trustedui_mode_ist_on();
+	tui_delay(95);
 #endif
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI_FB_BLANK
@@ -397,10 +406,12 @@ uint32_t hal_tui_deactivate(void)
 		tui_delay(5);
 		trustedui_mode_off();
 		tui_delay(95);
-#else
-		tui_delay(1);
 #endif
-
+#if defined(CONFIG_TOUCHSCREEN_IST40XX)
+		tui_delay(5);
+		trustedui_mode_ist_off();
+		tui_delay(95);
+#endif
 		/* Clear linux TUI flag */
 		trustedui_set_mode(TRUSTEDUI_MODE_OFF);
 
@@ -438,11 +449,14 @@ uint32_t hal_tui_activate(void)
 #endif
 
 #if defined(CONFIG_TOUCHSCREEN_SEC_TS)
-	tui_delay(5);
-	trustedui_mode_off();
-	tui_delay(95);
-#else
-	tui_delay(1);
+		tui_delay(5);
+		trustedui_mode_off();
+		tui_delay(95);
+#endif
+#if defined(CONFIG_TOUCHSCREEN_IST40XX)
+		tui_delay(5);
+		trustedui_mode_ist_off();
+		tui_delay(95);
 #endif
 	
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI_FB_BLANK

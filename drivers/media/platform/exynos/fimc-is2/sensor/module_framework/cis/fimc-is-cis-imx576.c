@@ -24,6 +24,7 @@
 #include <linux/moduleparam.h>
 #include <linux/platform_device.h>
 #include <linux/of_gpio.h>
+#include <linux/syscalls.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-subdev.h>
@@ -42,6 +43,8 @@
 
 #include "fimc-is-helper-i2c.h"
 
+#include "interface/fimc-is-interface-library.h"
+
 #define SENSOR_NAME "IMX576"
 #define SENSOR_NAME_REAR  "IMX576_REAR"
 #define SENSOR_NAME_FRONT "IMX576_FRONT"
@@ -51,10 +54,15 @@
 
 static const u32 *sensor_imx576_global;
 static u32 sensor_imx576_global_size;
+static const u32 *sensor_imx576_imageQuality;
+static u32 sensor_imx576_imageQuality_size;
 static const u32 **sensor_imx576_setfiles;
 static const u32 *sensor_imx576_setfile_sizes;
 static const struct sensor_pll_info_compact **sensor_imx576_pllinfos;
 static u32 sensor_imx576_max_setfile_num;
+static bool sensor_imx576_cal_write_flag;
+
+extern struct fimc_is_lib_support gPtr_lib_support;
 
 static void sensor_imx576_set_integration_max_margin(u32 mode, cis_shared_data *cis_data)
 {
@@ -76,6 +84,10 @@ static void sensor_imx576_set_integration_max_margin(u32 mode, cis_shared_data *
 		case SENSOR_IMX576_1870X1052_SSM_240FPS:
 		case SENSOR_IMX576_1920X1080_SSM_120FPS:
 		case SENSOR_IMX576_1280X720_SSM_240FPS:
+		case SENSOR_IMX576_1280X720_SSM_120FPS:
+		case SENSOR_IMX576_2832x2124_117FPS:
+		case SENSOR_IMX576_2832X2124_60FPS:
+		case SENSOR_IMX576_2832X1592_120FPS:
 			cis_data->max_margin_coarse_integration_time = SENSOR_IMX576_COARSE_INTEGRATION_TIME_MAX_MARGIN;
 			dbg_sensor(1, "max_margin_coarse_integration_time(%d)\n",
 				cis_data->max_margin_coarse_integration_time);
@@ -98,7 +110,7 @@ static void sensor_imx576_set_integration_min(u32 mode, cis_shared_data *cis_dat
 		case SENSOR_IMX576_2832X1592_2X2BIN_30FPS:
 		case SENSOR_IMX576_2832X1376_2X2BIN_30FPS:
 		case SENSOR_IMX576_2124X2124_2X2BIN_30FPS:
-			cis_data->min_coarse_integration_time = 4;
+			cis_data->min_coarse_integration_time = SENSOR_IMX576_COARSE_INTEGRATION_TIME_MIN;
 			dbg_sensor(1, "min_coarse_integration_time(%d)\n",
 				cis_data->min_coarse_integration_time);
 			break;	
@@ -106,7 +118,7 @@ static void sensor_imx576_set_integration_min(u32 mode, cis_shared_data *cis_dat
 		case SENSOR_IMX576_2832X1592_QBCHDR_30FPS:
 		case SENSOR_IMX576_2832X1376_QBCHDR_30FPS:
 		case SENSOR_IMX576_2124X2124_QBCHDR_30FPS:
-			cis_data->min_coarse_integration_time = SENSOR_IMX576_COARSE_INTEGRATION_TIME_MIN;
+			cis_data->min_coarse_integration_time = 0x06;
 			dbg_sensor(1, "min_coarse_integration_time(%d)\n",
 				cis_data->min_coarse_integration_time);
 			break;
@@ -114,13 +126,13 @@ static void sensor_imx576_set_integration_min(u32 mode, cis_shared_data *cis_dat
 		case SENSOR_IMX576_5664X3184_QBCREMOSAIC_30FPS:
 		case SENSOR_IMX576_5664X2752_QBCREMOSAIC_30FPS:
 		case SENSOR_IMX576_4248X4248_QBCREMOSAIC_30FPS:
-			cis_data->min_coarse_integration_time = 4;
-			dbg_sensor(1, "min_coarse_integration_time(%d)\n",
-				cis_data->min_coarse_integration_time);
-			break;	
 		case SENSOR_IMX576_1870X1052_SSM_240FPS:
 		case SENSOR_IMX576_1920X1080_SSM_120FPS:
 		case SENSOR_IMX576_1280X720_SSM_240FPS:
+		case SENSOR_IMX576_1280X720_SSM_120FPS:
+		case SENSOR_IMX576_2832x2124_117FPS:
+		case SENSOR_IMX576_2832X2124_60FPS:
+		case SENSOR_IMX576_2832X1592_120FPS:
 			cis_data->min_coarse_integration_time = SENSOR_IMX576_COARSE_INTEGRATION_TIME_MIN;
 			dbg_sensor(1, "min_coarse_integration_time(%d)\n",
 				cis_data->min_coarse_integration_time);
@@ -338,12 +350,19 @@ int sensor_imx576_cis_init(struct v4l2_subdev *subdev)
 		ret = 0;
 	}
 
+	// Check that QSC and DPC Cal is written for Remosaic Capture.
+	// false : Not yet write the QSC and DPC
+	// true  : Written the QSC and DPC
+	sensor_imx576_cal_write_flag = false;
+
 	info("[%s] cis_rev=%#x\n", __func__, cis->cis_data->cis_rev);
 
 	if (cis->cis_data->cis_rev == 0x11) {
 		probe_info("%s setfile_A for MP\n", __func__);
 		sensor_imx576_global = sensor_imx576_setfile_A_Global;
 		sensor_imx576_global_size = sizeof(sensor_imx576_setfile_A_Global) / sizeof(sensor_imx576_setfile_A_Global[0]);
+		sensor_imx576_imageQuality = sensor_imx576_setfile_A_ImageQuality;
+		sensor_imx576_imageQuality_size = sizeof(sensor_imx576_setfile_A_ImageQuality) / sizeof(sensor_imx576_setfile_A_ImageQuality[0]);
 		sensor_imx576_setfiles = sensor_imx576_setfiles_A;
 		sensor_imx576_setfile_sizes = sensor_imx576_setfile_A_sizes;
 		sensor_imx576_pllinfos = sensor_imx576_pllinfos_A;
@@ -352,6 +371,8 @@ int sensor_imx576_cis_init(struct v4l2_subdev *subdev)
 		probe_info("%s setfile_B for MP0\n", __func__);
 		sensor_imx576_global = sensor_imx576_setfile_B_Global;
 		sensor_imx576_global_size = sizeof(sensor_imx576_setfile_B_Global) / sizeof(sensor_imx576_setfile_B_Global[0]);
+		sensor_imx576_imageQuality = sensor_imx576_setfile_B_ImageQuality;
+		sensor_imx576_imageQuality_size = sizeof(sensor_imx576_setfile_B_ImageQuality) / sizeof(sensor_imx576_setfile_B_ImageQuality[0]);
 		sensor_imx576_setfiles = sensor_imx576_setfiles_B;
 		sensor_imx576_setfile_sizes = sensor_imx576_setfile_B_sizes;
 		sensor_imx576_pllinfos = sensor_imx576_pllinfos_B;
@@ -360,6 +381,8 @@ int sensor_imx576_cis_init(struct v4l2_subdev *subdev)
 		probe_info("%s chip_rev(%d) is wrong! setfile_A for MP (default)\n", __func__, cis->cis_data->cis_rev);
 		sensor_imx576_global = sensor_imx576_setfile_A_Global;
 		sensor_imx576_global_size = sizeof(sensor_imx576_setfile_A_Global) / sizeof(sensor_imx576_setfile_A_Global[0]);
+		sensor_imx576_imageQuality = sensor_imx576_setfile_A_ImageQuality;
+		sensor_imx576_imageQuality_size = sizeof(sensor_imx576_setfile_A_ImageQuality) / sizeof(sensor_imx576_setfile_A_ImageQuality[0]);
 		sensor_imx576_setfiles = sensor_imx576_setfiles_A;
 		sensor_imx576_setfile_sizes = sensor_imx576_setfile_A_sizes;
 		sensor_imx576_pllinfos = sensor_imx576_pllinfos_A;
@@ -402,6 +425,198 @@ int sensor_imx576_cis_init(struct v4l2_subdev *subdev)
 #endif
 
 p_err:
+	return ret;
+}
+
+#if SENSOR_IMX576_CAL_DEBUG
+int sensor_imx576_cis_cal_dump(char* name, char *buf, size_t size)
+{
+	int ret = 0;
+
+	struct file *fp;
+	ssize_t tx = -ENOENT;
+	int fd, old_mask;
+	loff_t pos = 0;
+	mm_segment_t old_fs;
+
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+
+	old_mask = sys_umask(0);
+
+	sys_rmdir(name);
+	fd = sys_open(name, O_WRONLY | O_CREAT | O_TRUNC | O_SYNC, 0666);
+	if (fd < 0) {
+		err("open file error(%d): %s", fd, name);
+		sys_umask(old_mask);
+		set_fs(old_fs);
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+	fp = fget(fd);
+	if (fp) {
+		tx = vfs_write(fp, buf, size, &pos);
+		if (tx != size) {
+			err("fail to write %s. ret %zd", name, tx);
+			ret = -ENOENT;
+		}
+
+		vfs_fsync(fp, 0);
+		fput(fp);
+	} else {
+		err("fail to get file *: %s", name);
+	}
+
+	sys_close(fd);
+	sys_umask(old_mask);
+	set_fs(old_fs);
+
+p_err:
+	return ret;
+}
+#endif
+
+int sensor_imx576_cis_QuadSensCal_write(struct v4l2_subdev *subdev)
+{
+	int ret = 0;
+	struct fimc_is_cis *cis;
+	struct i2c_client *client = NULL;
+	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
+	struct fimc_is_lib_support *lib = &gPtr_lib_support;
+	int position;
+	u16 start_addr;
+	ulong cal_addr;
+	u16 data_size;
+	u8 cal_data[SENSOR_IMX576_QUAD_SENS_CAL_SIZE] = {0, };
+
+	BUG_ON(!subdev);
+
+	cis = (struct fimc_is_cis *)v4l2_get_subdevdata(subdev);
+	BUG_ON(!cis);
+	BUG_ON(!cis->cis_data);
+
+	sensor_peri = container_of(cis, struct fimc_is_device_sensor_peri, cis);
+	BUG_ON(!sensor_peri);
+
+	client = cis->client;
+	if (unlikely(!client)) {
+		err("client is NULL");
+		return -EINVAL;
+	}
+
+	position = sensor_peri->module->position;
+	if (position == SENSOR_POSITION_REAR)
+		cal_addr = lib->minfo->kvaddr_rear_cal + SENSOR_IMX576_QUAD_SENS_CAL_BASE_REAR;
+	else if (position == SENSOR_POSITION_FRONT)
+		cal_addr = lib->minfo->kvaddr_front_cal + SENSOR_IMX576_QUAD_SENS_CAL_BASE_FRONT;
+	else {
+		err("cis_imx576 position(%d) is invalid!\n", position);
+		goto p_err;
+	}
+
+	memcpy(cal_data, (u16 *)cal_addr, SENSOR_IMX576_QUAD_SENS_CAL_SIZE);
+
+#if SENSOR_IMX576_CAL_DEBUG
+	ret = sensor_imx576_cis_cal_dump(SENSOR_IMX576_QSC_DUMP_NAME, (char *)cal_data, (size_t)SENSOR_IMX576_QUAD_SENS_CAL_SIZE);
+	if (ret < 0) {
+		err("cis_imx576 QSC Cal dump fail(%d)!\n", ret);
+		goto p_err;
+	}
+#endif
+
+	I2C_MUTEX_LOCK(cis->i2c_lock);
+
+	start_addr = SENSOR_IMX576_QUAD_SENS_REG_ADDR;
+	data_size = SENSOR_IMX576_QUAD_SENS_CAL_SIZE;
+	ret = fimc_is_sensor_write8_burst(client, start_addr, cal_data, data_size);
+	if (ret < 0) {
+		err("cis_imx576 QSC write Error(%d)\n", ret);
+	}
+
+p_err:
+	I2C_MUTEX_UNLOCK(cis->i2c_lock);
+	return ret;
+}
+
+int sensor_imx576_cis_DPC_write(struct v4l2_subdev *subdev)
+{
+	int ret = 0;
+	struct fimc_is_cis *cis;
+	struct i2c_client *client = NULL;
+	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
+	struct fimc_is_lib_support *lib = &gPtr_lib_support;
+	int position;
+	u16 start_val[2] = {0, };
+	u16 count_val[2] = {0, };
+	u16 start_addr = 0;
+	u16 data_size = 0;
+	ulong cal_addr;
+	u8 *cal_data = NULL;
+
+	BUG_ON(!subdev);
+
+	cis = (struct fimc_is_cis *)v4l2_get_subdevdata(subdev);
+	BUG_ON(!cis);
+	BUG_ON(!cis->cis_data);
+
+	sensor_peri = container_of(cis, struct fimc_is_device_sensor_peri, cis);
+	BUG_ON(!sensor_peri);
+
+	client = cis->client;
+	if (unlikely(!client)) {
+		err("client is NULL");
+		return -EINVAL;
+	}
+
+	position = sensor_peri->module->position;
+	if (position == SENSOR_POSITION_REAR)
+		cal_addr = lib->minfo->kvaddr_rear_cal + SENSOR_IMX576_DPC_CAL_BASE_REAR;
+	else if (position == SENSOR_POSITION_FRONT)
+		cal_addr = lib->minfo->kvaddr_front_cal + SENSOR_IMX576_DPC_CAL_BASE_FRONT;
+	else {
+		err("cis_imx576 position(%d) is invalid!\n", position);
+		goto p_err;
+	}
+
+	cal_data = kzalloc(SENSOR_IMX576_DPC_CAL_SIZE, GFP_KERNEL);
+	if (!cal_data) {
+		err("cis_imx576 cal_data alloc fail");
+		ret = -ENOMEM;
+		goto p_err;
+	}
+
+	memcpy(cal_data, (u16 *)cal_addr, SENSOR_IMX576_DPC_CAL_SIZE);
+
+#if SENSOR_IMX576_CAL_DEBUG
+	ret = sensor_imx576_cis_cal_dump(SENSOR_IMX576_DPC_DUMP_NAME, (char *)cal_data, (size_t)SENSOR_IMX576_DPC_CAL_SIZE);
+	if (ret < 0) {
+		err("cis_imx576 QSC Cal dump fail(%d)!\n", ret);
+		goto p_err;
+	}
+#endif
+
+	start_val[0] = cal_data[SENSOR_IMX576_DPC_CAL_SIZE - 4];
+	start_val[1] = cal_data[SENSOR_IMX576_DPC_CAL_SIZE - 3];
+	count_val[0] = cal_data[SENSOR_IMX576_DPC_CAL_SIZE - 2];
+	count_val[1] = cal_data[SENSOR_IMX576_DPC_CAL_SIZE - 1];
+	start_addr = ((((start_val[0] & 0x00FF) << 8) & 0xFF00) | (start_val[1] & 0x00FF));
+	data_size = ((((count_val[0] & 0x00FF) << 8) & 0xFF00) | (count_val[1] & 0x00FF));
+
+	I2C_MUTEX_LOCK(cis->i2c_lock);
+	if (start_addr < 0xFFFF && data_size > 0x0) {
+		ret = fimc_is_sensor_write8_burst(client, start_addr, cal_data, data_size);
+		if (ret < 0) {
+			err("cis_imx576 DPC write Error(%d).\n", ret);
+		}
+	}
+
+p_err:
+	I2C_MUTEX_UNLOCK(cis->i2c_lock);
+
+	if(cal_data)
+		kfree(cal_data);
+	
 	return ret;
 }
 
@@ -522,32 +737,29 @@ int sensor_imx576_cis_set_global_setting(struct v4l2_subdev *subdev)
 {
 	int ret = 0;
 	struct fimc_is_cis *cis = NULL;
-	struct fimc_is_module_enum *module;
-	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
-	struct sensor_open_extended *ext_info;
 
 	BUG_ON(!subdev);
 
 	cis = (struct fimc_is_cis *)v4l2_get_subdevdata(subdev);
 	BUG_ON(!cis);
 
-	sensor_peri = container_of(cis, struct fimc_is_device_sensor_peri, cis);
-	module = sensor_peri->module;
-	ext_info = &module->ext;
-
 	I2C_MUTEX_LOCK(cis->i2c_lock);
 	/* setfile global setting is at camera entrance */
 	info("[%s] global setting start\n", __func__);
 	ret = sensor_cis_set_registers(subdev, sensor_imx576_global, sensor_imx576_global_size);
 	if (ret < 0) {
-		err("sensor_imx576_set_registers fail!!");
+		err("sensor_imx576_set_global registers fail!!");
 		goto p_err;
 	}
-
 	dbg_sensor(1, "[%s] global setting done\n", __func__);
 
 p_err:
 	I2C_MUTEX_UNLOCK(cis->i2c_lock);
+
+	// Check that QSC and DPC Cal is written for Remosaic Capture.
+	// false : Not yet write the QSC and DPC
+	// true  : Written the QSC and DPC
+	sensor_imx576_cal_write_flag = false;
 	return ret;
 }
 
@@ -555,9 +767,6 @@ int sensor_imx576_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 {
 	int ret = 0;
 	struct fimc_is_cis *cis = NULL;
-	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
-	struct fimc_is_module_enum *module;
-	struct sensor_open_extended *ext_info;
 
 	BUG_ON(!subdev);
 
@@ -587,10 +796,6 @@ int sensor_imx576_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 #endif
 	sensor_imx576_set_integration_max_margin(mode, cis->cis_data);
 
-	sensor_peri = container_of(cis, struct fimc_is_device_sensor_peri, cis);
-	module = sensor_peri->module;
-	ext_info = &module->ext;
-
 	I2C_MUTEX_LOCK(cis->i2c_lock);
 
 	info("[%s] mode=%d, mode change setting start\n", __func__, mode);
@@ -600,6 +805,25 @@ int sensor_imx576_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 		goto p_err;
 	}
 	dbg_sensor(1, "[%s] mode changed(%d)\n", __func__, mode);
+
+	if (mode >= SENSOR_IMX576_5664X4248_QBCREMOSAIC_30FPS
+		&& mode <= SENSOR_IMX576_4248X4248_QBCREMOSAIC_30FPS
+		&& sensor_imx576_cal_write_flag == false) {
+		sensor_imx576_cal_write_flag = true;
+		
+		info("[%s] %d mode is QBC Remosaic Mode! Write QSC and DPC data.\n", __func__, mode);
+		ret = sensor_imx576_cis_QuadSensCal_write(subdev);
+		if (ret < 0) {
+			err("sensor_imx576_Quad_Sens_Cal_write fail!! (%d)", ret);
+			goto p_err;
+		}
+		ret = sensor_imx576_cis_DPC_write(subdev);
+		if (ret < 0) {
+			err("sensor_imx576_DPC_write fail!! (%d)", ret);
+			goto p_err;
+		}
+	}
+
 
 p_err:
 	I2C_MUTEX_UNLOCK(cis->i2c_lock);
@@ -829,6 +1053,9 @@ int sensor_imx576_cis_stream_on(struct v4l2_subdev *subdev)
 #endif
 
 	info("[%s] start\n", __func__);
+	/* here Add for Master mode in dual */
+	fimc_is_sensor_write8(client, 0x3040, 0x01);
+	fimc_is_sensor_write8(client, 0x3F71, 0x01);
 	/* Sensor stream on */
 	fimc_is_sensor_write8(client, 0x0100, 0x01);
 
@@ -981,28 +1208,12 @@ int sensor_imx576_cis_set_exposure_time(struct v4l2_subdev *subdev, struct ae_pa
 		goto p_err;
 	}
 
-	// WDR mode off
-	if (fimc_is_vender_wdr_mode_on(cis_data)) {
-		fimc_is_sensor_write8(cis->client, 0x0220, 0x63);
-	} else {
-		fimc_is_sensor_write8(cis->client, 0x0220, 0x62);
-	}
-
 	//Long exposure
 	arrayBuf[0] = (cis_data->cur_long_exposure_coarse & 0xFF00) >> 8;
 	arrayBuf[1] = cis_data->cur_long_exposure_coarse & 0xFF;
-	ret = fimc_is_sensor_write8_array(client, 0x0204, arrayBuf, 2);
+	ret = fimc_is_sensor_write8_array(client, SENSOR_IMX576_COARSE_INTEG_TIME_ADDR, arrayBuf, 2);
 	if (ret < 0)
 		goto p_err;
-
-	//Short exposure
-	if (fimc_is_vender_wdr_mode_on(cis_data)) {
-		arrayBuf[0] = (cis_data->cur_short_exposure_coarse & 0xFF00) >> 8;
-		arrayBuf[1] = cis_data->cur_short_exposure_coarse & 0xFF;
-		ret = fimc_is_sensor_write8_array(client, 0x0224, arrayBuf, 2);
-		if (ret < 0)
-			goto p_err;
-	}
 
 	dbg_sensor(1, "[MOD:D:%d] %s, vsync_cnt(%d), vt_pic_clk_freq_mhz (%d),"
 		KERN_CONT "line_length_pck(%d), min_fine_int (%d)\n", cis->id, __func__,
@@ -1433,7 +1644,7 @@ int sensor_imx576_cis_set_analog_gain(struct v4l2_subdev *subdev, struct ae_para
 	// Analog gain
 	arrayBuf[0] = (analog_gain & 0xFF00) >> 8;
 	arrayBuf[1] = analog_gain & 0xFF;
-	ret = fimc_is_sensor_write8_array(client, 0x0204, arrayBuf, 2);
+	ret = fimc_is_sensor_write8_array(client, SENSOR_IMX576_ANALOG_GAIN_ADDR, arrayBuf, 2);
 	if (ret < 0)
 		goto p_err;
 
@@ -1488,7 +1699,7 @@ int sensor_imx576_cis_get_analog_gain(struct v4l2_subdev *subdev, u32 *again)
 		goto p_err;
 	}
 
-	ret = fimc_is_sensor_read16(client, 0x0204, &analog_gain);
+	ret = fimc_is_sensor_read16(client, SENSOR_IMX576_ANALOG_GAIN_ADDR, &analog_gain);
 	if (ret < 0)
 		goto p_err;
 
@@ -1516,9 +1727,7 @@ p_err:
 int sensor_imx576_cis_get_min_analog_gain(struct v4l2_subdev *subdev, u32 *min_again)
 {
 	int ret = 0;
-	int hold = 0;
 	struct fimc_is_cis *cis;
-	struct i2c_client *client;
 	cis_shared_data *cis_data;
 	u16 read_value = 0;
 
@@ -1535,27 +1744,9 @@ int sensor_imx576_cis_get_min_analog_gain(struct v4l2_subdev *subdev, u32 *min_a
 	BUG_ON(!cis);
 	BUG_ON(!cis->cis_data);
 
-	client = cis->client;
-	if (unlikely(!client)) {
-		err("client is NULL");
-		ret = -EINVAL;
-		goto p_err;
-	}
-
 	cis_data = cis->cis_data;
 
-	I2C_MUTEX_LOCK(cis->i2c_lock);
-	hold = sensor_imx576_cis_group_param_hold_func(subdev, 0x01);
-	if (hold < 0) {
-		ret = hold;
-		goto p_err;
-	}
-
-	ret = fimc_is_sensor_read16(client, 0x0216, &read_value);
-	if (ret < 0) {
-		err("i2c transfer fail addr(%x), val(%x), ret = %d\n", 0x0216, read_value, ret);
-		goto p_err;
-	}
+	read_value = SENSOR_IMX576_MIN_ANALOG_GAIN_SET_VALUE;
 
 	cis_data->min_analog_gain[0] = read_value;
 	cis_data->min_analog_gain[1] = sensor_imx576_cis_calc_again_permile(cis_data->min_analog_gain[0]);
@@ -1569,23 +1760,13 @@ int sensor_imx576_cis_get_min_analog_gain(struct v4l2_subdev *subdev, u32 *min_a
 	dbg_sensor(1, "[%s] time %lu us\n", __func__, (end.tv_sec - st.tv_sec)*1000000 + (end.tv_usec - st.tv_usec));
 #endif
 
-p_err:
-	if (hold > 0) {
-		hold = sensor_imx576_cis_group_param_hold_func(subdev, 0x00);
-		if (hold < 0)
-			ret = hold;
-	}
-	I2C_MUTEX_UNLOCK(cis->i2c_lock);
-
 	return ret;
 }
 
 int sensor_imx576_cis_get_max_analog_gain(struct v4l2_subdev *subdev, u32 *max_again)
 {
 	int ret = 0;
-	int hold = 0;
 	struct fimc_is_cis *cis;
-	struct i2c_client *client;
 	cis_shared_data *cis_data;
 	u16 read_value = 0;
 
@@ -1602,31 +1783,14 @@ int sensor_imx576_cis_get_max_analog_gain(struct v4l2_subdev *subdev, u32 *max_a
 	BUG_ON(!cis);
 	BUG_ON(!cis->cis_data);
 
-	client = cis->client;
-	if (unlikely(!client)) {
-		err("client is NULL");
-		ret = -EINVAL;
-		goto p_err;
-	}
-
 	cis_data = cis->cis_data;
 
-	I2C_MUTEX_LOCK(cis->i2c_lock);
-	hold = sensor_imx576_cis_group_param_hold_func(subdev, 0x01);
-	if (hold < 0) {
-		ret = hold;
-		goto p_err;
-	}
-
-	ret = fimc_is_sensor_read16(client, 0x0204, &read_value);
-	if (ret < 0) {
-		err("i2c transfer fail addr(%x), val(%x), ret = %d\n", 0x0204, read_value, ret);
-		goto p_err;
-	}
+	read_value = SENSOR_IMX576_MAX_ANALOG_GAIN_SET_VALUE;
 
 	cis_data->max_analog_gain[0] = read_value;
 	cis_data->max_analog_gain[1] = sensor_imx576_cis_calc_again_permile(cis_data->max_analog_gain[0]);
 	*max_again = cis_data->max_analog_gain[1];
+
 	dbg_sensor(1, "[%s] code %d, permile %d\n", __func__, cis_data->max_analog_gain[0],
 		cis_data->max_analog_gain[1]);
 
@@ -1634,14 +1798,6 @@ int sensor_imx576_cis_get_max_analog_gain(struct v4l2_subdev *subdev, u32 *max_a
 	do_gettimeofday(&end);
 	dbg_sensor(1, "[%s] time %lu us\n", __func__, (end.tv_sec - st.tv_sec)*1000000 + (end.tv_usec - st.tv_usec));
 #endif
-
-p_err:
-	if (hold > 0) {
-		hold = sensor_imx576_cis_group_param_hold_func(subdev, 0x00);
-		if (hold < 0)
-			ret = hold;
-	}
-	I2C_MUTEX_UNLOCK(cis->i2c_lock);
 
 	return ret;
 }
@@ -1715,14 +1871,14 @@ int sensor_imx576_cis_set_digital_gain(struct v4l2_subdev *subdev, struct ae_par
 	if (fimc_is_vender_wdr_mode_on(cis_data)) {
 		dgains[0] = (short_gain & 0xFF00) >> 8;
 		dgains[1] = short_gain & 0xFF;
-		ret = fimc_is_sensor_write8_array(client, 0x0218, dgains, 2);
+		ret = fimc_is_sensor_write8_array(client, SENSOR_IMX576_SOHT_DIG_GAIN_ADDR, dgains, 2);
 		if (ret < 0) {
 			goto p_err;
 		}
 	}
 	dgains[0] = (long_gain & 0xFF00) >> 8;
 	dgains[1] = long_gain & 0xFF;
-	ret = fimc_is_sensor_write8_array(client, 0x020E, dgains, 2);
+	ret = fimc_is_sensor_write8_array(client, SENSOR_IMX576_DIG_GAIN_ADDR, dgains, 2);
 	if (ret < 0) {
 		goto p_err;
 	}
@@ -1778,7 +1934,7 @@ int sensor_imx576_cis_get_digital_gain(struct v4l2_subdev *subdev, u32 *dgain)
 		goto p_err;
 	}
 
-	ret = fimc_is_sensor_read16(client, 0x020E, &digital_gain);
+	ret = fimc_is_sensor_read16(client, SENSOR_IMX576_DIG_GAIN_ADDR, &digital_gain);
 	if (ret < 0)
 		goto p_err;
 
@@ -1807,7 +1963,6 @@ int sensor_imx576_cis_get_min_digital_gain(struct v4l2_subdev *subdev, u32 *min_
 {
 	int ret = 0;
 	struct fimc_is_cis *cis;
-	struct i2c_client *client;
 	cis_shared_data *cis_data;
 
 #ifdef DEBUG_SENSOR_TIME
@@ -1823,15 +1978,8 @@ int sensor_imx576_cis_get_min_digital_gain(struct v4l2_subdev *subdev, u32 *min_
 	BUG_ON(!cis);
 	BUG_ON(!cis->cis_data);
 
-	client = cis->client;
-	if (unlikely(!client)) {
-		err("client is NULL");
-		ret = -EINVAL;
-		goto p_err;
-	}
-
 	cis_data = cis->cis_data;
-	cis_data->min_digital_gain[0] = 0x100;
+	cis_data->min_digital_gain[0] = SENSOR_IMX576_MIN_DIGITAL_GAIN_SET_VALUE;
 	cis_data->min_digital_gain[1] = sensor_cis_calc_dgain_permile(cis_data->min_digital_gain[0]);
 
 	*min_dgain = cis_data->min_digital_gain[1];
@@ -1844,7 +1992,6 @@ int sensor_imx576_cis_get_min_digital_gain(struct v4l2_subdev *subdev, u32 *min_
 	dbg_sensor(1, "[%s] time %lu us\n", __func__, (end.tv_sec - st.tv_sec)*1000000 + (end.tv_usec - st.tv_usec));
 #endif
 
-p_err:
 	return ret;
 }
 
@@ -1852,7 +1999,6 @@ int sensor_imx576_cis_get_max_digital_gain(struct v4l2_subdev *subdev, u32 *max_
 {
 	int ret = 0;
 	struct fimc_is_cis *cis;
-	struct i2c_client *client;
 	cis_shared_data *cis_data;
 
 #ifdef DEBUG_SENSOR_TIME
@@ -1868,15 +2014,8 @@ int sensor_imx576_cis_get_max_digital_gain(struct v4l2_subdev *subdev, u32 *max_
 	BUG_ON(!cis);
 	BUG_ON(!cis->cis_data);
 
-	client = cis->client;
-	if (unlikely(!client)) {
-		err("client is NULL");
-		ret = -EINVAL;
-		goto p_err;
-	}
-
 	cis_data = cis->cis_data;
-	cis_data->max_digital_gain[0] = 0xfff;
+	cis_data->max_digital_gain[0] = SENSOR_IMX576_MAX_DIGITAL_GAIN_SET_VALUE;
 	cis_data->max_digital_gain[1] = sensor_cis_calc_dgain_permile(cis_data->max_digital_gain[0]);
 
 	*max_dgain = cis_data->max_digital_gain[1];
@@ -1889,7 +2028,6 @@ int sensor_imx576_cis_get_max_digital_gain(struct v4l2_subdev *subdev, u32 *max_
 	dbg_sensor(1, "[%s] time %lu us\n", __func__, (end.tv_sec - st.tv_sec)*1000000 + (end.tv_usec - st.tv_usec));
 #endif
 
-p_err:
 	return ret;
 }
 
@@ -1927,6 +2065,80 @@ int sensor_imx576_cis_long_term_exposure(struct v4l2_subdev *subdev)
 
 	return ret;
 }
+
+int sensor_imx576_cis_set_wb_gain(struct v4l2_subdev *subdev, struct wb_gains wb_gains)
+{
+	int ret = 0;
+	int hold = 0;
+	int mode = 0;
+	struct fimc_is_cis *cis;
+	struct i2c_client *client;
+	u16 abs_gains[4] = {0, };	//[0]=gr, [1]=r, [2]=b, [3]=gb
+
+#ifdef DEBUG_SENSOR_TIME
+	struct timeval st, end;
+	do_gettimeofday(&st);
+#endif
+
+	BUG_ON(!subdev);
+
+	cis = (struct fimc_is_cis *)v4l2_get_subdevdata(subdev);
+
+	BUG_ON(!cis);
+	BUG_ON(!cis->cis_data);
+
+	if (!cis->use_wb_gain)
+		return ret;
+
+	client = cis->client;
+	if (unlikely(!client)) {
+		err("client is NULL");
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+	mode = cis->cis_data->sens_config_index_cur;
+
+	if ( mode < SENSOR_IMX576_5664X4248_QBCREMOSAIC_30FPS || mode > SENSOR_IMX576_4248X4248_QBCREMOSAIC_30FPS)
+		return 0;
+
+	dbg_sensor(1, "[SEN:%d]%s:DDK vlaue: wb_gain_gr(%d), wb_gain_r(%d), wb_gain_b(%d), wb_gain_gb(%d)\n",
+		cis->id, __func__, wb_gains.gr, wb_gains.r, wb_gains.b, wb_gains.gb);
+
+	abs_gains[0] = (u16)((wb_gains.gr / 4) & 0xFFFF);
+	abs_gains[1] = (u16)((wb_gains.r / 4) & 0xFFFF);
+	abs_gains[2] = (u16)((wb_gains.b / 4) & 0xFFFF);
+	abs_gains[3] = (u16)((wb_gains.gb / 4) & 0xFFFF);
+
+	dbg_sensor(1, "[SEN:%d]%s, abs_gain_gr(0x%4X), abs_gain_r(0x%4X), abs_gain_b(0x%4X), abs_gain_gb(0x%4X)\n",
+		cis->id, __func__, abs_gains[0], abs_gains[1], abs_gains[2], abs_gains[3]);
+
+	I2C_MUTEX_LOCK(cis->i2c_lock);
+	hold = sensor_imx576_cis_group_param_hold_func(subdev, 0x01);
+	if (hold < 0) {
+		ret = hold;
+		goto p_err;
+	}
+
+	ret = fimc_is_sensor_write16_array(client, SENSOR_IMX576_ABS_GAIN_GR_SET_ADDR, abs_gains, 4);
+	if (ret < 0)
+		goto p_err;
+
+#ifdef DEBUG_SENSOR_TIME
+	do_gettimeofday(&end);
+	dbg_sensor(1, "[%s] time %lu us\n", __func__, (end.tv_sec - st.tv_sec)*1000000 + (end.tv_usec - st.tv_usec));
+#endif
+
+p_err:
+	if (hold > 0) {
+		hold = sensor_imx576_cis_group_param_hold_func(subdev, 0x00);
+		if (hold < 0)
+			ret = hold;
+	}
+	I2C_MUTEX_UNLOCK(cis->i2c_lock);
+	return ret;
+}
+
 static struct fimc_is_cis_ops cis_ops_imx576 = {
 	.cis_init = sensor_imx576_cis_init,
 	.cis_log_status = sensor_imx576_cis_log_status,
@@ -1958,6 +2170,10 @@ static struct fimc_is_cis_ops cis_ops_imx576 = {
 	.cis_wait_streamoff = sensor_cis_wait_streamoff,
 	.cis_data_calculation = sensor_imx576_cis_data_calc,
 	.cis_set_long_term_exposure = sensor_imx576_cis_long_term_exposure,
+	.cis_set_wb_gains = sensor_imx576_cis_set_wb_gain,
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+	.cis_set_initial_exposure = sensor_cis_set_initial_exposure,
+#endif
 };
 
 int cis_imx576_probe(struct i2c_client *client,
@@ -2064,6 +2280,12 @@ int cis_imx576_probe(struct i2c_client *client,
 
 		cis->use_dgain = true;
 		cis->hdr_ctrl_by_again = false;
+		cis->use_wb_gain = true;
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+		cis->use_initial_ae = of_property_read_bool(dnode, "use_initial_ae");
+
+		probe_info("%s use_initial_ae(%d)\n", __func__, cis->use_initial_ae);
+#endif
 
 		v4l2_set_subdevdata(subdev_cis, cis);
 		v4l2_set_subdev_hostdata(subdev_cis, device);

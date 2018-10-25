@@ -2394,6 +2394,10 @@ int slsi_mlme_set_key(struct slsi_dev *sdev, struct net_device *dev, u16 key_id,
 
 		if (key_id > 3)
 			SLSI_NET_WARN(dev, "Key ID is greater than 3");
+		/* Incase of WEP key index is appended before key.
+		 * So increment length by one
+		 */
+		fapi_set_u16(req, u.mlme_setkeys_req.length, (key->key_len + 1) * 8);
 		fapi_append_data(req, &wep_key_id, 1);
 	}
 	fapi_append_data(req, key->key, key->key_len);

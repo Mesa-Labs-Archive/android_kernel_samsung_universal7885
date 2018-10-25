@@ -82,4 +82,13 @@ config CAMERA_ACT_ZC535_OBJ
 	depends on CAMERA_ACT_SELECT
         default n
         help
-          Use to build ZC535 driver.		  
+          Use to build ZC535 driver.
+
+config CAMERA_ACT_DW9823_OBJ
+        bool "Use actuator DW9823"
+	depends on USE_DIRECT_IS_CONTROL
+	depends on CAMERA_ACT_SELECT
+        default n
+        help
+          Use to build DW9823 driver.
+

@@ -840,6 +840,10 @@ int request_exposure(struct fimc_is_sensor_interface *itf,
 	u32 i = 0;
 	u32 end_index = 0;
 
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
+#endif
+
 	BUG_ON(!itf);
 	BUG_ON(itf->magic != SENSOR_INTERFACE_MAGIC);
 
@@ -866,6 +870,20 @@ int request_exposure(struct fimc_is_sensor_interface *itf,
 			goto p_err;
 		}
 	}
+
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+	/* store exposure for use initial AE */
+	sensor_peri = container_of(itf, struct fimc_is_device_sensor_peri, sensor_interface);
+	if (!sensor_peri) {
+		err("[%s] sensor_peri is NULL", __func__);
+		return -EINVAL;
+	}
+
+	if (sensor_peri->cis.use_initial_ae) {
+		sensor_peri->cis.last_ae_setting.long_exposure = long_exposure;
+		sensor_peri->cis.last_ae_setting.exposure = short_exposure;
+	}
+#endif
 
 p_err:
 	return ret;
@@ -993,6 +1011,10 @@ int request_gain(struct fimc_is_sensor_interface *itf,
 	u32 i = 0;
 	u32 end_index = 0;
 
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
+#endif
+
 	BUG_ON(!itf);
 	BUG_ON(itf->magic != SENSOR_INTERFACE_MAGIC);
 
@@ -1035,6 +1057,22 @@ int request_gain(struct fimc_is_sensor_interface *itf,
 			goto p_err;
 		}
 	}
+
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+	/* store gain for use initial AE */
+	sensor_peri = container_of(itf, struct fimc_is_device_sensor_peri, sensor_interface);
+	if (!sensor_peri) {
+		err("[%s] sensor_peri is NULL", __func__);
+		return -EINVAL;
+	}
+
+	if (sensor_peri->cis.use_initial_ae) {
+		sensor_peri->cis.last_ae_setting.long_analog_gain = long_analog_gain;
+		sensor_peri->cis.last_ae_setting.long_digital_gain = long_digital_gain;
+		sensor_peri->cis.last_ae_setting.analog_gain = short_analog_gain;
+		sensor_peri->cis.last_ae_setting.digital_gain = short_digital_gain;
+	}
+#endif
 
 p_err:
 	return ret;
@@ -1794,11 +1832,13 @@ int copy_sensor_ctl(struct fimc_is_sensor_interface *itf,
 			sensor_peri->ois->coef = (u8)shot->uctl.lensUd.oisCoefVal;
 		}
 
+#ifndef USE_WDR_INTERFACE
 		if (shot->uctl.companionUd.wdr_mode == COMPANION_WDR_ON ||
 				shot->uctl.companionUd.wdr_mode == COMPANION_WDR_AUTO ||
 				shot->uctl.companionUd.wdr_mode == COMPANION_WDR_AUTO_LIKE)
 			itf->cis_mode = ITF_CIS_SMIA_WDR;
 		else
+#endif
 			itf->cis_mode = ITF_CIS_SMIA;
 
 		/* set frame rate : Limit of max frame duration
@@ -1910,6 +1950,62 @@ int set_sensor_3a_mode(struct fimc_is_sensor_interface *itf,
 
 	return 0;
 }
+
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+int get_initial_exposure_gain_of_sensor(struct fimc_is_sensor_interface *itf,
+	u32 *long_expo,
+	u32 *long_again,
+	u32 *long_dgain,
+	u32 *short_expo,
+	u32 *short_again,
+	u32 *short_dgain)
+{
+	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
+	struct fimc_is_device_sensor *device = NULL;
+
+	if (!itf) {
+		err("[%s] fimc_is_sensor_interface is NULL", __func__);
+		return -EINVAL;
+	}
+
+	BUG_ON(itf->magic != SENSOR_INTERFACE_MAGIC);
+
+	sensor_peri = container_of(itf, struct fimc_is_device_sensor_peri, sensor_interface);
+	if (!sensor_peri) {
+		err("[%s] sensor_peri is NULL", __func__);
+		return -EINVAL;
+	}
+
+	device = get_device_sensor(itf);
+	if (!device) {
+		err("%s, failed to get sensor device", __func__);
+		return -ENODEV;
+	}
+
+	if (sensor_peri->cis.use_initial_ae && device->cfg->framerate < 60) {
+		*long_expo = sensor_peri->cis.init_ae_setting.long_exposure;
+		*long_again = sensor_peri->cis.init_ae_setting.long_analog_gain;
+		*long_dgain = sensor_peri->cis.init_ae_setting.long_digital_gain;
+		*short_expo = sensor_peri->cis.init_ae_setting.exposure;
+		*short_again = sensor_peri->cis.init_ae_setting.analog_gain;
+		*short_dgain = sensor_peri->cis.init_ae_setting.digital_gain;
+	} else {
+		*long_expo = 0;
+		*long_again = 0;
+		*long_dgain = 0;
+		*short_expo = 0;
+		*short_again = 0;
+		*short_dgain = 0;
+		dbg_sensor(1, "%s: called at not enabled last_ae, use default low exposure setting", __func__);
+	}
+
+	dbg_sensor(1, "%s: sensorid(%d),long(%d-%d-%d), shot(%d-%d-%d)\n", __func__,
+		sensor_peri->module->sensor_id,
+		*long_expo, *long_again, *long_dgain, *short_expo, *short_again, *short_dgain);
+
+	return 0;
+}
+#endif
 
 u32 set_adjust_sync(struct fimc_is_sensor_interface *itf, u32 setsync)
 {
@@ -2724,6 +2820,134 @@ int dual_reserved_3(struct fimc_is_sensor_interface *itf)
 	return 0;
 }
 
+int request_wb_gain(struct fimc_is_sensor_interface *itf,
+		u32 gr_gain, u32 r_gain, u32 b_gain, u32 gb_gain)
+{
+	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
+	struct fimc_is_device_sensor *sensor;
+	struct fimc_is_sensor_ctl *sensor_ctl = NULL;
+	int i;
+	u32 frame_count = 0, num_of_frame = 1;
+
+	BUG_ON(!itf);
+	BUG_ON(itf->magic != SENSOR_INTERFACE_MAGIC);
+
+	sensor_peri = container_of(itf, struct fimc_is_device_sensor_peri, sensor_interface);
+
+	sensor = get_device_sensor(itf);
+	if (!sensor) {
+		err("%s, failed to get sensor device", __func__);
+		return -1;
+	}
+
+	if (!test_bit(FIMC_IS_SENSOR_FRONT_START, &sensor->state)) {
+		sensor_peri->cis.mode_chg_wb_gains.gr = gr_gain;
+		sensor_peri->cis.mode_chg_wb_gains.r = r_gain;
+		sensor_peri->cis.mode_chg_wb_gains.b = b_gain;
+		sensor_peri->cis.mode_chg_wb_gains.gb = gb_gain;
+	}
+
+	frame_count = get_frame_count(itf);
+	get_num_of_frame_per_one_3aa(itf, &num_of_frame);
+
+	for (i = 0; i < num_of_frame; i++) {
+		sensor_ctl = get_sensor_ctl_from_module(itf, frame_count + i);
+		BUG_ON(!sensor_ctl);
+
+		sensor_ctl->wb_gains.gr = gr_gain;
+		sensor_ctl->wb_gains.r = r_gain;
+		sensor_ctl->wb_gains.b = b_gain;
+		sensor_ctl->wb_gains.gb = gb_gain;
+
+		if (i == 0)
+			sensor_ctl->update_wb_gains = true;
+	}
+
+	dbg_sensor(1, "[%s] stream %s, wb gains(gr:%d, r:%d, b:%d, gb:%d)\n",
+		__func__,
+		test_bit(FIMC_IS_SENSOR_FRONT_START, &sensor->state) ? "on" : "off",
+		gr_gain, r_gain, b_gain, gb_gain);
+
+	return 0;
+}
+
+int set_sensor_info_mfhdr_mode_change(struct fimc_is_sensor_interface *itf,
+		u32 count, u32 *long_expo, u32 *long_again, u32 *long_dgain,
+		u32 *expo, u32 *again, u32 *dgain)
+{
+	struct fimc_is_device_sensor_peri *sensor_peri;
+	struct fimc_is_device_sensor *sensor;
+	camera2_sensor_uctl_t *sensor_uctl;
+	struct fimc_is_sensor_ctl *sensor_ctl;
+	int idx;
+
+	BUG_ON(!itf);
+	BUG_ON(itf->magic != SENSOR_INTERFACE_MAGIC);
+
+	sensor_peri = container_of(itf, struct fimc_is_device_sensor_peri, sensor_interface);
+
+	sensor = get_device_sensor(itf);
+	if (!sensor) {
+		err("%s, failed to get sensor device", __func__);
+		return -1;
+	}
+
+	if (test_bit(FIMC_IS_SENSOR_FRONT_START, &sensor->state))
+		warn("[%s] called during stream on", __func__);
+
+	if (count < 1) {
+		err("[%s] wrong request count(%d)", __func__, count);
+		return -1;
+	}
+
+	/* set index 0 values to mode_chg_xxx variables
+	 * for applying values before stream on
+	 */
+	sensor_peri->cis.mode_chg_expo = expo[0];
+	sensor_peri->cis.mode_chg_again = again[0];
+	sensor_peri->cis.mode_chg_dgain = dgain[0];
+	sensor_peri->cis.mode_chg_long_expo = long_expo[0];
+	sensor_peri->cis.mode_chg_long_again = long_again[0];
+	sensor_peri->cis.mode_chg_long_dgain = long_dgain[0];
+
+	/* set index 0 ~ cnt-1 values to sensor uctl variables
+	 * for applying values during streaming.
+	 * (index 0 is set for code clean(not updated during streaming)
+	 * set "use_sensor_work" to true for call sensor_work_thread
+	 * to apply sensor settings
+	 */
+	sensor_peri->use_sensor_work = true;
+	for (idx = 0; idx < count; idx++) {
+		sensor_ctl = get_sensor_ctl_from_module(itf, get_frame_count(itf) + idx);
+		sensor_ctl->force_update = true;
+
+		sensor_uctl = get_sensor_uctl_from_module(itf, get_frame_count(itf) + idx);
+		BUG_ON(!sensor_uctl);
+
+		sensor_uctl->exposureTime = fimc_is_sensor_convert_us_to_ns(long_expo[idx]);
+		sensor_uctl->longExposureTime = fimc_is_sensor_convert_us_to_ns(long_expo[idx]);
+		sensor_uctl->shortExposureTime = fimc_is_sensor_convert_us_to_ns(expo[idx]);
+
+		sensor_uctl->sensitivity = DIV_ROUND_UP((long_again[idx] + long_dgain[idx]), 10);
+		sensor_uctl->analogGain = again[idx];
+		sensor_uctl->digitalGain = dgain[idx];
+		sensor_uctl->longAnalogGain = long_again[idx];
+		sensor_uctl->shortAnalogGain = again[idx];
+		sensor_uctl->longDigitalGain = long_dgain[idx];
+		sensor_uctl->shortDigitalGain = dgain[idx];
+
+		set_sensor_uctl_valid(itf, idx);
+
+		dbg_sensor(1, "[%s][%d]: exp(%d), again(%d), dgain(%d), "
+			KERN_CONT "long_exp(%d), long_again(%d), long_dgain(%d)\n",
+			__func__, idx,
+			expo[idx], again[idx], dgain[idx],
+			long_expo[idx], long_again[idx], long_dgain[idx]);
+	}
+
+	return 0;
+}
+
 int init_sensor_interface(struct fimc_is_sensor_interface *itf)
 {
 	int ret = 0;
@@ -2805,6 +3029,9 @@ int init_sensor_interface(struct fimc_is_sensor_interface *itf)
 	itf->cis_itf_ops.get_module_id = get_module_id;
 	itf->cis_itf_ops.get_module_position = get_module_position;
 	itf->cis_itf_ops.set_sensor_3a_mode = set_sensor_3a_mode;
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+	itf->cis_itf_ops.get_initial_exposure_gain_of_sensor = get_initial_exposure_gain_of_sensor;
+#endif
 	itf->cis_ext_itf_ops.change_cis_mode = change_cis_mode;
 
 	/* struct fimc_is_cis_event_ops */
@@ -2853,6 +3080,9 @@ int init_sensor_interface(struct fimc_is_sensor_interface *itf)
 	itf->dual_itf_ops.reserved[1] = dual_reserved_1;
 	itf->dual_itf_ops.reserved[2] = dual_reserved_2;
 	itf->dual_itf_ops.reserved[3] = dual_reserved_3;
+
+	itf->cis_ext2_itf_ops.request_wb_gain = request_wb_gain;
+	itf->cis_ext2_itf_ops.set_sensor_info_mfhdr_mode_change = set_sensor_info_mfhdr_mode_change;
 
 	return ret;
 }

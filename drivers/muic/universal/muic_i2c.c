@@ -43,6 +43,14 @@
 #include "muic-internal.h"
 #include "muic_debug.h"
 
+#ifndef READ
+#define READ 0
+#endif
+
+#ifndef WRITE
+#define WRITE 1
+#endif
+
 int muic_i2c_read_byte(const struct i2c_client *client, u8 command)
 {
 	int ret;

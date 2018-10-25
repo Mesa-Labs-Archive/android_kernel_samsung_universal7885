@@ -580,6 +580,28 @@ static ssize_t muic_store_afc_set_voltage(struct device *dev,
 #endif
 #endif /* CONFIG_MUIC_HV */
 
+#if IS_ENABLED(CONFIG_HICCUP_CHARGER)
+static ssize_t hiccup_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "ENABLE\n");
+}
+
+static ssize_t hiccup_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	muic_data_t *muic_data = dev_get_drvdata(dev);
+
+	if (!strncasecmp(buf, "DISABLE", 7)) {
+		muic_data->is_hiccup_mode = false;
+		com_to_open_with_vbus(muic_data);
+	} else
+		pr_warn("%s invalid com : %s\n", __func__, buf);
+
+	return count;
+}
+#endif /* CONFIG_HICCUP_CHARGER */
+
 static DEVICE_ATTR(uart_en, 0664, muic_show_uart_en, muic_set_uart_en);
 static DEVICE_ATTR(uart_sel, 0664, muic_show_uart_sel,
 		muic_set_uart_sel);
@@ -610,6 +632,9 @@ static DEVICE_ATTR(afc_set_voltage, 0220,
 		NULL, muic_store_afc_set_voltage);
 #endif
 #endif
+#if IS_ENABLED(CONFIG_HICCUP_CHARGER)
+static DEVICE_ATTR_RW(hiccup);
+#endif /* CONFIG_HICCUP_CHARGER */
 
 static struct attribute *muic_attributes[] = {
 	&dev_attr_uart_en.attr,
@@ -632,6 +657,9 @@ static struct attribute *muic_attributes[] = {
 #if defined(CONFIG_MUIC_HV_12V) && defined(CONFIG_SEC_FACTORY)
 	&dev_attr_afc_set_voltage.attr,
 #endif
+#endif
+#if IS_ENABLED(CONFIG_HICCUP_CHARGER)
+	&dev_attr_hiccup.attr,
 #endif
 	NULL
 };

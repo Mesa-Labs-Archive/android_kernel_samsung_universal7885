@@ -8,13 +8,13 @@
 
 #define VENDER_PATH
 #define CAMERA_MODULE_ES_VERSION_FRONT 'A'
-//#define CAL_MAP_ES_VERSION_FRONT '1'  /* VF01 version */
-#define CAL_MAP_ES_VERSION_FRONT '3'  /* V003 version */
+#define CAL_MAP_ES_VERSION_FRONT '1'  /* VF01 version */
+//#define CAL_MAP_ES_VERSION_FRONT '3'  /* V003 version */
 
 #define CAMERA_SYSFS_V2
 
 #define USE_COMMON_CAM_IO_PWR
-#define USE_COMMON_FRONT_CAL_MAP
+//#define USE_COMMON_FRONT_CAL_MAP
 
 #define USE_SSRM_CAMERA_INFO /* Match with SAMSUNG_SSRM define of Camera Hal side */
 
@@ -28,5 +28,10 @@
 //#define CSI_SCENARIO_SEN_REAR	(0) /* This value follows dtsi */
 #define CSI_SCENARIO_SEN_FRONT	(1)
 #endif
+#define FRONT_CAMERA_ONLY_SUPPORT
+
+/* this define should be used after A7 2018  */
+#define USE_AI_CAMERA_INTERFACE     (0)
+#define USE_MFHDR_CAMERA_INTERFACE  (0)
 
 #endif /* FIMC_IS_VENDOR_CONFIG_GVIEW2_H */

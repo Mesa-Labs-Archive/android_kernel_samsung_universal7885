@@ -39,7 +39,7 @@
 #include "panels/dd.h"
 
 /* #define BRINGUP_DSIM_BIST */
-#define PHY_FRAMEWORK_DIS
+/* #define PHY_FRAMEWORK_DIS */
 
 #if defined(PHY_FRAMEWORK_DIS)
 	void __iomem *dphy_isolation;
@@ -173,6 +173,7 @@ int dsim_wait_for_cmd_done(struct dsim_device *dsim)
 	return ret;
 }
 
+#if 0
 static bool dsim_fifo_empty_needed(struct dsim_device *dsim, unsigned int data_id,
 	unsigned long data0)
 {
@@ -195,6 +196,13 @@ static bool dsim_fifo_empty_needed(struct dsim_device *dsim, unsigned int data_i
 
 	return false;
 }
+#else
+static inline bool dsim_fifo_empty_needed(struct dsim_device *dsim, unsigned int data_id,
+	unsigned long data0)
+{
+	return true;
+}
+#endif
 
 int dsim_write_data(struct dsim_device *dsim, u32 id, unsigned long d0, u32 d1)
 {
@@ -323,7 +331,7 @@ int dsim_read_data(struct dsim_device *dsim, u32 id, u32 addr, u32 cnt, u8 *buf)
 
 	/* Read request will be sent at safe region */
 	if (dsim->lcd_info.mode == DECON_VIDEO_MODE)
-		dsim_wait_linecnt_is_safe_timeout(dsim->id, 35 * 1000, (dsim->lcd_info.yres >> 2));
+		dsim_wait_linecnt_is_safe_timeout(dsim->id, 35 * 1000, (dsim->lcd_info.yres >> 1));
 
 	/* Read request */
 	dsim_write_data(dsim, id, addr, 0);
@@ -632,7 +640,8 @@ int dsim_runtime_reset(struct dsim_device *dsim)
 	return ret;
 }
 
-void dphy_power_on(int on)
+#if defined(PHY_FRAMEWORK_DIS)
+void dphy_power_on(struct dsim_device *dsim, int on)
 {
 	int val;
 
@@ -648,6 +657,15 @@ void dphy_power_on(int on)
 		iounmap(dphy_isolation);
 	}
 }
+#else
+void dphy_power_on(struct dsim_device *dsim, int on)
+{
+	if (on)
+		phy_power_on(dsim->phy);
+	else
+		phy_power_off(dsim->phy);
+}
+#endif
 
 static int dsim_enable(struct dsim_device *dsim)
 {
@@ -673,11 +691,7 @@ static int dsim_enable(struct dsim_device *dsim)
 
 	dpu_sysreg_set_lpmux(dsim->res.ss_regs);
 
-#if !defined(PHY_FRAMEWORK_DIS)
-	phy_power_on(dsim->phy);
-#else
-	dphy_power_on(1);
-#endif
+	dphy_power_on(dsim, 1);
 
 	dsim_set_panel_power_early(dsim);
 
@@ -784,12 +798,7 @@ static int dsim_disable(struct dsim_device *dsim)
 	disable_irq(dsim->res.irq);
 	dsim_reg_stop(dsim->id, dsim->data_lane);
 
-#if !defined(PHY_FRAMEWORK_DIS)
-	/* HACK */
-	phy_power_off(dsim->phy);
-#else
-	dphy_power_on(0);
-#endif
+	dphy_power_on(dsim, 0);
 
 	dsim_set_panel_power(dsim, 0);
 
@@ -808,7 +817,6 @@ exit:
 static int dsim_enter_ulps(struct dsim_device *dsim)
 {
 	int ret = 0;
-	int val;
 
 	DPU_EVENT_START();
 	dsim_dbg("%s +\n", __func__);
@@ -835,15 +843,7 @@ static int dsim_enter_ulps(struct dsim_device *dsim)
 	if (ret < 0)
 		dsim_dump(dsim);
 
-#if !defined(PHY_FRAMEWORK_DIS)
-	/* HACK */
-	phy_power_off(dsim->phy);
-#else
-	/* for DPHY isolation enable */
-	val = (0x0<<0);
-	writel(val, dphy_isolation);
-	iounmap(dphy_isolation);
-#endif
+	dphy_power_on(dsim, 0);
 
 #if defined(CONFIG_PM)
 	pm_runtime_put_sync(dsim->dev);
@@ -863,7 +863,6 @@ err:
 static int dsim_exit_ulps(struct dsim_device *dsim)
 {
 	int ret = 0;
-	int val;
 
 	DPU_EVENT_START();
 	dsim_dbg("%s +\n", __func__);
@@ -883,14 +882,8 @@ static int dsim_exit_ulps(struct dsim_device *dsim)
 
 	dpu_sysreg_set_lpmux(dsim->res.ss_regs);
 
-#if !defined(PHY_FRAMEWORK_DIS)
-	phy_power_on(dsim->phy);
-#else
-	/* for DPHY isolation release */
-	dphy_isolation = ioremap(0x11c80678, 0x4);
-	val = (0x1<<0);
-	writel(val, dphy_isolation);
-#endif
+	dphy_power_on(dsim, 1);
+
 	dsim_reg_dphy_reset(dsim->id);
 	dsim_reg_sw_reset(dsim->id);
 

@@ -866,5 +866,4 @@ void remove_sysfs(struct ssp_data *data)
 #ifdef CONFIG_SENSORS_SSP_MOBEAM
 	remove_mobeam(data);
 #endif
-	destroy_sensor_class();
 }

@@ -15,6 +15,7 @@
  * Copyright (C) 2016 Samsung Electronics, Inc.
  */
 
+#include <linux/module.h>
 #include "lv.h"
 
 struct lv *lv_get_next(struct lv *field, const void *end)

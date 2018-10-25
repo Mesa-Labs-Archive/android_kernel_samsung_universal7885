@@ -28,6 +28,12 @@ static struct mdnie_color_lens_info color_lens_info = {
 	.max_w = 24
 };
 
+static struct rgb_info wrgb_swa = {
+	.r = 0,
+	.g = 11,
+	.b = 2
+};
+
 static unsigned char night_mode_data[] = {
 	0x00, 0xff, 0xfa, 0x00, 0xf1, 0x00, 0xff, 0x00, 0x00, 0xfa, 0xf1, 0x00, 0xff, 0x00, 0xfa, 0x00, 0x00, 0xf1, 0xff, 0x00, 0xfa, 0x00, 0xf1, 0x00, /* 6500K */
 	0x00, 0xff, 0xf8, 0x00, 0xeb, 0x00, 0xff, 0x00, 0x00, 0xf8, 0xeb, 0x00, 0xff, 0x00, 0xf8, 0x00, 0x00, 0xeb, 0xff, 0x00, 0xf8, 0x00, 0xeb, 0x00, /* 6100K */
@@ -1656,6 +1662,83 @@ static unsigned char AUTO_CAMERA_2[] = {
 	0x0f, //trans_ctrl scr gamma cs de
 };
 
+static unsigned char AUTO_CAMERA_SWA_1[] = {
+	0xCF,
+	0x04, //de cs cc 000
+	0x00, //de_gain 10
+	0x10,
+	0xff, //de_maxplus 8
+	0xff, //de_maxminus 8
+	0x01, //cs_gain 10
+	0x20,
+	0x00, //curve_0
+	0x10, //curve_1
+	0x20, //curve_2
+	0x30, //curve_3
+	0x40, //curve_4
+	0x50, //curve_5
+	0x60, //curve_6
+	0x70, //curve_7
+	0x80, //curve_8
+	0x90, //curve_9
+	0xa0, //curve_10
+	0xb0, //curve_11
+	0xc0, //curve_12
+	0xd0, //curve_13
+	0xe0, //curve_14
+	0xf0, //curve_15
+	0x01, //curve_16
+	0x00,
+	0x00, //curve_offset
+	0x00,
+	0x00, //curve_low_x
+	0x00, //curve_low_y
+	0x00, //scr Cr
+	0xff, //scr Rr
+	0xff, //scr Cg
+	0x00, //scr Rg
+	0xff, //scr Cb
+	0x00, //scr Rb
+	0xff, //scr Mr
+	0x00, //scr Gr
+	0x00, //scr Mg
+	0xff, //scr Gg
+	0xff, //scr Mb
+	0x00, //scr Gb
+	0xff, //scr Yr
+	0x00, //scr Br
+	0xff, //scr Yg
+	0x00, //scr Bg
+	0x00, //scr Yb
+	0xff, //scr Bb
+	0xff, //scr Wr
+	0x00, //scr Kr
+	0xf4, //scr Wg
+	0x00, //scr Kg
+	0xfd, //scr Wb
+	0x00, //scr Kb
+};
+
+static unsigned char AUTO_CAMERA_SWA_2[] = {
+	//start
+	0xCE,
+	0x01, //mdnie_en
+	0x00, //RGB_IF_Type mask 00 000
+	0x0f, //scr_bypass scr_en algo_bypass algo_en 0000
+	0x00, //roi_en
+	0x00, //roi0 x start
+	0x00,
+	0x00, //roi0 y start
+	0x00,
+	0x00, //roi1 x end
+	0x00,
+	0x00, //roi0 y end
+	0x00,
+	0x14, //trans_en trans_slope 0 0000
+	0x01, //trans_interval
+	0x0f, //trans_ctrl scr gamma cs de
+};
+
 static unsigned char DYNAMIC_GALLERY_1[] = {
 	0xCF,
 	0x06, //de cs cc 000
@@ -2022,6 +2105,83 @@ static unsigned char AUTO_GALLERY_1[] = {
 };
 
 static unsigned char AUTO_GALLERY_2[] = {
+	//start
+	0xCE,
+	0x01, //mdnie_en
+	0x00, //RGB_IF_Type mask 00 000
+	0x0f, //scr_bypass scr_en algo_bypass algo_en 0000
+	0x00, //roi_en
+	0x00, //roi0 x start
+	0x00,
+	0x00, //roi0 y start
+	0x00,
+	0x00, //roi1 x end
+	0x00,
+	0x00, //roi0 y end
+	0x00,
+	0x14, //trans_en trans_slope 0 0000
+	0x01, //trans_interval
+	0x0f, //trans_ctrl scr gamma cs de
+};
+
+static unsigned char AUTO_GALLERY_SWA_1[] = {
+	0xCF,
+	0x04, //de cs cc 000
+	0x00, //de_gain 10
+	0x10,
+	0xa0, //de_maxplus 8
+	0xa0, //de_maxminus 8
+	0x01, //cs_gain 10
+	0x00,
+	0x00, //curve_0
+	0x10, //curve_1
+	0x20, //curve_2
+	0x30, //curve_3
+	0x40, //curve_4
+	0x50, //curve_5
+	0x60, //curve_6
+	0x70, //curve_7
+	0x80, //curve_8
+	0x90, //curve_9
+	0xa0, //curve_10
+	0xb0, //curve_11
+	0xc0, //curve_12
+	0xd0, //curve_13
+	0xe0, //curve_14
+	0xf0, //curve_15
+	0x01, //curve_16
+	0x00,
+	0x00, //curve_offset
+	0x00,
+	0x00, //curve_low_x
+	0x00, //curve_low_y
+	0x00, //scr Cr
+	0xff, //scr Rr
+	0xff, //scr Cg
+	0x00, //scr Rg
+	0xff, //scr Cb
+	0x00, //scr Rb
+	0xff, //scr Mr
+	0x00, //scr Gr
+	0x00, //scr Mg
+	0xff, //scr Gg
+	0xff, //scr Mb
+	0x00, //scr Gb
+	0xff, //scr Yr
+	0x00, //scr Br
+	0xff, //scr Yg
+	0x00, //scr Bg
+	0x00, //scr Yb
+	0xff, //scr Bb
+	0xff, //scr Wr
+	0x00, //scr Kr
+	0xf4, //scr Wg
+	0x00, //scr Kg
+	0xfd, //scr Wb
+	0x00, //scr Kb
+};
+
+static unsigned char AUTO_GALLERY_SWA_2[] = {
 	//start
 	0xCE,
 	0x01, //mdnie_en
@@ -3432,6 +3592,14 @@ static struct mdnie_table main_table[SCENARIO_MAX][MODE_MAX] = {
 		MDNIE_SET(AUTO_CAMERA),
 		MDNIE_SET(AUTO_EBOOK)
 	},
+	[CAMERA_SWA_MODE] = {
+		MDNIE_SET(DYNAMIC_CAMERA),
+		MDNIE_SET(STANDARD_CAMERA),
+		MDNIE_SET(NATURAL_CAMERA),
+		MDNIE_SET(MOVIE_CAMERA),
+		MDNIE_SET(AUTO_CAMERA_SWA),
+		MDNIE_SET(AUTO_EBOOK)
+	},
 	[GALLERY_MODE] = {
 		MDNIE_SET(DYNAMIC_GALLERY),
 		MDNIE_SET(STANDARD_GALLERY),
@@ -3439,12 +3607,13 @@ static struct mdnie_table main_table[SCENARIO_MAX][MODE_MAX] = {
 		MDNIE_SET(MOVIE_GALLERY),
 		MDNIE_SET(AUTO_GALLERY),
 		MDNIE_SET(AUTO_EBOOK)
-	}, {
-		MDNIE_SET(AUTO_UI),
-		MDNIE_SET(AUTO_UI),
-		MDNIE_SET(AUTO_UI),
-		MDNIE_SET(AUTO_UI),
-		MDNIE_SET(AUTO_UI),
+	}, 
+	[GALLERY_SWA_MODE] = {
+		MDNIE_SET(DYNAMIC_GALLERY),
+		MDNIE_SET(STANDARD_GALLERY),
+		MDNIE_SET(NATURAL_GALLERY),
+		MDNIE_SET(MOVIE_GALLERY),
+		MDNIE_SET(AUTO_GALLERY_SWA),
 		MDNIE_SET(AUTO_EBOOK)
 	}, {
 		MDNIE_SET(DYNAMIC_BROWSER),
@@ -3487,5 +3656,6 @@ static struct mdnie_tune tune_info = {
 	.trans_info = &trans_info,
 	.night_info = &night_info,
 	.color_lens_info = &color_lens_info,
+	.wrgb_swa = &wrgb_swa,
 };
 #endif

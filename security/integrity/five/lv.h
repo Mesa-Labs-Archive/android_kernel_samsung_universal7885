@@ -18,7 +18,7 @@
 #ifndef __FIVE_LV_H__
 #define __FIVE_LV_H__
 
-#include <five_cc.h>
+#include <linux/types.h>
 
 /**
  * Length/Value structure

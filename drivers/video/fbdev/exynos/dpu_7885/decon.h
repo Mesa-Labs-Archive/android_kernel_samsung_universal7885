@@ -799,6 +799,7 @@ struct decon_dt_info {
 	int max_win;
 	int dft_win;
 	int dft_idma;
+	u32 disp_freq;
 };
 
 struct decon_win {
@@ -872,6 +873,7 @@ struct decon_bts_ops {
 	void (*bts_update_bw)(struct decon_device *decon, struct decon_reg_data *regs,
 			u32 is_after);
 	void (*bts_release_bw)(struct decon_device *decon);
+	void (*bts_update_qos_disp)(struct decon_device *decon, u32 disp_freq);
 	void (*bts_deinit)(struct decon_device *decon);
 };
 
@@ -889,6 +891,7 @@ struct decon_bts {
 	struct decon_bts_ops *ops;
 	struct bts_decon_info bts_info;
 	struct pm_qos_request disp_qos;
+	u32 disp_freq_minlock;
 };
 
 struct abd_log {
@@ -1009,6 +1012,9 @@ struct decon_device {
 	int frame_cnt_target;
 	wait_queue_head_t wait_vstatus;
 	int eint_status;
+#ifdef CONFIG_LOGGING_BIGDATA_BUG
+	int eint_pend;
+#endif
 
 	u32 prev_protection_bitmask;
 	unsigned long prev_aclk_khz;

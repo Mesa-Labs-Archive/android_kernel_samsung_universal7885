@@ -2422,6 +2422,21 @@ int fimc_is_group_buffer_queue(struct fimc_is_groupmgr *groupmgr,
 			}
 		}
 #endif
+
+#ifdef ENABLE_REMOSAIC_CAPTURE_WITH_ROTATION
+		if ((GET_DEVICE_TYPE_BY_GRP(group->id) == FIMC_IS_DEVICE_SENSOR)
+			&& (device->sensor && !test_bit(FIMC_IS_SENSOR_FRONT_START, &device->sensor->state))) {
+			device->sensor->mode_chg_frame = NULL;
+
+			if (CHK_REMOSAIC_SCN(frame->shot->ctl.aa.sceneMode)) {
+				clear_bit(FIMC_IS_SENSOR_OTF_OUTPUT, &device->sensor->state);
+				device->sensor->mode_chg_frame = frame;
+			} else {
+				if (group->child)
+					set_bit(FIMC_IS_SENSOR_OTF_OUTPUT, &device->sensor->state);
+			}
+		}
+#endif
 		trans_frame(framemgr, frame, FS_REQUEST);
 	} else {
 		err("frame(%d) is invalid state(%d)\n", index, frame->state);
@@ -2465,7 +2480,17 @@ int fimc_is_group_buffer_queue(struct fimc_is_groupmgr *groupmgr,
 		frame->shot->uctl.companionUd.wdr_mode = COMPANION_WDR_OFF;
 	}
 #else
+#ifdef USE_WDR_INTERFACE
+	if (frame->shot->uctl.companionUd.wdr_mode == COMPANION_WDR_ON) {
+		frame->shot->uctl.companionUd.wdr_mode = COMPANION_WDR_ON;
+	} else if (frame->shot->uctl.companionUd.wdr_mode == COMPANION_WDR_AUTO) {
+		frame->shot->uctl.companionUd.wdr_mode = COMPANION_WDR_AUTO;
+	} else {
+		frame->shot->uctl.companionUd.wdr_mode = COMPANION_WDR_OFF;
+	}
+#else
 	frame->shot->uctl.companionUd.wdr_mode = COMPANION_WDR_OFF;
+#endif
 #endif
 	fimc_is_group_start_trigger(groupmgr, group, frame);
 
@@ -3109,6 +3134,13 @@ int fimc_is_group_done(struct fimc_is_groupmgr *groupmgr,
 			device->next_noise_idx[(frame->fcount + 2) % NI_BACKUP_MAX] =
 				frame->shot->udm.ni.nextNextFrameNoiseIndex;
 		}
+
+#ifdef ENABLE_INIT_AWB
+		/* wb gain backup for initial AWB */
+		if (device->sensor && ((child == &device->group_isp) || (child->subdev[ENTRY_ISP])))
+			memcpy(device->sensor->last_wb, frame->shot->dm.color.gains,
+				sizeof(float) * WB_GAIN_COUNT);
+#endif
 
 		if ((child == &device->group_vra) || (child->subdev[ENTRY_VRA])) {
 #ifdef ENABLE_FD_SW

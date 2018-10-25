@@ -532,6 +532,7 @@ static int muic_handle_ccic_ATTACH(muic_data_t *pmuic, CC_NOTI_ATTACH_TYPEDEF *p
 		if (pmuic->afc_water_disable) {
 			pr_info("%s: Water is not detected, AFC Enable\n", __func__);
 			pmuic->afc_water_disable = false;
+			pmuic->is_hiccup_mode = false;
 		}
 
 #if !defined(CONFIG_SEC_FACTORY)
@@ -705,6 +706,7 @@ static int muic_handle_ccic_WATER(muic_data_t *pmuic, CC_NOTI_ATTACH_TYPEDEF *pn
 	if (pnoti->attach == CCIC_NOTIFY_ATTACH) {
 		pr_info("%s: Water detect\n", __func__);
 		pmuic->afc_water_disable = true;
+		pmuic->is_hiccup_mode = true;
 	} else {
 		pr_info("%s: Undefined notification, Discard\n", __func__);
 	}

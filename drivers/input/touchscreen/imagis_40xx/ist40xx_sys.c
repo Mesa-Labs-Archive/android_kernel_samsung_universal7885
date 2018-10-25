@@ -40,22 +40,100 @@
  * ENXIO  : 6 (No such device or address)
  * EINVAL : 22 (Invalid argument)
  *****************************************************************************/
+
+#ifdef USE_SPONGE_LIB
+int ist40xx_write_sponge_reg(struct ist40xx_data *data, u16 idx, u16 *buf16,
+			int len)
+{
+	int i;
+	int ret = -EIO;
+	
+	ist40xx_cmd_hold(data, IST40XX_ENABLE);
+	data->ignore_delay = true;
+	
+	for (i = 0; i < len; i++) {
+		ret = ist40xx_write_cmd(data, IST40XX_HIB_CMD,
+			(eHCOM_SET_SP_REG_IDX << 16) | (idx + (sizeof(u16) * i)));
+		if (ret) {
+			input_err(true, &data->client->dev, "%s(), fail to write idx\n", __func__);
+			goto err_write_sponge_reg;
+		}
+
+		ist40xx_delay(1);
+
+		ret = ist40xx_write_cmd(data, IST40XX_HIB_CMD,
+				(eHCOM_SET_SP_REG_W_DATA << 16) | *(buf16 + i));
+		if (ret) {
+			input_err(true, &data->client->dev, "%s(), fail to write data\n", __func__);
+			goto err_write_sponge_reg;
+		}
+	}
+
+err_write_sponge_reg:
+
+	data->ignore_delay = false;    
+	ist40xx_cmd_hold(data, IST40XX_DISABLE);
+
+	return ret;
+}
+
+int ist40xx_read_sponge_reg(struct ist40xx_data *data, u16 idx, u16 *buf16,
+			int len)
+{
+	int i;
+	int ret = -EIO;
+	u32 rdata = 0;
+	
+	ist40xx_cmd_hold(data, IST40XX_ENABLE);
+	data->ignore_delay = true;
+	
+	for (i = 0; i < len; i++) {
+		ret = ist40xx_write_cmd(data, IST40XX_HIB_CMD,
+			(eHCOM_SET_SP_REG_IDX << 16) | (idx + (sizeof(u16) * i)));
+		if (ret) {
+			input_err(true, &data->client->dev, "%s(), fail to write idx\n", __func__);
+			goto err_read_sponge_reg;
+		}
+
+		ist40xx_delay(1);
+
+		ret = ist40xx_read_reg(data->client, IST40XX_SPONGE_REG_R_DATA,
+								&rdata);
+		if (ret) {
+			input_err(true, &data->client->dev, "%s(), fail to read data\n", __func__);
+			goto err_read_sponge_reg;
+		}
+
+		*(buf16 + i) = rdata & 0xFFFF;
+	}
+
+err_read_sponge_reg:
+	
+	data->ignore_delay = false;    
+	ist40xx_cmd_hold(data, IST40XX_DISABLE);
+
+	return ret;
+}
+#endif
+
 int ist40xx_cmd_gesture(struct ist40xx_data *data, u16 value)
 {
 	int ret = -EIO;
 
 	if (value == IST40XX_ENABLE) {
+#ifndef USE_SPONGE_LIB
 		data->g_reg.b.evt = 0;
 		data->g_reg.b.evt_x = 0;
 		data->g_reg.b.evt_y = 0;
-
+#endif
 		ret =
 		    ist40xx_write_cmd(data, IST40XX_HIB_INTR_MSG,
 				      IST40XX_LPM_VALUE);
 		if (ret)
 			input_err(true, &data->client->dev,
 				  "fail to write LPM magic value.\n");
-
+		
+#ifndef USE_SPONGE_LIB
 		ret = ist40xx_burst_write(data->client, IST40XX_HIB_GESTURE_REG,
 					  data->g_reg.full,
 					  sizeof(data->g_reg.full) /
@@ -65,6 +143,7 @@ int ist40xx_cmd_gesture(struct ist40xx_data *data, u16 value)
 				  "fail to write gesture reg map.\n");
 			return ret;
 		}
+#endif
 	}
 
 	ret = ist40xx_write_cmd(data, IST40XX_HIB_CMD,
@@ -74,12 +153,19 @@ int ist40xx_cmd_gesture(struct ist40xx_data *data, u16 value)
 			  "fail to write gesture command.\n");
 	} else {
 		if (value == IST40XX_ENABLE) {
+#ifdef USE_SPONGE_LIB
+			input_info(true, &data->client->dev,
+				   "%s, spay : %d, aod : %d\n", __func__,
+				   (data->lpm_mode & IST40XX_GETURE_CTRL_SPAY) ? 1 : 0,
+				   (data->lpm_mode & IST40XX_GETURE_CTRL_AOD) ? 1 : 0);
+#else
 			input_info(true, &data->client->dev,
 				   "%s, spay : %d, aod : %d\n", __func__,
 				   (data->g_reg.b.
 				    ctrl & IST40XX_GETURE_CTRL_SPAY) ? 1 : 0,
 				   (data->g_reg.b.
 				    ctrl & IST40XX_GETURE_CTRL_AOD) ? 1 : 0);
+#endif
 		} else {
 			input_info(true, &data->client->dev,
 				   "%s, normal mode\n", __func__);
@@ -537,7 +623,7 @@ int ist40xx_power_on(struct ist40xx_data *data, bool download)
 	}
 
 	if (download)
-		ist40xx_delay(8);
+		ist40xx_delay(10);
 	else
 		ist40xx_delay(60);
 
@@ -574,7 +660,20 @@ int ist40xx_reset(struct ist40xx_data *data, bool download)
 	ist40xx_power_off(data);
 	ist40xx_delay(30);
 	ist40xx_power_on(data, download);
+
+#ifdef USE_SPONGE_LIB
+	ist40xx_write_sponge_reg(data, IST40XX_SPONGE_CTRL,
+						(u16*)&data->lpm_mode, 1);
+
+	ist40xx_write_cmd(data, IST40XX_HIB_CMD,
+				(eHCOM_NOTIRY_G_REGMAP << 16) | IST40XX_ENABLE);
+#endif
 	if (temp_sys_mode == STATE_LPM) {
+		if (data->lpm_mode & IST40XX_GETURE_CTRL_AOD)
+			ist40xx_write_sponge_reg(data, IST40XX_SPONGE_RECT, 
+					data->rect_data, 4);
+		ist40xx_write_cmd(data, IST40XX_HIB_CMD,
+					(eHCOM_NOTIRY_G_REGMAP << 16) | IST40XX_ENABLE);
 		ist40xx_cmd_gesture(data, IST40XX_ENABLE);
 		data->status.noise_mode = false;
 		data->status.sys_mode = STATE_LPM;

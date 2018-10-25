@@ -17,6 +17,13 @@ config EXYNOS7885_BTS
 	help
 	  Enable BTS (Bus traffic shaper) support
 
+config EXYNOS7885_BTS_VM
+	bool "Bus traffic shaper support"
+	default n
+	depends on SOC_EXYNOS7885
+	help
+	  Enable BTS (Bus traffic shaper) support
+
 config EXYNOS7872_BTS
 	bool "Bus traffic shaper support"
 	default y

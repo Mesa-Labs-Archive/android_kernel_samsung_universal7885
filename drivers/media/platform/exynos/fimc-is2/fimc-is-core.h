@@ -278,6 +278,7 @@ struct fimc_is_core {
 	struct fimc_is_device_sensor		sensor[FIMC_IS_SENSOR_COUNT];
 #if defined(CONFIG_EXYNOS_DEVICE_MIPI_CSIS_VER3)
 	struct fimc_is_device_csi_dma		csi_dma;
+	bool					use_csi_dma_split;
 #endif
 	u32					chain_config;
 	struct fimc_is_device_ischain		ischain[FIMC_IS_STREAM_COUNT];

@@ -2212,6 +2212,17 @@ static int tfa98xx_get_saam_ctl(struct snd_kcontrol *kcontrol,
 }
 
 #if defined(TFA_ACTIVATED_ASYNCHRONOUSLY)
+static int tfa98xx_info_activate_spk_ctl(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 1;
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = 0xf; /* 4-bit to control 4 devices */
+
+	return 0;
+}
+
 static int tfa98xx_set_activate_spk(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
@@ -2487,7 +2498,7 @@ static int tfa98xx_create_controls(struct tfa98xx *tfa98xx)
 	scnprintf(name, MAX_CONTROL_NAME, "ActivateSpk");
 	tfa98xx_controls[mix_index].name = name;
 	tfa98xx_controls[mix_index].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	tfa98xx_controls[mix_index].info = snd_soc_info_bool_ext;
+	tfa98xx_controls[mix_index].info = tfa98xx_info_activate_spk_ctl;
 	tfa98xx_controls[mix_index].get = tfa98xx_get_activate_spk;
 	tfa98xx_controls[mix_index].put = tfa98xx_set_activate_spk;
 	/* tfa98xx_controls[mix_index].private_value = profs; */

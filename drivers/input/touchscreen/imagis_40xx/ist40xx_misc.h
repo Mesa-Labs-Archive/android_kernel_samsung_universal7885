@@ -47,8 +47,6 @@ int parse_tsp_node(struct ist40xx_data *data, u8 flag,
 int ist40xx_read_touch_node(struct ist40xx_data *data, u8 flag,
 			    struct TSP_NODE_BUF *node);
 
-int ist40xx_display_dump_log(struct ist40xx_data *data);
-
 int ist40xx_put_frame(struct ist40xx_data *data, u32 ms, u32 *touch,
 		      u32 *frame, int frame_cnt);
 int ist40xx_recording_put_frame(struct ist40xx_data *data, u32 *frame,

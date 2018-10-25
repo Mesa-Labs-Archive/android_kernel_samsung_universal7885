@@ -26,4 +26,13 @@
 #define inode_unlock(inode)	mutex_unlock(&(inode)->i_mutex)
 #endif
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 14, 20)
+/* kmemcheck is gone.
+ * Since Kernel 4.14.21 SLAB_NOTRACK isn't present in Kernel.
+ * But for backward compatibility with old Kernels
+ * we have to define it here.
+ */
+#define SLAB_NOTRACK 0
+#endif
+
 #endif /* __LINUX_FIVE_PORTING_H */

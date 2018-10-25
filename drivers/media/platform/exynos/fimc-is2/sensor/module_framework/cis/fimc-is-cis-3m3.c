@@ -1669,6 +1669,9 @@ static struct fimc_is_cis_ops cis_ops = {
 	.cis_compensate_gain_for_extremely_br = sensor_3m3_cis_compensate_gain_for_extremely_br,
 	.cis_wait_streamoff = sensor_cis_wait_streamoff,
 	.cis_wait_streamon = sensor_cis_wait_streamon,
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+	.cis_set_initial_exposure = sensor_cis_set_initial_exposure,
+#endif
 };
 
 int cis_3m3_probe(struct i2c_client *client,
@@ -1758,6 +1761,11 @@ int cis_3m3_probe(struct i2c_client *client,
 	}
 
 	probe_info("%s f-number %d\n", __func__, cis->aperture_num);
+
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+	cis->use_initial_ae = of_property_read_bool(dnode, "use_initial_ae");
+	probe_info("%s use_initial_ae(%d)\n", __func__, cis->use_initial_ae);
+#endif
 
 	ret = of_property_read_string(dnode, "setfile", &setfile);
 	if (ret) {

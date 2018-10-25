@@ -53,7 +53,7 @@
 #define ABS_CUR_LEVEL		ABS_X
 #define ABS_INT_DIRECTION	ABS_Y
 
-#define PS_CANCELLATION_ARRAY_NUM 3
+#define PS_CANCELLATION_ARRAY_NUM 5
 #define PS_CANCELLATION_POLLING_DELAY 10
 
 #define CONTROL_INT_ISR_PS_REPORT	0x00
@@ -129,6 +129,7 @@ struct cm36658_data {
 	uint16_t current_adc;
 	uint16_t inte_cancel_set;
 	uint16_t ps_conf1_val;
+	uint16_t ps_period;
 	uint16_t ps_conf3_val;
 	uint16_t red_data;
 	uint16_t green_data;
@@ -282,6 +283,8 @@ static int cm36658_get_calibration_result(struct cm36658_data *cm36658, int is_f
 	/* Disable interrupt */
 	cm36658_i2c_read_word(cm36658, PS_CONF1, &cm36658->ps_conf1_val);
 	cm36658->ps_conf1_val &= CM36658_PS_INT_MASK;
+	/*change ps_period to 10ms*/
+	cm36658->ps_conf1_val &= CM36658_PS_PERIOD_10MS;
 	cm36658_i2c_write_word(cm36658, PS_CONF1, cm36658->ps_conf1_val);
 
 	/* Initialize */
@@ -289,8 +292,8 @@ static int cm36658_get_calibration_result(struct cm36658_data *cm36658, int is_f
 	cm36658->autocal = 1;
 
 	for (i = 0; i < PS_CANCELLATION_ARRAY_NUM; i++) {
-		/* delay 32ms(PS_PERIOD) * 1.5 */
-		msleep(48);
+		/* delay = (PS_PERIOD) * 1.5,  current PS_PERIOD = 10ms */
+		msleep(PS_CALI_DELAY);
 		ret = cm36658_get_ps_adc_value(&value[i]);
 		if (ret < 0) {
 			pr_err("[PS_ERR][cm36658 error]%s: cm36658_get_ps_adc_value\n",
@@ -314,8 +317,14 @@ static int cm36658_get_calibration_result(struct cm36658_data *cm36658, int is_f
 			cm36658->offset);
 
 	cm36658_i2c_write_word(cm36658, PS_CANC, cm36658->offset);
+	/* write ps_period from device tree */
+	cm36658_i2c_read_word(cm36658, PS_CONF1, &cm36658->ps_conf1_val);
+	cm36658->ps_conf1_val &= CM36658_PS_PERIOD_MASK;
+	cm36658->ps_conf1_val |= cm36658->ps_period;
+	cm36658_i2c_write_word(cm36658, PS_CONF1, cm36658->ps_conf1_val);
+	
 	/* delay for update PS_CANC */
-	usleep_range(9000, 9000);
+	msleep(PS_CALI_DELAY);
 
 	return 0;
 }
@@ -1327,6 +1336,7 @@ static int cm36658_parse_dt(struct device *dev,
 	} else {
 		cm36658->ps_conf1_val = temp;
 	}
+	cm36658->ps_period = cm36658->ps_conf1_val & CM36658_PS_PERIOD_REVERSEMASK;
 
 	/* Proximity CONF3 register Setting */
 	if (of_property_read_u32(np, "cm36658,ps_conf3_reg", &temp) < 0) {
@@ -1407,12 +1417,6 @@ static int cm36658_probe(struct i2c_client *client,
 		goto err_setup_reg;
 	}
 
-	ret = cm36658_setup_irq(cm36658);
-	if (ret < 0) {
-		SENSOR_ERR("cm36658_setup_irq error!\n");
-		goto err_cm36658_setup_irq;
-	}
-
 	ret = light_setup(cm36658);
 	if (ret < 0) {
 		SENSOR_ERR("light_setup error!!\n");
@@ -1424,11 +1428,18 @@ static int cm36658_probe(struct i2c_client *client,
 		SENSOR_ERR("proximity_setup error!!\n");
 		goto err_proximity_setup;
 	}
+	
+	ret = cm36658_setup_irq(cm36658);
+	if (ret < 0) {
+		SENSOR_ERR("cm36658_setup_irq error!\n");
+		goto err_cm36658_setup_irq;
+	}
 
 	SENSOR_INFO("Probe success!\n");
 
 	return ret;
 
+err_cm36658_setup_irq:
 err_proximity_setup:
 	sensors_unregister(cm36658->prox_dev, prox_sensor_attrs);
 	destroy_workqueue(cm36658->light_wq);
@@ -1440,7 +1451,6 @@ err_proximity_setup:
 	mutex_destroy(&cm36658->control_mutex);
 err_light_setup:
 	gpio_free(cm36658->irq_gpio);
-err_cm36658_setup_irq:
 err_setup_reg:
 	wake_lock_destroy(&cm36658->prox_wake_lock);
 	mutex_destroy(&cm36658->read_lock);

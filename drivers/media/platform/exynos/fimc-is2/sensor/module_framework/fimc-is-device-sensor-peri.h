@@ -43,6 +43,7 @@ struct fimc_is_cis {
 	u32				aperture_num;
 	bool				use_dgain;
 	bool				hdr_ctrl_by_again;
+	bool				use_wb_gain;
 
 	struct fimc_is_sensor_ctl	sensor_ctls[CAM2P0_UCTL_LIST_SIZE];
 
@@ -57,6 +58,7 @@ struct fimc_is_cis {
 	u32				mode_chg_long_expo;
 	u32				mode_chg_long_again;
 	u32				mode_chg_long_dgain;
+	struct wb_gains			mode_chg_wb_gains;
 
 	/* expected dms */
 	camera2_lens_dm_t		expecting_lens_dm[EXPECT_DM_NUM];
@@ -87,6 +89,13 @@ struct fimc_is_cis {
 
 	/* sensor control delay(N+1 or N+2) */
 	u32				ctrl_delay;
+
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+	/* settings for initial AE */
+	bool				use_initial_ae;
+	ae_setting			init_ae_setting;
+	ae_setting			last_ae_setting;
+#endif
 };
 
 struct fimc_is_actuator_data {
@@ -225,7 +234,7 @@ struct fimc_is_device_sensor_peri {
 	unsigned long			peri_state;
 
 	/* Thread for sensor and high spped recording setting */
-	u32				sensor_work_index;
+	bool					use_sensor_work;
 	spinlock_t			sensor_work_lock;
 	struct task_struct		*sensor_task;
 	struct kthread_worker		sensor_worker;
@@ -298,6 +307,8 @@ int fimc_is_sensor_peri_s_analog_gain(struct fimc_is_device_sensor *device,
 				u32 long_analog_gain, u32 short_analog_gain);
 int fimc_is_sensor_peri_s_digital_gain(struct fimc_is_device_sensor *device,
 				u32 long_digital_gain, u32 short_digital_gain);
+int fimc_is_sensor_peri_s_wb_gains(struct fimc_is_device_sensor *device,
+				struct wb_gains wb_gains);
 int fimc_is_sensor_peri_adj_ctrl(struct fimc_is_device_sensor *device,
 				u32 input, struct v4l2_control *ctrl);
 

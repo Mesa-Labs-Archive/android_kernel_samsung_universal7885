@@ -446,6 +446,8 @@ static int help_show(struct seq_file *m, void *unused)
 	seq_puts(m, "* If you insist, we eliminate these function immediately\n");
 	seq_puts(m, "------------------------------------------------------------\n");
 	seq_puts(m, "\n");
+	seq_puts(m, "---------- usage\n");
+	seq_puts(m, "# cd /d/dd_mdnie\n");
 	seq_puts(m, "---------- status usage\n");
 	seq_puts(m, "# cat status\n");
 	seq_puts(m, "= see status value with latest read data from panel\n");

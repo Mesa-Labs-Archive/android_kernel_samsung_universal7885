@@ -410,6 +410,7 @@ enum zt_cover_id {
 #define	DEF_OPTIONAL_MODE_SENSITIVE_BIT		2
 #define DEF_OPTIONAL_MODE_EDGE_SELECT			3
 #define	DEF_OPTIONAL_MODE_DUO_TOUCH		4
+#define DEF_OPTIONAL_MODE_TOUCHABLE_AREA		5
 /* end header file */
 
 #define DEF_MIS_CAL_SPEC_MIN 40
@@ -6678,6 +6679,38 @@ static void ium_read(void *device_data)
 #endif
 #endif
 
+static void set_touchable_area(void *device_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
+	struct bt532_ts_info *info = container_of(sec, struct bt532_ts_info, sec);
+	char buff[SEC_CMD_STR_LEN] = { 0 };
+	int val = sec->cmd_param[0];
+
+	sec_cmd_set_default_result(sec);
+
+	if (sec->cmd_param[0] < 0 || sec->cmd_param[0] > 1) {
+		snprintf(buff, sizeof(buff), "%s", "NG");
+		sec->cmd_state = SEC_CMD_STATUS_FAIL;
+		goto out;
+	}
+
+	input_info(true, &info->client->dev,
+			"%s: set 16:9 mode %s\n", __func__, val ? "enable" : "disable");
+
+	if (val)
+		zinitix_bit_set(m_optional_mode.select_mode.flag, DEF_OPTIONAL_MODE_TOUCHABLE_AREA);
+	else
+		zinitix_bit_clr(m_optional_mode.select_mode.flag, DEF_OPTIONAL_MODE_TOUCHABLE_AREA);
+	
+	snprintf(buff, sizeof(buff), "%s", "OK");
+	sec->cmd_state = SEC_CMD_STATUS_OK;
+out:
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+	sec_cmd_set_cmd_exit(sec);
+
+	input_info(true, &info->client->dev, "%s: %s\n", __func__, buff);
+}
+
 static void clear_cover_mode(void *device_data)
 {
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
@@ -7670,6 +7703,7 @@ static struct sec_cmd sec_cmds[] = {
 	{SEC_CMD("clear_reference_data", clear_reference_data),},
 	{SEC_CMD("run_ref_calibration", run_ref_calibration),},
 	{SEC_CMD("dead_zone_enable", dead_zone_enable),},
+	{SEC_CMD("set_touchable_area", set_touchable_area),},
 	{SEC_CMD("clear_cover_mode", clear_cover_mode),},
 	{SEC_CMD("spay_enable", spay_enable),},
 	{SEC_CMD("aod_enable", aod_enable),},

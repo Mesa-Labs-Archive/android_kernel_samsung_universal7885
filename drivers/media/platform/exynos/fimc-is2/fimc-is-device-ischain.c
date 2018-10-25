@@ -1471,8 +1471,6 @@ int fimc_is_itf_set_fwboot(struct fimc_is_device_ischain *device, u32 val)
 
 static void fimc_is_itf_param_init(struct is_region *region)
 {
-	memset(&region->parameter, 0x0, sizeof(struct is_param_region));
-
 	memcpy(&region->parameter.sensor, &init_sensor_param,
 		sizeof(struct sensor_param));
 	memcpy(&region->parameter.taa, &init_taa_param,
@@ -1493,10 +1491,6 @@ static void fimc_is_itf_param_init(struct is_region *region)
 #ifdef SOC_SCP
 	memcpy(&region->parameter.scalerp, &init_scp_param,
 		sizeof(struct scp_param));
-#endif
-#ifdef SOC_MCS
-	memcpy(&region->parameter.mcs, &init_mcs_param,
-		sizeof(struct mcs_param));
 #endif
 	memcpy(&region->parameter.vra, &init_vra_param,
 		sizeof(struct vra_param));
@@ -2089,6 +2083,7 @@ int fimc_is_itf_grp_shot(struct fimc_is_device_ischain *device,
 	unsigned long flags;
 	struct fimc_is_group *head;
 	struct fimc_is_framemgr *framemgr;
+	bool is_remosaic_preview = false;
 #endif
 	BUG_ON(!device);
 	BUG_ON(!group);
@@ -2123,8 +2118,15 @@ int fimc_is_itf_grp_shot(struct fimc_is_device_ischain *device,
 	mgrdbgs(1, " SHOT(%d)\n", device, group, frame, frame->index);
 
 #ifdef CONFIG_USE_SENSOR_GROUP
+
+#ifdef ENABLE_REMOSAIC_CAPTURE_WITH_ROTATION
+	if (!test_bit(FIMC_IS_ISCHAIN_REPROCESSING, &device->state)
+		&& CHK_REMOSAIC_SCN(frame->shot->ctl.aa.sceneMode))
+		is_remosaic_preview = true;
+#endif
+
 	head = GET_HEAD_GROUP_IN_DEVICE(FIMC_IS_DEVICE_ISCHAIN, group);
-	if (head) {
+	if (head && !is_remosaic_preview) {
 		ret = fimc_is_itf_shot_wrap(device, group, frame);
 	} else {
 		framemgr = GET_HEAD_GROUP_FRAMEMGR(group);
@@ -3259,6 +3261,8 @@ static int fimc_is_ischain_open(struct fimc_is_device_ischain *device)
 	device->kvaddr_shared	= device->is_region->shared[0];
 	device->dvaddr_shared	= minfo->dvaddr +
 				(u32)((ulong)&device->is_region->shared[0] - minfo->kvaddr);
+
+	memset(&device->is_region->parameter, 0x0, sizeof(struct is_param_region));
 
 #ifdef SOC_DRC
 	fimc_is_subdev_open(&device->drc, NULL, (void *)&init_drc_param.control);

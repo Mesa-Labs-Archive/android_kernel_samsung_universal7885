@@ -116,6 +116,15 @@ int sensor_module_init(struct v4l2_subdev *subdev, u32 val)
 		goto p_err;
 	}
 
+#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
+	/* set initial ae setting if initial_ae feature is supported */
+	ret = CALL_CISOPS(&sensor_peri->cis, cis_set_initial_exposure, subdev_cis);
+	if (ret) {
+		err("v4l2_subdev_call(set_initial_exposure) is fail(%d)", ret);
+		goto p_err;
+	}
+#endif
+
 	subdev_flash = sensor_peri->subdev_flash;
 	if (subdev_flash != NULL) {
 		ret = v4l2_subdev_call(subdev_flash, core, init, 0);
@@ -617,12 +626,22 @@ int sensor_module_s_stream(struct v4l2_subdev *subdev, int enable)
 	 * Camera first mode set high speed recording and maintain 120fps
 	 * not setting exposure so need to this check
 	 */
-	if (sensor_peri->cis.cis_data->video_mode == true && device->cfg->framerate >= 60) {
-		sensor_peri->sensor_interface.diff_bet_sen_isp = sensor_peri->sensor_interface.otf_flag_3aa? DIFF_OTF_DELAY + 1 : DIFF_M2M_DELAY;
-		if (fimc_is_sensor_init_sensor_thread(sensor_peri))
+	if ((sensor_peri->use_sensor_work)
+		|| (sensor_peri->cis.cis_data->video_mode == true && device->cfg->framerate >= 60)) {
+
+		ret = fimc_is_sensor_init_sensor_thread(sensor_peri);
+		if (ret) {
 			err("fimc_is_sensor_init_sensor_thread is fail");
+			return ret;
+		}
+	}
+
+	if (sensor_peri->cis.cis_data->video_mode == true && device->cfg->framerate >= 60) {
+		sensor_peri->sensor_interface.diff_bet_sen_isp =
+			sensor_peri->sensor_interface.otf_flag_3aa ? DIFF_OTF_DELAY + 1 : DIFF_M2M_DELAY;
 	} else {
-		sensor_peri->sensor_interface.diff_bet_sen_isp = sensor_peri->sensor_interface.otf_flag_3aa? DIFF_OTF_DELAY : DIFF_M2M_DELAY;
+		sensor_peri->sensor_interface.diff_bet_sen_isp =
+			sensor_peri->sensor_interface.otf_flag_3aa ? DIFF_OTF_DELAY : DIFF_M2M_DELAY;
 	}
 
 	ret = fimc_is_sensor_peri_s_stream(device, enable);

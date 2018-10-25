@@ -39,6 +39,7 @@
 #include "fimc-is-cis-sr556.h"
 #include "fimc-is-cis-sr556-setA.h"
 #include "fimc-is-cis-sr556-setB.h"
+#include "fimc-is-cis-sr556-setC.h"
 
 #include "fimc-is-helper-i2c.h"
 #include "fimc-is-vender-specific.h"
@@ -1874,6 +1875,20 @@ int cis_sr556_probe(struct i2c_client *client,
 		sensor_sr556_fsync_master_size = sizeof(sensor_sr556_setfile_B_Fsync_Master) / sizeof(sensor_sr556_setfile_B_Fsync_Master[0]);
 		sensor_sr556_fsync_slave = sensor_sr556_setfile_B_Fsync_Slave;
 		sensor_sr556_fsync_slave_size = sizeof(sensor_sr556_setfile_B_Fsync_Slave) / sizeof(sensor_sr556_setfile_B_Fsync_Slave[0]);
+	}  else if (strcmp(setfile, "setC") == 0) {
+		probe_info("%s : setfile_C for Tablets(Landscape Device)\n", __func__);
+		sensor_sr556_global = sensor_sr556_setfile_C_Global;
+		sensor_sr556_global_size = sizeof(sensor_sr556_setfile_C_Global) / sizeof(sensor_sr556_setfile_C_Global[0]);
+		sensor_sr556_setfiles = sensor_sr556_setfiles_C;
+		sensor_sr556_setfile_sizes = sensor_sr556_setfile_C_sizes;
+		sensor_sr556_pllinfos = sensor_sr556_pllinfos_C;
+		sensor_sr556_max_setfile_num = sizeof(sensor_sr556_setfiles_C) / sizeof(sensor_sr556_setfiles_C[0]);
+		sensor_sr556_fsync_normal = sensor_sr556_setfile_C_Fsync_Normal;
+		sensor_sr556_fsync_normal_size = sizeof(sensor_sr556_setfile_C_Fsync_Normal) / sizeof(sensor_sr556_setfile_C_Fsync_Normal[0]);
+		sensor_sr556_fsync_master = sensor_sr556_setfile_C_Fsync_Master;
+		sensor_sr556_fsync_master_size = sizeof(sensor_sr556_setfile_C_Fsync_Master) / sizeof(sensor_sr556_setfile_C_Fsync_Master[0]);
+		sensor_sr556_fsync_slave = sensor_sr556_setfile_C_Fsync_Slave;
+		sensor_sr556_fsync_slave_size = sizeof(sensor_sr556_setfile_C_Fsync_Slave) / sizeof(sensor_sr556_setfile_C_Fsync_Slave[0]);
 	} else {
 		err("%s setfile index out of bound, take default (setfile_A)", __func__);
 		sensor_sr556_global = sensor_sr556_setfile_A_Global;

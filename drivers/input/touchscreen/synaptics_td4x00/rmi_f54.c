@@ -3024,6 +3024,9 @@ static void get_chip_name(void *dev_data)
 	case SYNAPTICS_PRODUCT_ID_TD4100:
 		snprintf(data->cmd_buff, CMD_RESULT_STR_LEN, "%s", tostring(TD4100));
 		break;
+	case SYNAPTICS_PRODUCT_ID_TD4101:
+		snprintf(data->cmd_buff, CMD_RESULT_STR_LEN, "%s", tostring(TD4101));
+		break;
 	default:
 		snprintf(data->cmd_buff, CMD_RESULT_STR_LEN, "%s", tostring(NA));
 	}
@@ -5607,7 +5610,19 @@ static void run_rawgap_read(void *dev_data)
 
 	num_of_tx = f54->tx_assigned;
 	num_of_rx = f54->rx_assigned;
+
+	/*
+	 * model	 : J330 / J260
+	 * num_of_rx : 29  / 26
+	 * num_of_tx : 16  / 15
+	 * tx_half	 :	8  / 7
+	 */
+	
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_I2C_TD4X00_J2CORESPR
+	tx_half = (num_of_tx / 2) + 1;
+#else
 	tx_half = num_of_tx / 2;
+#endif
 
 	max_value = min_value = 0;
 

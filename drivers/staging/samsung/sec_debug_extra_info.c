@@ -400,7 +400,7 @@ void sec_debug_set_extra_info_backtrace(struct pt_regs *regs)
 			offset += sprintf((char *)sec_debug_extra_info->item[INFO_STACK].val + offset, ":");
 
 		snprintf((char *)sec_debug_extra_info->item[INFO_STACK].val + offset,
-				MAX_EXTRA_INFO_VAL_LEN, "%s", buf);
+				MAX_EXTRA_INFO_VAL_LEN - offset, "%s", buf);
 
 		offset += sym_name_len;
 	}
@@ -452,7 +452,7 @@ void sec_debug_set_extra_info_backtrace_cpu(struct pt_regs *regs, int cpu)
 			offset += sprintf((char *)sec_debug_extra_info->item[INFO_CPU0 + (cpu % 8)].val + offset, ":");
 
 		snprintf((char *)sec_debug_extra_info->item[INFO_CPU0 + (cpu % 8)].val + offset,
-				MAX_EXTRA_INFO_VAL_LEN, "%s", buf);
+				MAX_EXTRA_INFO_VAL_LEN - offset, "%s", buf);
 		offset += sym_name_len;
 	}
 }

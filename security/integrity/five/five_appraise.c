@@ -184,7 +184,7 @@ static int five_fix_xattr(struct task_struct *task,
 }
 
 static void five_set_cache_status(struct integrity_iint_cache *iint,
-					enum integrity_status status)
+					enum five_file_integrity status)
 {
 	iint->five_status = status;
 }
@@ -254,17 +254,16 @@ int five_appraise_measurement(struct task_struct *task, int func,
 			      struct file *file,
 			      struct five_cert *cert)
 {
-	static const char op[] = "appraise_data";
 	char *cause = "unknown";
 	struct dentry *dentry = NULL;
 	struct inode *inode = NULL;
 	enum five_file_integrity status = FIVE_FILE_UNKNOWN;
 	enum task_integrity_value prev_integrity;
 	int rc = 0;
-	u8 hash[FIVE_MAX_DIGEST_SIZE], *hash_file;
-	u8 stored_hash[FIVE_MAX_DIGEST_SIZE];
-	size_t hash_len = sizeof(hash), hash_file_len;
-	struct five_cert_header *header;
+	u8 *file_hash;
+	u8 stored_file_hash[FIVE_MAX_DIGEST_SIZE] = {0};
+	size_t file_hash_len = 0;
+	struct five_cert_header *header = NULL;
 
 	BUG_ON(!task || !iint || !file);
 
@@ -287,24 +286,24 @@ int five_appraise_measurement(struct task_struct *task, int func,
 	}
 
 	header = (struct five_cert_header *)cert->body.header->value;
-	hash_file = cert->body.hash->value;
-	hash_file_len = cert->body.hash->length;
-	if (hash_file_len > sizeof(stored_hash)) {
+	file_hash = cert->body.hash->value;
+	file_hash_len = cert->body.hash->length;
+	if (file_hash_len > sizeof(stored_file_hash)) {
 		cause = "invalid-hash-length";
 		rc = -EINVAL;
 		goto out;
 	}
 
-	memcpy(stored_hash, hash_file, hash_file_len);
+	memcpy(stored_file_hash, file_hash, file_hash_len);
 
-	if (unlikely(!header || !hash_file)) {
+	if (unlikely(!header || !file_hash)) {
 		cause = "invalid-header";
 		rc = -EINVAL;
 		goto out;
 	}
 
-	rc = five_collect_measurement(file, header->hash_algo, hash_file,
-				      hash_file_len);
+	rc = five_collect_measurement(file, header->hash_algo, file_hash,
+				      file_hash_len);
 	if (rc) {
 		cause = "failed-calc-hash";
 		goto out;
@@ -316,6 +315,8 @@ int five_appraise_measurement(struct task_struct *task, int func,
 		u8 algo = header->hash_algo;
 		void *file_label_data;
 		size_t file_label_len, sig_len = 0;
+		u8 cert_hash[FIVE_MAX_DIGEST_SIZE] = {0};
+		size_t cert_hash_len = sizeof(cert_hash);
 
 		status = FIVE_FILE_FAIL;
 
@@ -337,23 +338,24 @@ int five_appraise_measurement(struct task_struct *task, int func,
 			break;
 		}
 
-		rc = five_cert_calc_hash(&cert->body, hash, &hash_len);
+		rc = five_cert_calc_hash(&cert->body, cert_hash,
+							&cert_hash_len);
 		if (unlikely(rc)) {
 			cause = "invalid-calc-cert-hash";
 			break;
 		}
 
-		rc = verify_hash(algo, hash,
-				hash_len,
+		rc = verify_hash(algo, cert_hash,
+				cert_hash_len,
 				file_label_data, file_label_len,
 				sig, sig_len);
 		if (unlikely(rc)) {
 			cause = "invalid-hash";
 			if (cert) {
 				five_audit_hexinfo(file, "stored hash",
-					stored_hash, hash_len);
+					stored_file_hash, file_hash_len);
 				five_audit_hexinfo(file, "calculated hash",
-					hash, hash_len);
+					file_hash, file_hash_len);
 				five_audit_hexinfo(file, "HMAC signature",
 					sig, sig_len);
 			}
@@ -371,23 +373,27 @@ int five_appraise_measurement(struct task_struct *task, int func,
 		break;
 	}
 	case FIVE_XATTR_DIGSIG: {
+		u8 cert_hash[FIVE_MAX_DIGEST_SIZE] = {0};
+		size_t cert_hash_len = sizeof(cert_hash);
+
 		status = FIVE_FILE_FAIL;
 
-		rc = five_cert_calc_hash(&cert->body, hash, &hash_len);
+		rc = five_cert_calc_hash(&cert->body, cert_hash,
+							&cert_hash_len);
 		if (unlikely(rc)) {
 			cause = "invalid-calc-cert-hash";
 			break;
 		}
 
-		rc = five_digsig_verify(cert, hash, hash_len);
+		rc = five_digsig_verify(cert, cert_hash, cert_hash_len);
 
 		if (rc) {
 			cause = "invalid-signature";
 			if (cert) {
 				five_audit_hexinfo(file, "stored hash",
-					stored_hash, hash_len);
+					stored_file_hash, file_hash_len);
 				five_audit_hexinfo(file, "calculated hash",
-					hash, hash_len);
+					file_hash, file_hash_len);
 				five_audit_hexinfo(file, "RSA signature",
 					cert->signature->value,
 					cert->signature->length);
@@ -408,8 +414,8 @@ int five_appraise_measurement(struct task_struct *task, int func,
 out:
 	iint->version = file_inode(file)->i_version;
 	if (status == FIVE_FILE_FAIL || status == FIVE_FILE_UNKNOWN)
-		five_audit_info(task, file, op, prev_integrity,
-				prev_integrity, cause, rc);
+		five_audit_info(task, file, five_get_string_fn(func),
+				prev_integrity,	prev_integrity, cause, rc);
 
 	five_set_cache_status(iint, status);
 

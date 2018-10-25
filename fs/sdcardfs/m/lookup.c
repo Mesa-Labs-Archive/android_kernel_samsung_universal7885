@@ -220,6 +220,18 @@ static int sdcardfs_name_match(struct dir_context *ctx, const char *name,
 	return 0;
 }
 
+static int need_ci_lookup(struct super_block *lower_sb)
+{
+	unsigned long lower_fs_magic = lower_sb->s_magic;
+
+	if (lower_fs_magic == ECRYPTFS_SUPER_MAGIC ||
+			lower_fs_magic == EXT4_SUPER_MAGIC ||
+			lower_fs_magic == F2FS_SUPER_MAGIC)
+		return 1;
+
+	return 0;
+}
+
 /*
  * Main driver function for sdcardfs's lookup.
  *
@@ -254,7 +266,7 @@ static struct dentry *__sdcardfs_lookup(struct dentry *dentry,
 	err = vfs_path_lookup(lower_dir_dentry, lower_dir_mnt, name->name, 0,
 				&lower_path);
 	/* check for other cases */
-	if (err == -ENOENT) {
+	if (err == -ENOENT && need_ci_lookup(lower_dir_mnt->mnt_sb)) {
 		struct file *file;
 		const struct cred *cred = current_cred();
 

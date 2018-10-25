@@ -1784,7 +1784,7 @@ int cis_4ha_probe(struct i2c_client *client,
 	cis->device = 0;
 	cis->client = client;
 	sensor_peri->module->client = cis->client;
-	cis->ctrl_delay = N_PLUS_ONE_FRAME;
+	cis->ctrl_delay = N_PLUS_TWO_FRAME;
 
 	cis->cis_data = kzalloc(sizeof(cis_shared_data), GFP_KERNEL);
 	if (!cis->cis_data) {

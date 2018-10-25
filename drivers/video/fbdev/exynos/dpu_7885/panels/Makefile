@@ -17,3 +17,5 @@ obj-$(CONFIG_EXYNOS_DECON_LCD_EA8061S_J7DUO)	+= ea8061s_j7duo_lcd_ctrl.o dynamic
 obj-$(CONFIG_EXYNOS_DECON_LCD_S6E8AA5_A6ELTE)	+= s6e8aa5_a6elte_lcd_ctrl.o dynamic_aid.o
 obj-$(CONFIG_EXYNOS_DECON_LCD_S6E8AA5_FEEL2)	+= s6e8aa5_a6elte_lcd_ctrl.o dynamic_aid.o
 obj-$(CONFIG_EXYNOS_DECON_LCD_SN65DSI86_GVIEW2)	+= sn65dsi86_gview2_lcd_ctrl.o
+obj-$(CONFIG_EXYNOS_DECON_LCD_S6E3FA7_A7Y18)	+= s6e3fa7_a7y18_lcd_ctrl.o dynamic_aid.o
+obj-$(CONFIG_EXYNOS_DECON_LCD_TD4101_J2COREPELTE)	+= td4101_j2corepelte_lcd_ctrl.o

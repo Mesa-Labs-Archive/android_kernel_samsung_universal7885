@@ -10643,7 +10643,8 @@ int dbmdx_stop_pcm_streaming(struct snd_soc_codec *codec)
 		dev_dbg(p->dev,
 			"%s: FW in Buffering mode, set the flag and leave\n",
 			__func__);
-		return 0;
+			ret = 0;
+			goto out_unlock;
 	} else if (p->va_flags.mode == DBMDX_DETECTION_AND_STREAMING)
 		required_mode = DBMDX_DETECTION;
 	else

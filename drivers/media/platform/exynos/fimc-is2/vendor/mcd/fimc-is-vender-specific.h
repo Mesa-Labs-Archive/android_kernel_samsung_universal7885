@@ -75,6 +75,9 @@ struct fimc_is_vender_specific {
 #if defined(CONFIG_USE_DIRECT_IS_CONTROL) && defined(CONFIG_CAMERA_OTPROM_SUPPORT_FRONT)
 	struct i2c_client	*front_cis_client;
 #endif
+#if defined(CONFIG_USE_DIRECT_IS_CONTROL) && defined(CONFIG_CAMERA_OTPROM_SUPPORT_REAR)
+	struct i2c_client	*rear_cis_client;
+#endif
 
 	bool			running_rear_camera;
 	bool			running_front_camera;

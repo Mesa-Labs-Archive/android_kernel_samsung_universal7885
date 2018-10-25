@@ -173,7 +173,11 @@ static struct bts_info exynos_bts[] = {
 		.type = BT_TREX,
 		.enable = true,
 		.table[BS_DEFAULT].stat.scen_en = true,
+#ifdef CONFIG_EXYNOS7885_BTS_VM
+		.table[BS_DEFAULT].stat.priority = 0x7,
+#else
 		.table[BS_DEFAULT].stat.priority = 0xC,
+#endif
 	},
 	[BTS_IDX_CPU_DMC0] = {
 		.name = "cpu_dmc0",
@@ -502,7 +506,11 @@ static void bts_drex_init(void __iomem *base)
 	__raw_writel(0x00000010, base + QOS_TIMEOUT_A);
 	__raw_writel(0x00000020, base + QOS_TIMEOUT_9);
 	__raw_writel(0x00000040, base + QOS_TIMEOUT_8);
+#ifdef CONFIG_EXYNOS7885_BTS_VM
+	__raw_writel(0x00000080, base + QOS_TIMEOUT_7);
+#else
 	__raw_writel(0x00000100, base + QOS_TIMEOUT_7);
+#endif
 	__raw_writel(0x00000100, base + QOS_TIMEOUT_6);
 	__raw_writel(0x00000100, base + QOS_TIMEOUT_5);
 	__raw_writel(0x00000100, base + QOS_TIMEOUT_4);

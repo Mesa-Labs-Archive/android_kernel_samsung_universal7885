@@ -98,6 +98,7 @@ static int sensor_module_4ha_power_setpin(struct device *dev,
 {
 	struct device_node *dnode;
 	int gpio_reset = 0;
+	int gpio_mclk = 0;
 	//int gpio_cam_2p8_en = 0;
 	int gpio_camaf_2p8_en = 0;
 	int gpio_cam_core_en = 0;
@@ -125,6 +126,15 @@ static int sensor_module_4ha_power_setpin(struct device *dev,
 	} else {
 		gpio_request_one(gpio_reset, GPIOF_OUT_INIT_LOW, "CAM_GPIO_OUTPUT_LOW");
 		gpio_free(gpio_reset);
+	}
+
+
+	gpio_mclk = of_get_named_gpio(dnode, "gpio_mclk", 0);
+	if (!gpio_is_valid(gpio_mclk)) {
+		dev_err(dev, "failed to get gpio_mclk\n");
+	} else {
+		gpio_request_one(gpio_mclk, GPIOF_OUT_INIT_LOW, "CAM_MCLK_OUTPUT_LOW");
+		gpio_free(gpio_mclk);
 	}
 
 	if (exist_actuator == true) {
@@ -189,7 +199,6 @@ static int sensor_module_4ha_power_setpin(struct device *dev,
 	/*SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_cam_2p8_en, "cam_2p8_en", PIN_OUTPUT, 0, 0);*/
 
 	/* SENSOR_SCENARIO_READ_ROM on */
-#if 0 /* FixMe */
 	if (exist_actuator == true) {
 		SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON, gpio_camaf_2p8_en, "camaf_2p8_en", PIN_OUTPUT, 1, 5000);
 	}
@@ -200,7 +209,7 @@ static int sensor_module_4ha_power_setpin(struct device *dev,
 	if (exist_actuator == true) {
 		SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_OFF, gpio_camaf_2p8_en, "camaf_2p8_en", PIN_OUTPUT, 0, 1500);
 	}
-#endif
+
 	dev_info(dev, "%s X v4\n", __func__);
 
 	return 0;

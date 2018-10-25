@@ -24,6 +24,7 @@
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/err.h>
+#include <linux/vmalloc.h>
 
 #include "ist40xx.h"
 #include "ist40xx_update.h"
@@ -123,6 +124,14 @@ int ist40xx_isp_enable(struct ist40xx_data *data, bool enable)
 	if (unlikely(ret))
 		return ret;
 
+	val = 0xC100;
+	ret = ist40xx_write_buf(data->client, rISP_ACCESS_MODE, &val, 1);
+	if (unlikely(ret))
+		return ret;
+	val = 0x00100059;
+	ret = ist40xx_write_buf(data->client, rISP_TMODE1, &val, 1);
+	if (unlikely(ret))
+		return ret;
 	ist40xx_delay(1);
 
 	return ret;
@@ -290,6 +299,8 @@ int ist40xx_isp_read(struct ist40xx_data *data, u32 addr, int mode, u32 * buf32,
 		     int size)
 {
 	int ret = 0;
+	int i;
+	int len = size / IST40XX_ROM_PAGE_SIZE;
 
 	input_info(true, &data->client->dev, "%s\n", __func__);
 
@@ -297,54 +308,51 @@ int ist40xx_isp_read(struct ist40xx_data *data, u32 addr, int mode, u32 * buf32,
 	if (unlikely(ret))
 		return ret;
 
-	ret = ist40xx_write_buf(data->client, rISP_ADDRESS, &addr, 1);
-	if (unlikely(ret)) {
-		input_err(true, &data->client->dev, "ISP fail, rISP_ADDRESS\n");
-		return ret;
-	}
+	addr /= IST40XX_ADDR_LEN;
+	for (i = 0; i < len; i++) {
+		ret = ist40xx_write_buf(data->client, rISP_ADDRESS, &addr, 1);
+		if (unlikely(ret)) {
+			input_err(true, &data->client->dev, "ISP fail, rISP_ADDRESS\n");
+			return ret;
+		}
 
-	ret = ist40xx_isp_read_burst(data->client, rISP_DOUT, buf32, size);
-	if (unlikely(ret)) {
-		input_err(true, &data->client->dev, "ISP fail, rISP_DOUT\n");
-		return ret;
+		ret = ist40xx_isp_read_burst(data->client, rISP_DOUT, buf32,
+					IST40XX_ROM_PAGE_SIZE / IST40XX_DATA_LEN);
+		if (unlikely(ret)) {
+			input_err(true, &data->client->dev, "ISP fail, rISP_DOUT\n");
+			return ret;
+		}
+
+		addr += (IST40XX_ROM_PAGE_SIZE / IST40XX_ADDR_LEN);
+		buf32 += (IST40XX_ROM_PAGE_SIZE / IST40XX_DATA_LEN);
 	}
 
 	return ret;
 }
 
 int ist40xx_write_sec_info(struct ist40xx_data *data, u8 idx, u32 *buf32,
-			   int len)
+				int len)
 {
 	int ret = 0;
-	int i;
 
 	ist40xx_disable_irq(data);
 
-	ret = ist40xx_write_cmd(data, IST40XX_HIB_CMD,
-				(eHCOM_FW_HOLD << 16) | (IST40XX_ENABLE &
-							 0xFFFF));
+	ret = ist40xx_cmd_hold(data, IST40XX_ENABLE);
 	if (ret)
 		goto err_write_sec_info;
 
-	for (i = 0; i < len; i++) {
-		ret = ist40xx_write_buf(data->client,
-					IST40XX_DA_ADDR(data->sec_info_addr),
-					buf32 + i, 1);
-		if (ret)
+	ret = ist40xx_burst_write(data->client,
+			IST40XX_DA_ADDR(data->sec_info_addr) + (idx * IST40XX_ADDR_LEN),
+			buf32, len);
+	if (ret)
 			goto err_write_sec_info;
-
-		ret = ist40xx_write_cmd(data, IST40XX_HIB_CMD,
-					(eHCOM_SET_SEC_INFO_W_IDX << 16) |
-					((idx + i) & 0xFFFF));
-		if (ret)
-			goto err_write_sec_info;
-
-		ist40xx_delay(10);
-	}
 
 	ret = ist40xx_write_cmd(data, IST40XX_HIB_CMD,
-				(eHCOM_FW_HOLD << 16) | (IST40XX_DISABLE &
-							 0xFFFF));
+		(eHCOM_SET_SEC_INFO_WRITE << 16) | IST40XX_ENABLE);
+	if (ret)
+		goto err_write_sec_info;
+
+	ret = ist40xx_cmd_hold(data, IST40XX_DISABLE);
 	if (ret)
 		goto err_write_sec_info;
 
@@ -361,38 +369,23 @@ err_write_sec_info:
 }
 
 int ist40xx_read_sec_info(struct ist40xx_data *data, u8 idx, u32 *buf32,
-			  int len)
+				int len)
 {
 	int ret = 0;
-	int i;
 
 	ist40xx_disable_irq(data);
 
-	ret = ist40xx_write_cmd(data, IST40XX_HIB_CMD,
-				(eHCOM_FW_HOLD << 16) | (IST40XX_ENABLE &
-							 0xFFFF));
+	ret = ist40xx_cmd_hold(data, IST40XX_ENABLE);
 	if (ret)
 		goto err_read_sec_info;
 
-	for (i = 0; i < len; i++) {
-		ret = ist40xx_write_cmd(data, IST40XX_HIB_CMD,
-					(eHCOM_SET_SEC_INFO_R_IDX << 16) |
-					((idx + i) & 0xFFFF));
-		if (ret)
-			goto err_read_sec_info;
+	ret = ist40xx_burst_read(data->client,
+			IST40XX_DA_ADDR(data->sec_info_addr) + (idx * IST40XX_ADDR_LEN),
+			buf32, len, true);
+	if (ret)
+		goto err_read_sec_info;
 
-		ist40xx_delay(1);
-
-		ret = ist40xx_read_reg(data->client,
-				       IST40XX_DA_ADDR(data->sec_info_addr),
-				       buf32 + i);
-		if (ret)
-			goto err_read_sec_info;
-	}
-
-	ret = ist40xx_write_cmd(data, IST40XX_HIB_CMD,
-				(eHCOM_FW_HOLD << 16) | (IST40XX_DISABLE &
-							 0xFFFF));
+	ret = ist40xx_cmd_hold(data, IST40XX_DISABLE);
 	if (ret)
 		goto err_read_sec_info;
 
@@ -411,7 +404,7 @@ err_read_sec_info:
 int ist40xx_ium_read(struct ist40xx_data *data, u32 *buf32)
 {
 	int ret = 0;
-	u32 addr = IST40XX_IUM_BASE_ADDR / IST40XX_ADDR_LEN;
+	u32 addr = IST40XX_IUM_BASE_ADDR;
 
 	ist40xx_reset(data, true);
 	data->ignore_delay = true;
@@ -420,7 +413,7 @@ int ist40xx_ium_read(struct ist40xx_data *data, u32 *buf32)
 		return ret;
 
 	ist40xx_isp_read(data, addr, IST40XX_ISP_READ_INFO_B, buf32,
-			 IST40XX_IUM_SIZE / IST40XX_DATA_LEN);
+			 IST40XX_IUM_SIZE);
 
 	data->ignore_delay = false;
 	ist40xx_isp_enable(data, false);
@@ -441,7 +434,7 @@ int ist40xx_isp_fw_read(struct ist40xx_data *data, u32 *buf32)
 		return ret;
 
 	ist40xx_isp_read(data, addr, IST40XX_ISP_READ_MAIN_B, buf32,
-			 IST40XX_ROM_TOTAL_SIZE / IST40XX_DATA_LEN);
+			 IST40XX_ROM_TOTAL_SIZE);
 
 	data->ignore_delay = false;
 	ist40xx_isp_enable(data, false);
@@ -908,7 +901,9 @@ int ist40xx_fw_recovery(struct ist40xx_data *data)
 	int ret = -EPERM;
 	u8 *fw = data->fw.buf;
 	int fw_size = data->fw.buf_size;
-
+#ifdef TCLM_CONCEPT
+	int rc;
+#endif
 	ret = ist40xx_get_update_info(data, fw, fw_size);
 	if (ret) {
 		data->status.update_result = 1;
@@ -919,23 +914,18 @@ int ist40xx_fw_recovery(struct ist40xx_data *data)
 	data->fw.bin.fw_ver = ist40xx_parse_ver(data, FLAG_FW, fw);
 	data->fw.bin.test_ver = ist40xx_parse_ver(data, FLAG_TEST, fw);
 	data->fw.bin.core_ver = ist40xx_parse_ver(data, FLAG_CORE, fw);
-#ifdef TCLM_CONCEPT
-	ret = ist40xx_tclm_get_nvm_all(data, true);
-	if (unlikely(!ret)) {
-		input_err(true, &data->client->dev,
-			  "TCLM_CONCEPT get_nvm_all failed\n");
-		ret = -EIO;
-		return ret;
-	}
-#endif
+
 	mutex_lock(&data->lock);
 	ret = ist40xx_fw_update(data, fw, fw_size);
 	if (ret == 0) {
 		ist40xx_print_info(data);
 #ifdef TCLM_CONCEPT
-		ist40xx_tclm_root_of_cal(data, CALPOSITION_TESTMODE);
-		ist40xx_execute_tclm_package(data, 0);
-		ist40xx_tclm_root_of_cal(data, CALPOSITION_NONE);
+		sec_tclm_root_of_cal(data->tdata, CALPOSITION_TESTMODE);
+		rc = sec_execute_tclm_package(data->tdata, 0);
+		if (rc < 0)
+			input_err(true, &data->client->dev,
+					"%s: sec_execute_tclm_package fail\n", __func__);
+		sec_tclm_root_of_cal(data->tdata, CALPOSITION_NONE);
 #else
 		ist40xx_calibrate(data, 1);
 #endif
@@ -958,7 +948,7 @@ int ist40xx_check_auto_update(struct ist40xx_data *data)
 	u32 chksum;
 	struct ist40xx_fw *fw = &data->fw;
 
-	while (retry--) {
+	while (retry--) {		
 		ret = ist40xx_read_cmd(data, eHCOM_GET_CHIP_ID, &chip_id);
 		if (likely(ret == 0)) {
 			if (likely(chip_id == IST40XX_CHIP_ID))
@@ -974,7 +964,7 @@ int ist40xx_check_auto_update(struct ist40xx_data *data)
 		goto fw_check_end;
 
 	ist40xx_write_cmd(data, IST40XX_HIB_CMD,
-			  (eHCOM_FW_HOLD << 16) | (IST40XX_ENABLE & 0xFFFF));
+			(eHCOM_FW_HOLD << 16) | (IST40XX_ENABLE & 0xFFFF));
 	ist40xx_delay(20);
 
 	ret = ist40xx_get_tsp_info(data);
@@ -982,11 +972,9 @@ int ist40xx_check_auto_update(struct ist40xx_data *data)
 		goto fw_check_end;
 
 	ret = ist40xx_write_cmd(data, IST40XX_HIB_CMD,
-				(eHCOM_FW_HOLD << 16) | (IST40XX_DISABLE &
-							 0xFFFF));
+			(eHCOM_FW_HOLD << 16) | (IST40XX_DISABLE & 0xFFFF));
 	if (ret) {
-		input_err(true, &data->client->dev, "%s fail to disable hold\n",
-			  __func__);
+		tsp_warn("%s fail to disable hold\n", __func__);
 		ist40xx_reset(data, false);
 	}
 
@@ -1007,8 +995,8 @@ int ist40xx_check_auto_update(struct ist40xx_data *data)
 			   (fw->cur.test_ver == 0))) {
 			ret = ist40xx_read_cmd(data, eHCOM_GET_CRC32, &chksum);
 			if (unlikely((ret) || (chksum != fw->chksum))) {
-				tsp_warn
-				    ("Checksum error, IC: %x, Bin: %x (ret: %d)\n",
+				input_err(true, &data->client->dev,
+				    "Checksum error, IC: %x, Bin: %x (ret: %d)\n",
 				     chksum, fw->chksum, ret);
 				data->checksum_result = 1;
 				goto fw_check_end;
@@ -1040,10 +1028,7 @@ int ist40xx_auto_bin_update(struct ist40xx_data *data)
 	struct ist40xx_fw *fw = &data->fw;
 #ifdef TCLM_CONCEPT
 	int restore_cal = 0;
-	int skip_firmup = 0;
 	int rc = 0;
-	int len = 1;
-	u32 buff;
 #endif
 
 	if (data->dt_data->fw_bin) {
@@ -1094,116 +1079,17 @@ int ist40xx_auto_bin_update(struct ist40xx_data *data)
 	ret = ist40xx_check_auto_update(data);
 	mutex_unlock(&data->lock);
 
-/* ret < 0 force update */
-#ifdef TCLM_CONCEPT
-	rc = ist40xx_read_sec_info(data, IST40XX_NVM_OFFSET_CAL_COUNT, &buff,
-				   len);
-	if (unlikely(rc)) {
-		input_err(true, &data->client->dev, "sec info read fail\n");
-		data->cal_count = 0;
-	}
-
-	data->cal_count = buff & 0xff;
-	input_info(true, &data->client->dev, "%s : cal_count : %02X\n",
-		   __func__, data->cal_count);
-
-	rc = ist40xx_read_sec_info(data, IST40XX_NVM_OFFSET_TUNE_VERSION, &buff,
-				   len);
-	if (unlikely(rc)) {
-		input_err(true, &data->client->dev, "sec info read fail\n");
-		data->tune_fix_ver = 0;
-	}
-	data->tune_fix_ver = buff;
-	input_info(true, &data->client->dev, "%s : tune_fix_ver : %04X\n",
-		   __func__, data->tune_fix_ver);
-
-	if (likely(ret >= 0)) {
-		skip_firmup = 1;
-	} else {		/* don't firmup case */
-		if ((data->dt_data->afe_base > data->tune_fix_ver) &&
-		    (data->dt_data->tclm_level > TCLM_LEVEL_CLEAR_NV)) {
-			/* tune version up case */
-			ist40xx_tclm_root_of_cal(data, CALPOSITION_TUNEUP);
-			restore_cal = 1;
-		} else if (data->dt_data->tclm_level == TCLM_LEVEL_CLEAR_NV) {
-			/* firmup case */
-			ist40xx_tclm_root_of_cal(data, CALPOSITION_FIRMUP);
-			restore_cal = 1;
-		}
-	}
-
-	/* always check case */
-	if (restore_cal == 0) {
-		if ((data->cal_count == 0) || (data->cal_count == 0xFF)) {
-			input_err(true, &data->client->dev,
-				  "%s: Calcount is abnormal,%02X \n", __func__,
-				  data->cal_count);
-			/* nvm uninitialed case */
-			ist40xx_tclm_root_of_cal(data, CALPOSITION_INITIAL);
-			restore_cal = 1;
-		} else if (data->dt_data->tclm_level == TCLM_LEVEL_EVERYTIME) {
-			/* everytime case */
-			ist40xx_tclm_root_of_cal(data, CALPOSITION_EVERYTIME);
-			restore_cal = 1;
-		}
-	}
-
-	if ((skip_firmup == 1) && (restore_cal == 0)) {
+	/* ret < 0 force update */
+	if (likely(ret >= 0)) { /* don't firmup case */
 		ret = true;
-		goto end_update;
-	} else {
-		input_info(true, &data->client->dev,
-			   "Update version. fw(main, test, core): %x(%x, %x, %x)-> "
-			   "%x(%x, %x, %x)\n", fw->cur.fw_ver, fw->cur.main_ver,
-			   fw->cur.test_ver, fw->cur.core_ver, fw->bin.fw_ver,
-			   fw->bin.main_ver, fw->bin.test_ver,
-			   fw->bin.core_ver);
-
-		mutex_lock(&data->lock);
-		while (retry--) {
-			ret = ist40xx_fw_update(data, fw->buf, fw->buf_size);
-			if (unlikely(!ret))
-				break;
-		}
-		mutex_unlock(&data->lock);
-	}
-
-	if (unlikely(ret)) {
-		ret = false;
-		goto end_update;
-	}
-
-	if (restore_cal == 0) {
-		ist40xx_tclm_root_of_cal(data, CALPOSITION_NONE);
-		ret = true;
-		goto end_update;
-	} else {
-		mutex_lock(&data->lock);
-		ret = ist40xx_execute_tclm_package(data, 0);
-		mutex_unlock(&data->lock);
-		if (ret) {
-			input_info(true, &data->client->dev,
-				   "calibrate successed\n");
-			//ist40xx_tclm_get_nvm_all(data, true);
-			ist40xx_tclm_root_of_cal(data, CALPOSITION_NONE);
-			goto end_update;
-		} else {
-			input_err(true, &data->client->dev,
-				  "calibrate failed\n");
-			goto end_update;
-		}
-	}
-#else
-	if (likely(ret >= 0)) {
-		ret = false;
 		goto end_update;
 	}
 
 	input_info(true, &data->client->dev,
-		   "Update version. fw(main, test, core): %x(%x, %x, %x)-> "
-		   "%x(%x, %x, %x)\n", fw->cur.fw_ver, fw->cur.main_ver,
-		   fw->cur.test_ver, fw->cur.core_ver, fw->bin.fw_ver,
-		   fw->bin.main_ver, fw->bin.test_ver, fw->bin.core_ver);
+			"Update version. fw(main, test, core): %x(%x, %x, %x)-> "
+			"%x(%x, %x, %x)\n", fw->cur.fw_ver, fw->cur.main_ver,
+			fw->cur.test_ver, fw->cur.core_ver, fw->bin.fw_ver,
+			fw->bin.main_ver, fw->bin.test_ver, fw->bin.core_ver);
 
 	mutex_lock(&data->lock);
 	while (retry--) {
@@ -1211,13 +1097,54 @@ int ist40xx_auto_bin_update(struct ist40xx_data *data)
 		if (unlikely(!ret))
 			break;
 	}
+	mutex_unlock(&data->lock);
 
 	if (unlikely(ret)) {
-		mutex_unlock(&data->lock);
 		ret = false;
 		goto end_update;
 	}
 
+	ret = true;
+
+#ifdef TCLM_CONCEPT
+	retry = IST40XX_MAX_RETRY_CNT;
+	while (retry--) {
+		rc = data->tdata->tclm_read(data->client, SEC_TCLM_NVM_ALL_DATA);
+		if (rc >= 0)
+			break;
+	}
+	if (rc < 0) {
+		input_info(true, &data->client->dev, "%s: SEC_TCLM_NVM_ALL_DATA i2c read fail \n", __func__);
+		goto end_update;
+	}
+
+	input_info(true, &data->client->dev, "%s: tune_fix_ver [%04X] afe_base [%04X]\n",
+					__func__, data->tdata->nvdata.tune_fix_ver, data->tdata->afe_base);
+
+	if ((data->tdata->tclm_level > TCLM_LEVEL_CLEAR_NV) &&
+			((data->tdata->nvdata.tune_fix_ver == 0xffff)
+			|| (data->tdata->afe_base > data->tdata->nvdata.tune_fix_ver))) {
+			/* tune version up case */
+		sec_tclm_root_of_cal(data->tdata, CALPOSITION_TUNEUP);
+			restore_cal = 1;
+	} else if (data->tdata->tclm_level == TCLM_LEVEL_CLEAR_NV) {
+		/* firmup case */
+		sec_tclm_root_of_cal(data->tdata, CALPOSITION_FIRMUP);
+		restore_cal = 1;
+	}
+
+	if (restore_cal == 1) {
+		input_err(true, &data->client->dev, "%s: RUN OFFSET CALIBRATION\n", __func__);
+		rc = sec_execute_tclm_package(data->tdata, 0);
+		if (rc < 0) {
+			input_err(true, &data->client->dev, "%s: sec_execute_tclm_package fail\n", __func__);
+		}
+	}
+	sec_tclm_root_of_cal(data->tdata, CALPOSITION_NONE);
+#endif
+
+#ifndef TCLM_CONCEPT
+	mutex_lock(&data->lock);
 	ist40xx_calibrate(data, IST40XX_MAX_RETRY_CNT);
 	mutex_unlock(&data->lock);
 #endif
@@ -1228,7 +1155,6 @@ end_update:
 #endif
 
 #define MAX_FILE_PATH   255
-const u8 fwbuf[IST40XX_ROM_TOTAL_SIZE + sizeof(struct ist40xx_tags)];
 /* sysfs: /sys/class/touch/firmware/firmware */
 ssize_t ist40xx_fw_store(struct device *dev, struct device_attribute *attr,
 			 const char *buf, size_t size)
@@ -1236,6 +1162,7 @@ ssize_t ist40xx_fw_store(struct device *dev, struct device_attribute *attr,
 	int ret;
 	int fw_size = 0;
 	u8 *fw = NULL;
+	u8 *fwbuf = NULL;
 	mm_segment_t old_fs = { 0 };
 	struct file *fp = NULL;
 	long fsize = 0, nread = 0;
@@ -1274,6 +1201,13 @@ ssize_t ist40xx_fw_store(struct device *dev, struct device_attribute *attr,
 		break;
 
 	case MASK_UPDATE_SDCARD:
+		fwbuf = vzalloc(IST40XX_ROM_TOTAL_SIZE + sizeof(struct ist40xx_tags));
+		if (!fwbuf) {
+			data->status.update_result = 1;
+			tsp_info("failed to fwbuf allocate\n");
+			goto err_alloc;
+		}
+
 		old_fs = get_fs();
 		set_fs(get_ds());
 
@@ -1288,7 +1222,7 @@ ssize_t ist40xx_fw_store(struct device *dev, struct device_attribute *attr,
 
 		fsize = fp->f_path.dentry->d_inode->i_size;
 
-		if (sizeof(fwbuf) != fsize) {
+		if ((IST40XX_ROM_TOTAL_SIZE + sizeof(struct ist40xx_tags)) != fsize) {
 			data->status.update_result = 1;
 			tsp_info("mismatch fw size\n");
 			goto err_fw_size;
@@ -1297,7 +1231,7 @@ ssize_t ist40xx_fw_store(struct device *dev, struct device_attribute *attr,
 		nread = vfs_read(fp, (char __user *)fwbuf, fsize, &fp->f_pos);
 		if (nread != fsize) {
 			data->status.update_result = 1;
-			tsp_info("mismatch fw size\n");
+			tsp_info("mismatch fw size2\n");
 			goto err_fw_size;
 		}
 
@@ -1339,9 +1273,9 @@ ssize_t ist40xx_fw_store(struct device *dev, struct device_attribute *attr,
 		ist40xx_print_info(data);
 #ifdef TCLM_CONCEPT
 		if (calib) {
-			ist40xx_tclm_root_of_cal(data, CALPOSITION_TESTMODE);
-			ist40xx_execute_tclm_package(data, 0);
-			ist40xx_tclm_root_of_cal(data, CALPOSITION_NONE);
+			sec_tclm_root_of_cal(data->tdata, CALPOSITION_TESTMODE);
+			sec_execute_tclm_package(data->tdata, 0);
+			sec_tclm_root_of_cal(data->tdata, CALPOSITION_NONE);
 		}
 #else
 		if (calib)
@@ -1363,6 +1297,10 @@ err_file_open:
 		set_fs(old_fs);
 	}
 
+	if (fwbuf)
+		vfree(fwbuf);
+err_alloc:
+
 	return size;
 }
 
@@ -1373,9 +1311,17 @@ ssize_t ist40xx_fw_sdcard_show(struct device *dev,
 	int ret = 0;
 	mm_segment_t old_fs = { 0 };
 	struct file *fp = NULL;
+	u8 *fwbuf = NULL;
 	long fsize = 0, nread = 0;
 	char fw_path[MAX_FILE_PATH];
 	struct ist40xx_data *data = dev_get_drvdata(dev);
+
+	fwbuf = vzalloc(IST40XX_ROM_TOTAL_SIZE + sizeof(struct ist40xx_tags));
+	if (!fwbuf) {
+		data->status.update_result = 1;
+		tsp_info("failed to fwbuf allocate\n");
+		goto err_alloc;
+	}
 
 	old_fs = get_fs();
 	set_fs(get_ds());
@@ -1390,7 +1336,7 @@ ssize_t ist40xx_fw_sdcard_show(struct device *dev,
 
 	fsize = fp->f_path.dentry->d_inode->i_size;
 
-	if (sizeof(fwbuf) != fsize) {
+	if ((IST40XX_ROM_TOTAL_SIZE + sizeof(struct ist40xx_tags)) != fsize) {
 		data->status.update_result = 1;
 		tsp_info("mismatch fw size\n");
 		goto err_fw_size;
@@ -1399,7 +1345,7 @@ ssize_t ist40xx_fw_sdcard_show(struct device *dev,
 	nread = vfs_read(fp, (char __user *)fwbuf, fsize, &fp->f_pos);
 	if (nread != fsize) {
 		data->status.update_result = 1;
-		tsp_info("mismatch fw size\n");
+		tsp_info("mismatch fw size2\n");
 		goto err_fw_size;
 	}
 
@@ -1425,6 +1371,8 @@ err_fw_size:
 	filp_close(fp, NULL);
 err_file_open:
 	set_fs(old_fs);
+	vfree(fwbuf);
+err_alloc:
 
 	return 0;
 }

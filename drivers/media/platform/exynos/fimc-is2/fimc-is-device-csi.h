@@ -142,6 +142,7 @@ struct fimc_is_device_csi_dma {
 	atomic_t			rcount; /* CSI open count check */
 
 	spinlock_t			barrier;
+	bool				use_split;
 };
 
 int __must_check fimc_is_csi_dma_probe(struct fimc_is_device_csi_dma *csi_dma, struct platform_device *pdev);

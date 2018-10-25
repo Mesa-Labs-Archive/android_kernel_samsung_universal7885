@@ -30,6 +30,8 @@ extern int cod3035x_jack_mic_register(struct snd_soc_codec *codec);
 #define AVC_MODE		3
 
 #define MODEL_FLAG_EP_DC_OFFSET_SWEEP	0x01
+#define MODEL_FLAG_LDET_VTH_ENABLE		0x02
+#define MODEL_FLAG_5PIN_JACK			0x04
 
 #define COD3035X_OTP_MAX_REG		0x0f
 #define COD3035X_MAX_REGISTER		0xf6
@@ -61,6 +63,7 @@ struct cod3035x_jack_det {
 	bool water_det;
 	bool button_det;
 #ifdef CONFIG_SND_SOC_COD30XX_EXT_ANT
+	int prev_jack_det_status;
 	bool ant_det;
 	bool ant_irq;
 #endif
@@ -105,6 +108,7 @@ struct cod3035x_priv {
 	bool is_lassenA;
 	struct cod3035x_jack_det jack_det;
 	struct mutex jackdet_lock;
+	struct mutex reset_lock;
 	struct switch_dev sdev;
 	struct completion initialize_complete;
 	int irq_val[10];
@@ -153,6 +157,10 @@ struct cod3035x_priv {
 	unsigned int model_feature_flag;
 
 #ifdef CONFIG_SND_SOC_COD30XX_EXT_ANT
+	struct delayed_work jack_report_work;
+	struct workqueue_struct *jack_report_wq;
+
+	struct mutex jackreport_lock;
 	struct wake_lock jack_wake_lock;
 #endif
 };
@@ -1523,6 +1531,16 @@ struct cod3035x_priv {
 #define CTRV_LDET_VTH_SHIFT		0
 #define CTRV_LDET_VTH_WIDTH		2
 #define CTRV_LDET_VTH_MASK		MASK(CTRV_LDET_VTH_WIDTH, CTRV_LDET_VTH_SHIFT)
+
+/* COD3035X_84_CTR_POP1 */
+#define CTRV_LDET_VTH_SHIFT		0
+#define CTRV_LDET_VTH_WIDTH		2
+#define CTRV_LDET_VTH_MASK		MASK(CTRV_LDET_VTH_WIDTH, CTRV_LDET_VTH_SHIFT)
+
+#define CTRV_LDET_VTH_1636		0
+#define CTRV_LDET_VTH_1565		1
+#define CTRV_LDET_VTH_1241		2
+#define CTRV_LDET_VTH_0900		3
 
 /* COD3035X_85_CTR_POP */
 #define T_CTRV_GDET_POP_SHIFT	7

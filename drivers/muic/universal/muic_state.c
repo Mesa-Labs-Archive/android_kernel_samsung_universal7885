@@ -604,7 +604,7 @@ void muic_detect_dev(muic_data_t *pmuic, int irq)
 	if (new_dev == ATTACHED_DEV_USB_MUIC && pmuic->is_dcdtmr_intr) {
 		new_dev = ATTACHED_DEV_TIMEOUT_OPEN_MUIC;
 	}
-	if (pmuic->opmode & OPMODE_CCIC) {
+	if (!pmuic->is_hiccup_mode && pmuic->opmode & OPMODE_CCIC) {
 		if (irq > 0) {
 			if (!mdev_continue_for_TA_USB(pmuic, new_dev))
 				return;

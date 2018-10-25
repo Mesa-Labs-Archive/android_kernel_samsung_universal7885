@@ -2239,8 +2239,6 @@ int fimc_is_load_bin(void)
 		return ret;
 	}
 
-	spin_lock_init(&lib->slock_debug);
-
 	fimc_is_load_ctrl_lock();
 #ifdef USE_TZ_CONTROLLED_MEM_ATTRIBUTE
 	ret = fimc_is_load_ddk_bin(BINARY_LOAD_DATA);
@@ -2284,8 +2282,6 @@ int fimc_is_load_bin(void)
 	}
 	dbg_lib(3, "lib_support_init success!!\n");
 
-	spin_lock_init(&svc_slock);
-
 	lib->binary_load_flg = true;
 
 	if (lib->minfo->pb_lib)
@@ -2322,7 +2318,12 @@ void fimc_is_load_ctrl_unlock(void)
 
 int fimc_is_load_bin_on_boot(void)
 {
+	struct fimc_is_lib_support *lib = &gPtr_lib_support;
 	int ret;
+
+	spin_lock_init(&svc_slock);
+
+	spin_lock_init(&lib->slock_debug);
 
 	ret = fimc_is_load_ddk_bin(BINARY_LOAD_ALL);
 	if (ret) {

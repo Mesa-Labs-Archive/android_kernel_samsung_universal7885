@@ -17,6 +17,7 @@
 
 #define CAMERA_REAR2               /* Support Rear2 for Dual Camera */
 #define CAMERA_REAR2_SR556
+#define CAMERA_REAR2_USE_COMMON_EEP /* For case that use 1 EEPROM for DUAL*/
 
 #define SAMSUNG_LIVE_OUTFOCUS /* Allocate memory For Dual Camera */
 
@@ -35,5 +36,11 @@
 #define CSI_SCENARIO_SEN_REAR	(0) /* This value follows dtsi */
 #define CSI_SCENARIO_SEN_FRONT	(1)
 #endif
+
+/* this define should be used after A7 2018  */
+#define USE_AI_CAMERA_INTERFACE     (0)
+#define USE_MFHDR_CAMERA_INTERFACE  (0)
+
+//#define USE_FACE_UNLOCK_AE_AWB_INIT /* for Face Unlock */
 
 #endif /* FIMC_IS_VENDOR_CONFIG_J7DUO_H */

@@ -30,6 +30,10 @@
 #define PANEL_STATE_RESUMED		1
 #define PANEL_STATE_SUSPENDING		2
 
+#ifdef CONFIG_DISPLAY_USE_INFO
+#include "dpui.h"
+#endif
+
 #define HX8876_ID_REG			0x04	/* LCD ID1,ID2,ID3 */
 #define HX8876_ID_LEN			3
 
@@ -85,14 +89,15 @@ struct lcd_info {
 	struct i2c_client		*blic_2;
 	struct i2c_client		*bridge;
 
+	struct u8			*dft_bridge_param;
 	struct dentry			*debug_root;
 	struct bridge_trace		b_first;
 	struct bridge_trace		b_lcdon;
 };
 
-static int sn65dsi86_wait(struct i2c_client *client, u8 command, u8 mask, u32 timeout_ms)
+static int sn65dsi86_wait(struct i2c_client *client, u8 command, u8 value, u8 mask, u32 timeout_ms)
 {
-	u32 i, cnt = timeout_ms / 10;
+	u32 i, cnt = timeout_ms;
 	int ret = 0;
 	struct lcd_info *lcd = i2c_get_clientdata(client);
 
@@ -104,18 +109,21 @@ static int sn65dsi86_wait(struct i2c_client *client, u8 command, u8 mask, u32 ti
 	for (i = 0; i < cnt; i++) {
 		ret = i2c_smbus_read_byte_data(client, command);
 		if (ret < 0) {
-			dev_info(&lcd->ld->dev, "%s: fail. %2x, %2x, cnt: %3d, %d\n", __func__, command, mask, i, ret);
+			dev_info(&lcd->ld->dev, "%s: fail. %2x, %2x, cnt: %3d, %d\n", __func__, command, value, i, ret);
 			break;
-		} else if (ret & mask) {
-			dev_info(&lcd->ld->dev, "%s: pass. %2x, %2x, cnt: %3d, %x\n", __func__, command, mask, i, ret);
+		} else if (mask && (ret & value)) {
+			dev_info(&lcd->ld->dev, "%s: pass. %2x, %2x, cnt: %3d, %x\n", __func__, command, value, i, ret);
+			break;
+		} else if (ret == value) {
+			/* dev_info(&lcd->ld->dev, "%s: pass. %2x, %2x, cnt: %3d, %x\n", __func__, command, value, i, ret); */
 			break;
 		}
 
-		usleep_range(10000, 11000);
+		usleep_range(1000, 1100);
 	}
 
 	if (i >= cnt) {
-		dev_info(&lcd->ld->dev, "%s: pass. %2x, %2x, cnt: %3d, %x, timeout(%d)\n", __func__, command, mask, i, ret, timeout_ms);
+		dev_info(&lcd->ld->dev, "%s: pass. %2x, %2x, cnt: %3d, %x, timeout(%d)\n", __func__, command, value, i, ret, timeout_ms);
 		ret = -EPERM;
 	}
 
@@ -147,12 +155,16 @@ static int sn65dsi86_array_write(struct i2c_client *client, u8 *ptr, u8 len)
 		if (type == 0xFF)
 			(command < 20) ? mdelay(command) : msleep(command);
 		else if (type == 0xFE)
-			ret = sn65dsi86_wait(client, command, value, 1000);
+			ret = sn65dsi86_wait(client, command, value, 1, 255);
+		else if (type == 0xFD)
+			ret = sn65dsi86_wait(client, command, value, 0, 255);
 		else
 			ret = i2c_smbus_write_byte_data(client, command, value);
 
-		if (ret < 0)
+		if (ret < 0) {
 			dev_err(&lcd->ld->dev, "%s: fail. %2x, %2x, %d\n", __func__, command, value, ret);
+			break;
+		}
 	}
 
 	return ret;
@@ -180,8 +192,10 @@ static int lp8558_array_write(struct i2c_client *client, u8 *ptr, u8 len)
 		value = ptr[i + 1];
 
 		ret = i2c_smbus_write_byte_data(client, ptr[i], ptr[i + 1]);
-		if (ret < 0)
+		if (ret < 0) {
 			dev_err(&lcd->ld->dev, "%s: fail. %2x, %2x, %d\n", __func__, ptr[i], ptr[i + 1], ret);
+			break;
+		}
 	}
 
 	return ret;
@@ -197,7 +211,7 @@ static int sn65dsi86_dpcd_tx(struct i2c_client *client, u32 addr, u8 value)
 		0x23, 0x77, 0x01,	/* AUX_LENGTH */
 		0x23, 0x64, 0x00,	/* AUX_WDATA0 */
 		0x23, 0x78, AUX_CMD_NATIVE_AUX_W << 4 | BIT(0),	/* AUX_CMD, SEND */
-		0xFF, 0x00, 0x00,	/* DELAY should be removed */
+		0xFD, 0x78, AUX_CMD_NATIVE_AUX_W << 4,		/* AUX_CMD, check SEND bit */
 	};
 	u8 addr_msb, addr_lsb;
 	int ret = 0;
@@ -225,7 +239,7 @@ static int sn65dsi86_dpcd_rx(struct i2c_client *client, u32 addr)
 		0x23, 0x76, 0x00,	/* AUX_ADDR[7:0] */
 		0x23, 0x77, 0x01,	/* AUX_LENGTH */
 		0x23, 0x78, AUX_CMD_NATIVE_AUX_R << 4 | BIT(0),	/* AUX_CMD, SEND */
-		0xFF, 0x00, 0x00,	/* DELAY should be removed */
+		0xFD, 0x78, AUX_CMD_NATIVE_AUX_R << 4,		/* AUX_CMD, check SEND bit */
 	};
 	u8 addr_msb, addr_lsb;
 	int ret = 0;
@@ -239,8 +253,6 @@ static int sn65dsi86_dpcd_rx(struct i2c_client *client, u32 addr)
 	ret = sn65dsi86_array_write(client, dpcd_param, ARRAY_SIZE(dpcd_param));
 	if (ret < 0)
 		dev_info(&lcd->ld->dev, "%s: %x, i2c_tx errno: %d\n", __func__, addr, ret);
-
-	sn65dsi86_wait(client, 0x78, BIT(0), 10);
 
 	ret = i2c_smbus_read_byte_data(client, 0x79);	/* AUX_RDATA0 */
 	if (ret < 0)
@@ -486,6 +498,32 @@ static void sn65dsi86_dump(struct lcd_info *lcd, struct seq_file *m)
 	sn65dsi86_abd_save_log(lcd, &lcd->b_lcdon, rx_dump, 1);
 }
 
+static void sn65dsi86_check_lt_fail(struct lcd_info *lcd)
+{
+	int rx_val = 0;
+
+/*	[0xF8 register info]
+ *	bit 0 : LT_PASS
+ *	bit 1 : LP_FAIL
+ */
+
+	if (!lcd->id_info.value)
+		return;
+
+	rx_val = i2c_smbus_read_byte_data(lcd->bridge, 0xF8);
+
+	if (rx_val < 0) {
+		dev_err(&lcd->ld->dev, "%s: read fail. [0x%02x]\n", __func__, rx_val);
+		return;
+	}
+
+
+	if (rx_val & 0x02) {
+		inc_dpui_u32_field(DPUI_KEY_PNSDRE, 1);
+		dev_err(&lcd->ld->dev, "%s: LT_FAIL [0x%02x]\n", __func__, rx_val);
+	}
+}
+
 static int sn65dsi86_hx8876_displayon_late(struct lcd_info *lcd)
 {
 	int ret = 0;
@@ -495,6 +533,8 @@ static int sn65dsi86_hx8876_displayon_late(struct lcd_info *lcd)
 	dsim_panel_set_brightness(lcd, 1);
 
 	sn65dsi86_dump(lcd, NULL);
+
+	sn65dsi86_check_lt_fail(lcd);
 
 	return ret;
 }
@@ -730,6 +770,8 @@ static int sn65dsi86_hx8876_probe(struct lcd_info *lcd)
 	sn65dsi86_abd_register(lcd);
 	sn65dsi86_dump(lcd, NULL);
 
+	lcd->dft_bridge_param = kmemdup(sn65dsi86_param, sizeof(sn65dsi86_param), GFP_KERNEL);
+
 	dev_info(&lcd->ld->dev, "- %s\n", __func__);
 
 	return 0;
@@ -769,14 +811,111 @@ static ssize_t bridge_dump_show(struct device *dev,
 	return strlen(buf);
 }
 
+static ssize_t bridge_param_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	int i;
+	struct seq_file m = {
+		.buf = buf,
+		.size = PAGE_SIZE - 1,
+	};
+
+	seq_printf(&m, "--|  0|  1|  2|\n");
+	seq_printf(&m, "---------------\n");
+
+	for (i = 0; i < ARRAY_SIZE(sn65dsi86_param); i += 3) {
+		seq_printf(&m, "%2d| %2x| %2x| %2x|\n", (i / 3), sn65dsi86_param[i + 0], sn65dsi86_param[i + 1], sn65dsi86_param[i + 2]);
+	}
+
+	seq_puts(&m, "\n");
+	seq_puts(&m, "# cd /sys/class/lcd/panel\n");
+	seq_puts(&m, "# echo col row val > bridge_param\n");
+
+	return strlen(buf);
+}
+
+static ssize_t bridge_param_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct lcd_info *lcd = dev_get_drvdata(dev);
+	int ret = 0;
+	int w = 0, h = 0, val = 0, idx = 0;
+
+	ret = sscanf(buf, "%8d %8d %8x", &w, &h, &val);
+
+	idx = h * 3 + w;
+
+	dev_info(&lcd->ld->dev, "%s: col: %d, row: %d, val: %x, ret: %d, idx: %d\n", __func__, w, h, val, ret, idx);
+
+	if (ret == 1 && w == 0) {
+		dev_info(&lcd->ld->dev, "%s: input is 0(zero). reset bridge param to default\n", __func__);
+		memcpy(sn65dsi86_param, lcd->dft_bridge_param, sizeof(sn65dsi86_param));
+		goto exit;
+	} else if (ret != 3) {
+		dev_info(&lcd->ld->dev, "%s: invalid input: ret: %d\n", __func__, ret);
+		goto exit;
+	}
+
+	if (idx >= ARRAY_SIZE(sn65dsi86_param)) {
+		dev_info(&lcd->ld->dev, "%s: invalid input: idx: %d\n", __func__, idx);
+		goto exit;
+	} else if (val > U8_MAX) {
+		dev_info(&lcd->ld->dev, "%s: invalid input: val: %d\n", __func__, val);
+		goto exit;
+	}
+
+	sn65dsi86_param[idx] = val;
+
+exit:
+	return count;
+}
+
+#ifdef CONFIG_DISPLAY_USE_INFO
+/*
+ * HW PARAM LOGGING SYSFS NODE
+ */
+static ssize_t dpui_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	int ret;
+
+	update_dpui_log(DPUI_LOG_LEVEL_INFO, DPUI_TYPE_PANEL);
+	ret = get_dpui_log(buf, DPUI_LOG_LEVEL_INFO, DPUI_TYPE_PANEL);
+	if (ret < 0) {
+		pr_err("%s failed to get log %d\n", __func__, ret);
+		return ret;
+	}
+
+	pr_info("%s\n", buf);
+
+	return ret;
+}
+
+static ssize_t dpui_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	if (buf[0] == 'C' || buf[0] == 'c')
+		clear_dpui_log(DPUI_LOG_LEVEL_INFO, DPUI_TYPE_PANEL);
+
+	return size;
+}
+
+static DEVICE_ATTR(dpui, 0660, dpui_show, dpui_store);
+#endif
+
 static DEVICE_ATTR(lcd_type, 0444, lcd_type_show, NULL);
 static DEVICE_ATTR(window_type, 0444, window_type_show, NULL);
 static DEVICE_ATTR(bridge_dump, 0444, bridge_dump_show, NULL);
+static DEVICE_ATTR(bridge_param, 0644, bridge_param_show, bridge_param_store);
 
 static struct attribute *lcd_sysfs_attributes[] = {
 	&dev_attr_lcd_type.attr,
 	&dev_attr_window_type.attr,
 	&dev_attr_bridge_dump.attr,
+#ifdef CONFIG_DISPLAY_USE_INFO
+	&dev_attr_dpui.attr,
+#endif
+	&dev_attr_bridge_param.attr,
 	NULL,
 };
 

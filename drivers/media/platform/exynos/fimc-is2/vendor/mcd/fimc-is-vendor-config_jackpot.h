@@ -39,4 +39,8 @@
 #define CSI_SCENARIO_SEN_FRONT	(1)
 #endif
 
+/* this define should be used after A7 2018  */
+#define USE_AI_CAMERA_INTERFACE     (0)
+#define USE_MFHDR_CAMERA_INTERFACE  (0)
+
 #endif /* FIMC_IS_VENDOR_CONFIG_JACKPOT_H */

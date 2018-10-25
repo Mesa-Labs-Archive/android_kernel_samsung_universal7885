@@ -72,6 +72,11 @@ config LCD_HMT
 	depends on EXYNOS_DECON_7885
 	default n
 
+config LOGGING_BIGDATA_BUG
+	bool "Logging extra information when decon bug"
+	depends on EXYNOS_DECON_7885
+	default n
+
 endif
 
 source "drivers/video/fbdev/exynos/dpu_7885/panels/Kconfig"

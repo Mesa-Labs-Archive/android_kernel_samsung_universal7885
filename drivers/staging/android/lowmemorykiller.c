@@ -210,6 +210,7 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 			     cache_size, cache_limit,
 			     min_score_adj,
 			     free);
+		show_mem_extra_call_notifiers();
 		lowmem_deathpending_timeout = jiffies + HZ;
 		rem += selected_tasksize;
 		lowmem_lmkcount++;
