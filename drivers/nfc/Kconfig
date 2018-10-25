@@ -12,6 +12,15 @@ config NFC_PN533
 
 	  Say Y here to compile support for PN533 devices into the
 	  kernel or say M to compile it as module (pn533).
+	  
+config NFC_PN547 
+	bool "NXP PN547 Controller"
+	default n
+	help
+	  NXP PN547 Near Field Communication controller support.
+	  This option enables device driver support for the NFC.
+	  It is used by many services. NFC is fully controlled using I2C
+	  to communicate the AP chip.
 
 config NFC_WILINK
 	tristate "Texas Instruments NFC WiLink driver"

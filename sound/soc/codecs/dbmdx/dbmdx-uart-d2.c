@@ -76,8 +76,9 @@ static int dbmd2_uart_prepare_boot(struct dbmdx_private *p)
 		__func__, uart_p->boot_baud_rate);
 
 	/* Send init sequence for up to 100ms at 115200baud.
-	* 1 start bit, 8 data bits, 1 parity bit, 2 stop bits = 12 bits
-	* FIXME: make sure it is multiple of 8 */
+	 * 1 start bit, 8 data bits, 1 parity bit, 2 stop bits = 12 bits
+	 * FIXME: make sure it is multiple of 8
+	 */
 	uart_p->boot_lock_buffer_size = ((uart_p->boot_baud_rate / 12) *
 			UART_SYNC_LENGTH) / 1000;
 
@@ -101,12 +102,8 @@ static int dbmd2_uart_sync(struct dbmdx_private *p)
 	dev_info(p->dev, "%s: start boot sync\n", __func__);
 
 	buf = kzalloc(size, GFP_KERNEL);
-	if (!buf) {
-		dev_err(p->dev,
-				"%s: failure: no memory for sync buffer\n",
-				__func__);
+	if (!buf)
 		return -ENOMEM;
-	}
 
 	for (i = 0; i < size; i += 8) {
 		buf[i]   = 0x00;
@@ -172,7 +169,7 @@ static int dbmd2_uart_reset(struct dbmdx_private *p)
 			uart_p->boot_stop_bits,
 			uart_p->boot_parity,
 			0);
-		return -1;
+		return -EIO;
 	}
 
 	uart_flush_rx_fifo(uart_p);
@@ -260,11 +257,11 @@ static int dbmd2_uart_load_firmware(const void *fw_data, size_t fw_size,
 
 		/* search proper sbl image */
 		sbl_len = dbmd2_uart_sbl_search(p,  p->clk_type);
-		if (0 > sbl_len) {
+		if (sbl_len < 0) {
 			dev_err(p->dev,
 				"%s: ---------> can not find proper sbl img\n",
 				__func__);
-			return -1;
+			return -EIO;
 		}
 
 		/* send SBL */
@@ -272,7 +269,7 @@ static int dbmd2_uart_load_firmware(const void *fw_data, size_t fw_size,
 		if (ret != sbl_len) {
 			dev_err(p->dev, "%s: ---------> load sbl error\n",
 				__func__);
-			return -1;
+			return -EIO;
 		}
 
 		/* check if SBL is ok */
@@ -280,7 +277,7 @@ static int dbmd2_uart_load_firmware(const void *fw_data, size_t fw_size,
 		if (ret != 0) {
 			dev_err(p->dev,
 				"%s: sbl does not respond with ok\n", __func__);
-			return -1;
+			return -EIO;
 		}
 	}
 
@@ -290,7 +287,7 @@ static int dbmd2_uart_load_firmware(const void *fw_data, size_t fw_size,
 	if (ret) {
 		dev_err(p->dev, "%s: failed to send change speed command\n",
 			__func__);
-		return -1;
+		return -EIO;
 	}
 	/* verify chip id */
 	if (p->cur_boot_options & DBMDX_BOOT_OPT_VERIFY_CHIP_ID) {
@@ -298,7 +295,7 @@ static int dbmd2_uart_load_firmware(const void *fw_data, size_t fw_size,
 		if (ret < 0) {
 			dev_err(p->dev, "%s: couldn't verify chip id\n",
 					__func__);
-			return -1;
+			return -EIO;
 		}
 	}
 
@@ -307,7 +304,7 @@ static int dbmd2_uart_load_firmware(const void *fw_data, size_t fw_size,
 		ret = uart_write_data(p, clr_crc, sizeof(clr_crc));
 		if (ret != sizeof(clr_crc)) {
 			dev_err(p->dev, "%s: failed to clear CRC\n", __func__);
-			return -1;
+			return -EIO;
 		}
 	}
 
@@ -316,7 +313,7 @@ static int dbmd2_uart_load_firmware(const void *fw_data, size_t fw_size,
 	if (ret != (fw_size - 4)) {
 		dev_err(p->dev, "%s: -----------> load firmware error\n",
 			__func__);
-		return -1;
+		return -EIO;
 	}
 	/* verify checksum */
 	if (checksum && !(p->cur_boot_options &
@@ -327,7 +324,7 @@ static int dbmd2_uart_load_firmware(const void *fw_data, size_t fw_size,
 			dev_err(uart_p->dev,
 				"%s: could not verify checksum\n",
 				__func__);
-			return -1;
+			return -EIO;
 		}
 	}
 
@@ -434,7 +431,7 @@ static int dbmd2_uart_boot(const void *fw_data, size_t fw_size,
 	if (fw_load_retry <= 0) {
 		dev_err(p->dev, "%s: exceeded max attepmts to load fw\n",
 				__func__);
-		return -1;
+		return -EIO;
 	}
 
 	return 0;

@@ -60,6 +60,10 @@ static void fc8180_data(HANDLE handle, u8 buf_int_status)
 		bbm_word_read(handle, BBM_BUF_AC_THR, &size);
 		size += 1;
 
+		if (size > (AC_BUF_SIZE / 2))
+			print_log(0, "[FC8180] AC Data Size error [%d]\n", size);	
+
+		size = (AC_BUF_SIZE / 2);
 		bbm_data(handle, BBM_AC_DATA, &ac_buf[0], size);
 
 		if (fc8180_ac_callback)

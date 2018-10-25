@@ -68,6 +68,8 @@ static const char *mode_to_str(enum s2mu004_muic_mode n)
 	ENUM_STR(S2MU004_MUIC_DETACH);
 	ENUM_STR(S2MU004_MUIC_OTG);
 	ENUM_STR(S2MU004_MUIC_JIG);
+	default:
+		return "invalid";
 	}
 	return "invalid";
 }

@@ -344,9 +344,9 @@ int fimc_is_hw_ischain_cfg(void *ischain_data)
 	case 0:
 	case 1:
 	case 2:
+	case 3:
 		is_val = fimc_is_hw_set_field_value(is_val, &sysreg_is_fields[field_index], csi->instance);
 		break;
-	case 3:
 	default:
 		break;
 	}

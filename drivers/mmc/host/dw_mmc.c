@@ -3614,6 +3614,15 @@ static void dw_mci_cmdq_transferred_cnt(struct mmc_host *mmc, struct mmc_request
 	host->transferred_cnt += mrq->cmdq_req->data.blksz
 		* mrq->cmdq_req->data.blocks;
 }
+
+static void dw_mci_cmdq_resume_skip(struct mmc_host *mmc)
+{
+	struct dw_mci_slot *slot = mmc_priv(mmc);
+	struct dw_mci *host = slot->host;
+
+	dw_mci_ctrl_reset(host, SDMMC_CTRL_ALL_RESET_FLAGS);
+}
+
 #else
 
 static int dw_mci_cmdq_core_reset(struct mmc_host *mmc)
@@ -3701,6 +3710,7 @@ static const struct cmdq_host_ops dw_mci_cmdq_ops = {
 	.pm_qos_lock = dw_mci_cmdq_pm_qos_lock,
 	.reset = dw_mci_cmdq_core_reset,
 	.transferred_cnt = dw_mci_cmdq_transferred_cnt,
+	.resume_skip = dw_mci_cmdq_resume_skip,
 };
 
 static int dw_mci_init_slot(struct dw_mci *host, unsigned int id, struct platform_device *pdev)
@@ -4593,9 +4603,14 @@ int dw_mci_probe(struct dw_mci *host, struct platform_device *pdev)
 	 */
 	mci_writel(host, RINTSTS, 0xFFFFFFFF);
 
-	mci_writel(host, INTMASK, SDMMC_INT_CMD_DONE | SDMMC_INT_DATA_OVER |
-			SDMMC_INT_TXDR | SDMMC_INT_RXDR |
-			DW_MCI_ERROR_FLAGS);
+	if (host->use_dma)
+		mci_writel(host, INTMASK, SDMMC_INT_CMD_DONE | SDMMC_INT_DATA_OVER |
+				DW_MCI_ERROR_FLAGS);
+	else
+		mci_writel(host, INTMASK, SDMMC_INT_CMD_DONE | SDMMC_INT_DATA_OVER |
+				SDMMC_INT_TXDR | SDMMC_INT_RXDR |
+				DW_MCI_ERROR_FLAGS);
+
 	/* Enable mci interrupt */
 	mci_writel(host, CTRL, SDMMC_CTRL_INT_ENABLE);
 
@@ -4768,9 +4783,14 @@ int dw_mci_resume(struct dw_mci *host)
 	mci_writel(host, TMOUT, 0xFFFFFFFF);
 
 	mci_writel(host, RINTSTS, 0xFFFFFFFF);
-	mci_writel(host, INTMASK, SDMMC_INT_CMD_DONE | SDMMC_INT_DATA_OVER |
-			SDMMC_INT_TXDR | SDMMC_INT_RXDR |
-			DW_MCI_ERROR_FLAGS);
+
+	if (host->use_dma)
+		mci_writel(host, INTMASK, SDMMC_INT_CMD_DONE | SDMMC_INT_DATA_OVER |
+				DW_MCI_ERROR_FLAGS);
+	else
+		mci_writel(host, INTMASK, SDMMC_INT_CMD_DONE | SDMMC_INT_DATA_OVER |
+				SDMMC_INT_TXDR | SDMMC_INT_RXDR |
+				DW_MCI_ERROR_FLAGS);
 
 	mci_writel(host, CTRL, SDMMC_CTRL_INT_ENABLE);
 

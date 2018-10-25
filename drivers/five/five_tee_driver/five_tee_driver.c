@@ -19,8 +19,10 @@
 #include <linux/slab.h>
 #include <linux/kthread.h>
 #include <five_tee_driver.h>
+#include <linux/task_integrity.h>
 #include "tee_client_api.h"
 #include "five_ta_uuid.h"
+#include "../../../security/integrity/five/five_audit.h"
 
 #ifdef CONFIG_TEE_DRIVER_DEBUG
 #include <linux/uaccess.h>
@@ -88,7 +90,7 @@ static int initialize_trusted_app(void)
 	wait_for_completion(&ta_loaded);
 	ret = kthread_stop(tsk);
 	is_initialized = ret == 0 ? 1 : 0;
-	pr_info("FIVE: Initialized trusted app ret: %d\n", ret);
+	pr_info("FIVE: Initialize trusted app ret: %d\n", ret);
 
 	return ret;
 }
@@ -178,8 +180,17 @@ static int send_cmd(unsigned int cmd,
 
 	mutex_unlock(&itee_driver_lock);
 
-	if (rc == TEEC_SUCCESS && origin != TEEC_ORIGIN_TRUSTED_APP)
-		rc = -EIO;
+	if (rc == TEEC_SUCCESS) {
+		if (origin != TEEC_ORIGIN_TRUSTED_APP) {
+			rc = -EIO;
+			five_audit_tee_msg("send_cmd",
+				"TEEC_InvokeCommand is failed", rc, origin);
+		}
+	} else {
+		five_audit_tee_msg("send_cmd", "TEEC_InvokeCommand is failed.",
+								 rc, origin);
+	}
+
 
 	if (rc == TEEC_SUCCESS && cmd == CMD_SIGN) {
 		memcpy(signature, msg->signature, sig_len);
@@ -257,7 +268,8 @@ static int load_trusted_app(void)
 
 	rc = TEEC_InitializeContext(NULL, context);
 	if (rc) {
-		pr_err("FIVE: Can't initialize context rc=0x%x\n", rc);
+		five_audit_tee_msg("load_trusted_app", "Can't initialize context",
+									rc, 0);
 		goto error;
 	}
 
@@ -270,8 +282,8 @@ static int load_trusted_app(void)
 	rc = TEEC_OpenSession(context, session,
 				&five_ta_uuid, 0, NULL, NULL, &origin);
 	if (rc) {
-		pr_err("FIVE: Can't open session rc=0x%x origin=0x%x\n",
-				rc, origin);
+		five_audit_tee_msg("load_trusted_app", "Can't open session",
+								rc, origin);
 		goto error;
 	}
 
@@ -391,9 +403,27 @@ static inline int __init init_fs(void)
 
 static int __init tee_driver_init(void)
 {
+	int rc = 0;
 	mutex_init(&itee_driver_lock);
-	register_tee_driver();
-	return init_fs();
+
+#ifdef CONFIG_FIVE_EARLY_LOAD_TRUSTED_APP
+	rc = load_trusted_app();
+	pr_info("FIVE: Initialize trusted app in early boot ret: %d\n", rc);
+#endif
+
+	rc = register_tee_driver();
+	if (rc) {
+		pr_err("FIVE: Can't register tee_driver\n");
+		goto out;
+	}
+	rc = init_fs();
+	if (rc) {
+		pr_err("FIVE: Can't initialize debug FS\n");
+		goto out;
+	}
+
+out:
+	return rc;
 }
 
 static void __exit tee_driver_exit(void)

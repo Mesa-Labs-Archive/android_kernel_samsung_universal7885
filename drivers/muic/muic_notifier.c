@@ -181,7 +181,10 @@ static int muic_notifier_notify(void)
 	else
 		send_muic_cable_intent(0);
 #else
-	send_muic_cable_intent(muic_notifier.attached_dev);
+	if (muic_notifier.cmd != 0)
+		send_muic_cable_intent(muic_notifier.attached_dev);
+	else
+		send_muic_cable_intent(0);
 #endif	/* CONFIG_MUIC_SUPPORT_CCIC */
 #endif	/* CONFIG_SEC_FACTORY */
 

@@ -64,6 +64,16 @@ config BATTERY_AGE_FORECAST_DETACHABLE
 	 are calculated based on the RIL time to give an estimate
 	 on weeks that the battery has been used to determine aging.
 
+config FUELGAUGE_ASOC_FROM_CYCLES
+	bool "FUELGAUGE ASOC output based on mapping with battery cycles"
+	default n
+	depends on BATTERY_AGE_FORECAST
+	help
+	 Say Y to enable support for the mapping of ASOC with charging cycles.
+	 Support for this feature implies that a mapping table has been shared
+	 from HW team and big data side. This feature is providing
+	 support for platform required battery health monitoring concepts.
+
 config MULTI_CHARGING
 	bool "support for multi charger ICs"
 	help
@@ -100,6 +110,17 @@ config BATTERY_CISD
 	help
 	 Say Y to include support for cisd
 	 cisd means cell internal short detection
+
+config FG_FULLCAP_FROM_BATTERY
+	bool "support Fuelgauge FULLCAP measurment concept via battery driver"
+	default n
+	depends on BATTERY_CISD
+	help
+	 Say Y to enable support for Fuelgauge (FG) FULLCAP
+	 measurement directly from the battery driver.
+	 This is an approximation of the remaining battery
+	 capacity. It is shouldn't be enabled if the FG
+	 supports this internally.
 
 # Fuel Gauge
 
@@ -351,6 +372,16 @@ config CHARGER_BQ24260
 	 for TI BQ24260 charger driver.
 	 This driver source code implemented
 	 all functions for BQ24260 charger.
+
+config CHARGER_BQ25898S
+	tristate "BQ25898S charger driver"
+	default n
+	depends on BATTERY_SAMSUNG
+	help
+	 Say Y to include support
+	 for TI BQ25898S charger driver.
+	 This driver source code implemented
+	 all functions for BQ25898S charger.
 
 config CHARGER_MAX77693
 	tristate "MAX77693 battery charger support"

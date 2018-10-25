@@ -210,6 +210,7 @@ void sec_debug_set_extra_info(enum sec_debug_extra_buf_type type,
 void sec_debug_store_extra_info(int start, int end)
 {
 	int i;
+	int maxlen = MAX_EXTRA_INFO_KEY_LEN + MAX_EXTRA_INFO_VAL_LEN + 10;
 	char *ptr = (char *)SEC_DEBUG_EXTRA_INFO_VA;
 
 	/* initialize extra info output buffer */
@@ -218,16 +219,16 @@ void sec_debug_store_extra_info(int start, int end)
 	if (!sec_debug_extra_info_backup)
 		return;
 
-	ptr += sprintf(ptr, "\"%s\":\"%s\"", sec_debug_extra_info_backup->item[start].key,
+	ptr += snprintf(ptr, maxlen, "\"%s\":\"%s\"", sec_debug_extra_info_backup->item[start].key,
 		sec_debug_extra_info_backup->item[start].val);
 
 	for (i = start + 1; i < end; i++) {
-		if (ptr + strlen(sec_debug_extra_info_backup->item[i].key) +
-				strlen(sec_debug_extra_info_backup->item[i].val) +
+		if (ptr + strnlen(sec_debug_extra_info_backup->item[i].key, MAX_EXTRA_INFO_KEY_LEN) +
+			strnlen(sec_debug_extra_info_backup->item[i].val, MAX_EXTRA_INFO_VAL_LEN) +
 				MAX_EXTRA_INFO_HDR_LEN > (char *)SEC_DEBUG_EXTRA_INFO_VA + SZ_1K)
 			break;
 
-		ptr += sprintf(ptr, ",\"%s\":\"%s\"",
+		ptr += snprintf(ptr, maxlen, ",\"%s\":\"%s\"",
 			sec_debug_extra_info_backup->item[i].key,
 			sec_debug_extra_info_backup->item[i].val);
 	}
@@ -398,7 +399,9 @@ void sec_debug_set_extra_info_backtrace(struct pt_regs *regs)
 		if (offset)
 			offset += sprintf((char *)sec_debug_extra_info->item[INFO_STACK].val + offset, ":");
 
-		sprintf((char *)sec_debug_extra_info->item[INFO_STACK].val + offset, "%s", buf);
+		snprintf((char *)sec_debug_extra_info->item[INFO_STACK].val + offset,
+				MAX_EXTRA_INFO_VAL_LEN, "%s", buf);
+
 		offset += sym_name_len;
 	}
 }
@@ -448,7 +451,8 @@ void sec_debug_set_extra_info_backtrace_cpu(struct pt_regs *regs, int cpu)
 		if (offset)
 			offset += sprintf((char *)sec_debug_extra_info->item[INFO_CPU0 + (cpu % 8)].val + offset, ":");
 
-		sprintf((char *)sec_debug_extra_info->item[INFO_CPU0 + (cpu % 8)].val + offset, "%s", buf);
+		snprintf((char *)sec_debug_extra_info->item[INFO_CPU0 + (cpu % 8)].val + offset,
+				MAX_EXTRA_INFO_VAL_LEN, "%s", buf);
 		offset += sym_name_len;
 	}
 }

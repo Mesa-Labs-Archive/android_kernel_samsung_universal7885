@@ -180,9 +180,6 @@ static int dbmd2_spi_boot(const void *fw_data, size_t fw_size,
 				__func__);
 			continue;
 		}
-#if 0
-		msleep(DBMDX_MSLEEP_SPI_D2_BEFORE_FW_CHECKSUM);
-#endif
 
 		/* verify checksum */
 		if (checksum && !(p->cur_boot_options &
@@ -203,7 +200,7 @@ static int dbmd2_spi_boot(const void *fw_data, size_t fw_size,
 	/* no retries left, failed to boot */
 	if (retry <= 0) {
 		dev_err(p->dev, "%s: failed to load firmware\n", __func__);
-		return -1;
+		return -EIO;
 	}
 
 	if (!(p->cur_boot_options & DBMDX_BOOT_OPT_DONT_SEND_START_BOOT)) {
@@ -212,7 +209,7 @@ static int dbmd2_spi_boot(const void *fw_data, size_t fw_size,
 		if (ret < 0) {
 			dev_err(p->dev,
 				"%s: booting the firmware failed\n", __func__);
-			return -1;
+			return -EIO;
 		}
 	}
 

@@ -163,9 +163,16 @@ bool sec_bat_cisd_check(struct sec_battery_info *battery)
 			}
 		}
 
+#if defined(CONFIG_FG_FULLCAP_FROM_BATTERY)
+		{
+			struct capacity_measure_info * info  = &(battery->capacity_info);
+			capcurr_val.intval = info->capacity_full / 3600;
+		}
+#else
 		capcurr_val.intval = SEC_BATTERY_CAPACITY_FULL;
 		psy_do_property(battery->pdata->fuelgauge_name, get,
 			POWER_SUPPLY_PROP_ENERGY_NOW, capcurr_val);
+#endif
 		if (capcurr_val.intval == -1) {
 			dev_info(battery->dev, "%s: [CISD] FG I2C fail. skip cisd check \n", __func__);
 			return ret;
@@ -173,12 +180,14 @@ bool sec_bat_cisd_check(struct sec_battery_info *battery)
 
 		if (capcurr_val.intval > pcisd->data[CISD_DATA_CAP_MAX])
 			pcisd->data[CISD_DATA_CAP_MAX] = capcurr_val.intval;
-		if (capcurr_val.intval < pcisd->data[CISD_DATA_CAP_MIN])
+		if ((capcurr_val.intval < pcisd->data[CISD_DATA_CAP_MIN]) &&
+			(capcurr_val.intval != 0))
 			pcisd->data[CISD_DATA_CAP_MIN] = capcurr_val.intval;
 
 		if (capcurr_val.intval > pcisd->data[CISD_DATA_CAP_MAX_PER_DAY])
 			pcisd->data[CISD_DATA_CAP_MAX_PER_DAY] = capcurr_val.intval;
-		if (capcurr_val.intval < pcisd->data[CISD_DATA_CAP_MIN_PER_DAY])
+		if ((capcurr_val.intval < pcisd->data[CISD_DATA_CAP_MIN_PER_DAY]) &&
+			(capcurr_val.intval != 0))
 			pcisd->data[CISD_DATA_CAP_MIN_PER_DAY] = capcurr_val.intval;
 	}
 
@@ -235,9 +244,17 @@ void sec_battery_cisd_init(struct sec_battery_info *battery)
 	battery->cisd.diff_volt_now = 40;
 	battery->cisd.diff_cap_now = 5;
 
-	capfull_val.intval = SEC_BATTERY_CAPACITY_FULL;
-	psy_do_property(battery->pdata->fuelgauge_name, get,
-		POWER_SUPPLY_PROP_ENERGY_NOW, capfull_val);
+
+#if defined(CONFIG_FG_FULLCAP_FROM_BATTERY)
+		{
+			struct capacity_measure_info * info  = &(battery->capacity_info);
+			capfull_val.intval = info->capacity_full / 3600;
+		}
+#else
+		capfull_val.intval = SEC_BATTERY_CAPACITY_FULL;
+		psy_do_property(battery->pdata->fuelgauge_name, get,
+			POWER_SUPPLY_PROP_ENERGY_NOW, capfull_val);
+#endif
 	battery->cisd.curr_cap_max = capfull_val.intval;
 	battery->cisd.err_cap_high_thr = battery->pdata->cisd_cap_high_thr;
 	battery->cisd.err_cap_low_thr = battery->pdata->cisd_cap_low_thr;

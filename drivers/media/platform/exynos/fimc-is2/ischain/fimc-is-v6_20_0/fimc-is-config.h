@@ -61,6 +61,14 @@
 #define ENABLE_10BIT_MCSC
 /* #define ENABLE_DJAG_IN_MCSC */
 #define ENABLE_VRA
+/*#define ENABLE_VRA_LIBRARY_IMPROVE*/ /* This feature will be defined in vendor config of each model */
+#if defined(ENABLE_VRA_LIBRARY_IMPROVE)
+#define ENABLE_VRA_CHANGE_SETFILE_PARSING
+#undef VRA_OLD_POSES
+#else
+#undef ENABLE_VRA_CHANGE_SETFILE_PARSING
+#define VRA_OLD_POSES
+#endif
 
 #define USE_ONE_BINARY
 #define USE_RTA_BINARY

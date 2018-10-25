@@ -2335,10 +2335,25 @@ static u32 lis2ds_parse_dt(struct lis2ds_data *cdata)
 	struct device_node *np;
 	enum of_gpio_flags flags;
 	u32 orientation[9], i = 0;
+	int ret = 0;
 
 	np = cdata->dev->of_node;
 	if (!np)
 		return -EINVAL;
+
+	/* ldo_pin setup */
+	cdata->lis2ds_ldo_pin = of_get_named_gpio_flags(np, "st,vdd_ldo_pin", 0, &flags);
+	if (cdata->lis2ds_ldo_pin < 0) {
+		SENSOR_ERR("Cannot set vdd_ldo_pin through DTSI\n\n");
+		cdata->lis2ds_ldo_pin = 0;
+	} else {
+		ret = gpio_request(cdata->lis2ds_ldo_pin, "st,vdd_ldo_pin");
+		if (ret < 0)
+			SENSOR_ERR("gpio %d request failed %d\n",
+				cdata->lis2ds_ldo_pin, ret);
+		else
+			gpio_direction_output(cdata->lis2ds_ldo_pin, 0);
+	}
 
 	cdata->irq_gpio = of_get_named_gpio_flags(np, "st,irq_gpio", 0, &flags);
 	if (cdata->irq_gpio < 0) {
@@ -2359,6 +2374,17 @@ static u32 lis2ds_parse_dt(struct lis2ds_data *cdata)
 	return 0;
 }
 
+static int lis2ds_vdd_onoff(struct lis2ds_data *cdata, int onoff)
+{
+	/* ldo control */
+	if (cdata->lis2ds_ldo_pin) {
+		gpio_set_value(cdata->lis2ds_ldo_pin, onoff);
+		if (onoff)
+			msleep(20);
+	}
+	return 0;
+}
+
 int lis2ds_common_probe(struct lis2ds_data *cdata, int irq, u16 bustype)
 {
 	int32_t err, i;
@@ -2371,6 +2397,14 @@ int lis2ds_common_probe(struct lis2ds_data *cdata, int irq, u16 bustype)
 	mutex_init(&cdata->tb.buf_lock);
 	mutex_init(&cdata->mutex_enable);
 	mutex_init(&cdata->mutex_read);
+
+	if (irq > 0) {
+		err = lis2ds_parse_dt(cdata);
+		if (err < 0)
+			goto parse_dt_error;
+	}
+
+	lis2ds_vdd_onoff(cdata, ON);
 
 	/* Read Chip ID register */
 	while (retry--) {
@@ -2386,12 +2420,6 @@ int lis2ds_common_probe(struct lis2ds_data *cdata, int irq, u16 bustype)
 
 	if (retry < 0)
 		goto exit_err_chip_id_or_i2c_error;
-
-	if (irq > 0) {
-		err = lis2ds_parse_dt(cdata);
-		if (err < 0)
-			goto parse_dt_error;
-	}
 
 	/* input device init */
 	err = lis2ds_acc_input_init(cdata);

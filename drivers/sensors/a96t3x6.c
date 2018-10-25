@@ -39,6 +39,12 @@
 #include <linux/muic/muic.h>
 #include <linux/muic/muic_notifier.h>
 #endif
+#if defined(CONFIG_CCIC_NOTIFIER)
+#include <linux/ccic/ccic_notifier.h>
+#endif
+#if defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER)
+#include <linux/usb/manager/usb_typec_manager_notifier.h>
+#endif
 
 #ifdef CONFIG_OF
 #include <linux/of_gpio.h>
@@ -91,6 +97,7 @@ struct a96t3x6_data {
 	u8 checksum_l;
 	u8 checksum_l_bin;
 	bool enabled;
+	bool skip_event;
 
 	int ldo_en;			/* ldo_en pin gpio */
 	int grip_int;			/* irq pin gpio */
@@ -103,6 +110,9 @@ struct a96t3x6_data {
 	int debug_count;
 #if defined(CONFIG_MUIC_NOTIFIER)
 	struct notifier_block cpuidle_muic_nb;
+#endif
+#if defined(CONFIG_CCIC_NOTIFIER)
+	struct notifier_block cpuidle_ccic_nb;
 #endif
 };
 
@@ -208,20 +218,23 @@ static int a96t3x6_i2c_write(struct i2c_client *client, u8 reg, u8 *val)
  * @enable: turn it on or off.
  * @force: if caller is grip_sensing_change(), it's true. others, it's false.
  * 
- * This function was designed to prevent noise issue from ic.
+ * This function was designed to prevent noise issue from ic for specific models.
+ * If earjack_noise is true, it handled enable control for it.
  */
-static void a96t3x6_set_enable(struct a96t3x6_data *data, bool enable, bool force)
+static void a96t3x6_set_enable(struct a96t3x6_data *data, int enable, bool force)
 {
 	u8 cmd;
 	int ret;
 
-	if ((data->current_state == enable) || (!force && data->earjack) ||
+	if ((data->current_state == enable) ||
+			((data->earjack_noise) && ((!force && data->earjack) ||
 			(force && ((!enable && (data->expect_state != data->current_state))
-			|| (enable && (data->expect_state == data->current_state))))) {
-		SENSOR_INFO("old enable = %d, new enable = %d, skip exception case\n",
-					data->current_state, enable);
+			|| (enable && (data->expect_state == data->current_state))))))) {
+		SENSOR_INFO("old = %d, new = %d, skip exception case\n",
+			data->current_state, enable);
 		return;
 	}
+
 	SENSOR_INFO("old enable = %d, new enable = %d\n",
 				data->current_state, enable);
 	if (enable) {
@@ -496,11 +509,17 @@ static irqreturn_t a96t3x6_interrupt(int irq, void *dev_id)
 	grip_press = !(grip_data % 2);
 
 	if (grip_data) {
-		if (grip_press)
-			input_report_rel(data->input_dev, REL_MISC, 1);
-		else
-			input_report_rel(data->input_dev, REL_MISC, 2);
-		data->grip_event = grip_press;
+		if (data->skip_event) {
+			SENSOR_INFO("%s int was generated, but event skipped\n",
+				__func__);
+		} else {
+			if (grip_press)
+				input_report_rel(data->input_dev, REL_MISC, 1);
+			else
+				input_report_rel(data->input_dev, REL_MISC, 2);
+			input_sync(data->input_dev);
+			data->grip_event = grip_press;
+		}
 	}
 	a96t3x6_diff_getdata(data);
 #ifdef CONFIG_SEC_FACTORY
@@ -512,7 +531,6 @@ static irqreturn_t a96t3x6_interrupt(int irq, void *dev_id)
 		}
 	}
 #endif
-	input_sync(data->input_dev);
 	if (grip_data)
 		SENSOR_INFO("%s %x\n", grip_press ? "grip P" : "grip R", buf);
 
@@ -525,68 +543,39 @@ static ssize_t grip_sar_enable_show(struct device *dev,
 {
 	struct a96t3x6_data *data = dev_get_drvdata(dev);
 
-	return snprintf(buf, PAGE_SIZE, "%u\n", !data->sar_enable_off);
+	return snprintf(buf, PAGE_SIZE, "%u\n", !data->skip_event);
 }
 
 static ssize_t grip_sar_enable_store(struct device *dev,
 		 struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct a96t3x6_data *data = dev_get_drvdata(dev);
-	int force;
-	int ret;
-	bool enable;
+	int ret, enable;
 
-	ret = sscanf(buf, "%2d", &force);
+	ret = sscanf(buf, "%2d", &enable);
 	if (ret != 1) {
 		SENSOR_ERR("cmd read err\n");
 		return count;
 	}
 
-	if (!(force >= 0 && force <= 3)) {
-		SENSOR_ERR("wrong command(%d)\n", force);
+	if (!(enable >= 0 && enable <= 3)) {
+		SENSOR_ERR("wrong command(%d)\n", enable);
 		return count;
 	}
 
-	/* force 0:off, 1:on, 2:force off, 3:force off->on  */
+	SENSOR_INFO("enable = %d\n", enable);
 
-	if (force == 3) {
-		data->sar_enable_off = false;
-		SENSOR_INFO("Power back off force off -> on (%d)\n", data->current_state);
-		if (!data->current_state)
-			force = 1;
-		else
-			return count;
-	}
-
-	if (data->sar_enable_off) {
-		if (force == 1)
-			enable = true;
-		else
-			enable = false;
-		SENSOR_INFO("skip, Power back off force off mode (%d)\n", enable);
-		return count;
-	}
-
-	if (force == 1) {
-		enable = true;
-	} else if (force == 2) {		//test app : Power back off _ force off
-		enable = false;
-		data->sar_enable_off = true;
-	} else {
-		enable = false;
-	}
-
-	if (force == 1) {
-		enable = true;
-	} else {
+	/* enable 0:off, 1:on, 2:skip event , 3:cancel skip event */
+	if (enable == 2) {
+		data->skip_event = true;
 		input_report_rel(data->input_dev, REL_MISC, 2);
-		data->grip_event = 0;
-		enable = false;
+		input_sync(data->input_dev);
+	} else if (enable == 3) {
+		data->skip_event = false;
+	} else {
+		data->expect_state = enable;
+		a96t3x6_set_enable(data, enable, 0);
 	}
-
-	data->expect_state = enable;
-	a96t3x6_set_enable(data, enable, 0);
-	SENSOR_INFO("force(%d)\n", force);
 
 	return count;
 }
@@ -765,21 +754,26 @@ static ssize_t grip_sensing_change(struct device *dev,
 		return count;
 	}
 
-	if (data->earjack_noise) {
-		if (earjack == 1) {
-			a96t3x6_set_enable(data, 0, 1);
-			a96t3x6_sar_sensing(data, 0);
-		} else {
-			a96t3x6_sar_sensing(data, 1);
-			a96t3x6_set_enable(data, 1, 1);
-		}
-		data->earjack = earjack;
-	} else {
-		if (earjack == 1) /* earjack inserted */
+	if (!data->earjack_noise) {
+		if (earjack == 1)
 			a96t3x6_sar_only_mode(data, 1);
 		else
 			a96t3x6_sar_only_mode(data, 0);
+	} else {
+		if (earjack == 1) {
+			a96t3x6_set_enable(data, 0, 1);
+			a96t3x6_sar_sensing(data, 0);
+			data->grip_event = 0;
+			input_report_rel(data->input_dev, REL_MISC, 2);
+			input_sync(data->input_dev);
+		} else {
+			a96t3x6_grip_sw_reset(data);
+			a96t3x6_sar_sensing(data, 1);
+			a96t3x6_set_enable(data, 1, 1);
+		}
 	}
+
+	data->earjack = earjack;
 
 	SENSOR_INFO("earjack was %s\n", (earjack) ? "inserted" : "removed");
 
@@ -1791,7 +1785,47 @@ static int a96t3x6_parse_dt(struct a96t3x6_data *data, struct device *dev)
 	return 0;
 }
 
-#if defined(CONFIG_MUIC_NOTIFIER)
+#if defined(CONFIG_CCIC_NOTIFIER) && defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER)
+static int a96t3x6_ccic_handle_notification(struct notifier_block *nb,
+		unsigned long action, void *data)
+{
+	CC_NOTI_ATTACH_TYPEDEF usb_typec_info = *(CC_NOTI_ATTACH_TYPEDEF *)data;
+	struct a96t3x6_data *grip_data =
+		container_of(nb, struct a96t3x6_data, cpuidle_ccic_nb);
+	u8 cmd = CMD_ON;
+
+	SENSOR_INFO("%s: (%ld) %01x, %01x, %02x, %04x, %04x, %04x\n",
+		__func__, action, usb_typec_info.src, usb_typec_info.dest, 
+		usb_typec_info.id, usb_typec_info.attach, usb_typec_info.rprd,
+		usb_typec_info.cable_type);
+
+	if (usb_typec_info.cable_type == 0)
+		return 0;
+
+	switch (usb_typec_info.cable_type) {
+	case NOTIFY_CABLE_TA:
+	case NOTIFY_CABLE_USB:
+	case NOTIFY_CABLE_TA_FAC:
+	case NOTIFY_CABLE_OTG:
+		if (usb_typec_info.attach == MUIC_NOTIFY_CMD_ATTACH) {
+			cmd = CMD_OFF;
+			a96t3x6_i2c_write(grip_data->client, REG_TSPTA, &cmd);
+			SENSOR_INFO("TA/USB is inserted\n");
+		} else if (usb_typec_info.attach == MUIC_NOTIFY_CMD_DETACH) {
+			cmd = CMD_ON;
+			a96t3x6_i2c_write(grip_data->client, REG_TSPTA, &cmd);
+			SENSOR_INFO("TA/USB is removed\n");
+		}
+		break;
+	default:
+		SENSOR_INFO("unsupported\n");
+		break;
+	}
+
+	return 0;
+}
+
+#elif defined(CONFIG_MUIC_NOTIFIER)
 static int a96t3x6_cpuidle_muic_notifier(struct notifier_block *nb,
 				unsigned long action, void *data)
 {
@@ -1861,6 +1895,7 @@ static int a96t3x6_probe(struct i2c_client *client,
 	data->earjack = 0;
 	data->current_state = false;
 	data->expect_state = false;
+	data->skip_event = false;
 	data->sar_mode = false;
 	wake_lock_init(&data->grip_wake_lock, WAKE_LOCK_SUSPEND, "grip wake lock");
 
@@ -1947,7 +1982,10 @@ static int a96t3x6_probe(struct i2c_client *client,
 
 	a96t3x6_set_debug_work(data, 1, 20000);
 
-#if defined(CONFIG_MUIC_NOTIFIER)
+#if defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER) && defined(CONFIG_CCIC_NOTIFIER)
+	manager_notifier_register(&data->cpuidle_ccic_nb,
+		a96t3x6_ccic_handle_notification, MANAGER_NOTIFY_CCIC_BATTERY);
+#elif defined(CONFIG_MUIC_NOTIFIER)
 	muic_notifier_register(&data->cpuidle_muic_nb,
 		a96t3x6_cpuidle_muic_notifier, MUIC_NOTIFY_DEV_CPUIDLE);
 #endif
@@ -2067,6 +2105,7 @@ static struct i2c_driver a96t3x6_driver = {
 	.id_table = a96t3x6_device_id,
 	.driver = {
 		   .name = MODEL_NAME,
+		   .owner = THIS_MODULE,		   	
 		   .of_match_table = a96t3x6_match_table,
 		   .pm = &a96t3x6_pm_ops
 	},

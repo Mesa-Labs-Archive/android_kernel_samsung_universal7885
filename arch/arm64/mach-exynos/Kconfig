@@ -13,10 +13,15 @@ menu "SAMSUNG EXYNOS SoCs Support"
 
 choice
 	prompt "Exynos device target"
-	default MACH_EXYNOS7885_NONE
+	default MACH_EXYNOS7885_JACKPOTLTE_EUR_OPEN
 
-config MACH_EXYNOS7885_NONE
-	bool "None"
+config MACH_EXYNOS7884_A6ELTE_USA
+	bool "Galaxy A6 (SM-A600P)"
+	select EXYNOS_DTBTOOL
+
+config MACH_EXYNOS7885_JACKPOT2LTE_EUR_OPEN
+	bool "Galaxy A8+ (SM-A730F)"
+	select EXYNOS_DTBTOOL
 
 config MACH_EXYNOS7885_JACKPOTLTE_CAN_OPEN
 	bool "Galaxy A8 (SM-A530W)"
@@ -32,10 +37,6 @@ config MACH_EXYNOS7885_JACKPOTLTE_JPN_DCM
 
 config MACH_EXYNOS7885_JACKPOTLTE_KOR
 	bool "Galaxy A8 (SM-A530N)"
-	select EXYNOS_DTBTOOL
-
-config MACH_EXYNOS7885_JACKPOT2LTE_EUR_OPEN
-	bool "Galaxy A8+ (SM-A730F)"
 	select EXYNOS_DTBTOOL
 
 endchoice

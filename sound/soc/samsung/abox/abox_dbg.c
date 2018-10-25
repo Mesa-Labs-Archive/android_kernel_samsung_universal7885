@@ -99,7 +99,7 @@ static struct abox_dbg_dump (*p_abox_dbg_dump)[ABOX_DBG_DUMP_COUNT];
 static struct abox_dbg_dump_min (*p_abox_dbg_dump_min)[ABOX_DBG_DUMP_COUNT];
 static struct reserved_mem *abox_rmem;
 
-#ifdef CONFIG_SAMSUNG_PRODUCT_SHIP
+#if defined(CONFIG_SND_SOC_SAMSUNG_ABOX_FREE_RMEM) && defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 #define MIN_ABOX_DBG_RMEM_SZ (0x400000)
 static void abox_free_reserved_mem(void)
 {
@@ -359,7 +359,7 @@ static int samsung_abox_debug_probe(struct platform_device *pdev)
 	if (abox_rmem == NULL)
 		return -ENOMEM;
 
-#ifdef CONFIG_SAMSUNG_PRODUCT_SHIP
+#if defined(CONFIG_SND_SOC_SAMSUNG_ABOX_FREE_RMEM) && defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 	abox_free_reserved_mem();
 #endif
 

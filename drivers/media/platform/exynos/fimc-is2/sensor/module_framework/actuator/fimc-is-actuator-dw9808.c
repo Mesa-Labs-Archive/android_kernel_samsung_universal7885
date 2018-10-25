@@ -59,6 +59,8 @@ int sensor_dw9808_init(struct i2c_client *client, struct fimc_is_caldata_list_dw
 
 	fimc_is_sec_get_sysfs_finfo(&sysfs_finfo);
 
+	probe_info("%s start\n", __func__);
+
 	if (!cal_data) {
 		/* PD(Power Down) mode enable */
 		i2c_data[0] = REG_CONTROL;

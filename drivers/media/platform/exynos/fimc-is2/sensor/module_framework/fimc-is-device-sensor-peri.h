@@ -77,7 +77,9 @@ struct fimc_is_cis {
 	u32				max_fps;
 	struct mutex			*i2c_lock;
 	struct mutex			control_lock;
+#ifdef USE_AP_PDAF
 	bool				use_pdaf;
+#endif
 
 	/* Long Term Exposure Mode(LTE mode) structure */
 	struct fimc_is_long_term_expo_mode	long_term_mode;

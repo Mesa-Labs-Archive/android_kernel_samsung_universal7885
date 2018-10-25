@@ -44,7 +44,7 @@ static int verify_or_update_label(struct task_integrity *intg,
 	if (is_system_label(file_label))
 		return 0;
 
-	spin_lock(&intg->lock);
+	spin_lock(&intg->value_lock);
 	l = intg->label;
 
 	if (l) {
@@ -68,7 +68,7 @@ static int verify_or_update_label(struct task_integrity *intg,
 	}
 
 out:
-	spin_unlock(&intg->lock);
+	spin_unlock(&intg->value_lock);
 
 	return rc;
 }
@@ -116,7 +116,6 @@ static bool set_next_state(struct integrity_iint_cache *iint,
 			   const char **msg)
 {
 	bool is_newstate = false;
-	enum task_integrity_value source_tint = task_integrity_read(integrity);
 	bool has_digsig = (iint->five_status == FIVE_FILE_RSA);
 	bool dmv_protected = (iint->five_status == FIVE_FILE_DMVERITY);
 	struct integrity_label *label = iint->five_label;
@@ -129,31 +128,23 @@ static bool set_next_state(struct integrity_iint_cache *iint,
 	iint->five_flags &= ~FIVE_TRUSTED_FILE;
 
 	if (verify_or_update_label(integrity, iint)) {
-		task_integrity_reset(integrity);
+		spin_lock(&integrity->value_lock);
 		cause = "mismatch-label";
 		state_tint = INTEGRITY_NONE;
 		is_newstate = true;
 		goto out;
 	}
 
-	switch (source_tint) {
+	spin_lock(&integrity->value_lock);
+	switch (integrity->value) {
 	case INTEGRITY_PRELOAD_ALLOW_SIGN:
 		if (dmv_protected) {
-			task_integrity_cmpxchg(integrity,
-					INTEGRITY_PRELOAD_ALLOW_SIGN,
-					INTEGRITY_DMVERITY_ALLOW_SIGN);
 			cause = "dmverity-allow-sign";
 			state_tint = INTEGRITY_DMVERITY_ALLOW_SIGN;
 		} else if (is_system_label(label)) {
-			task_integrity_cmpxchg(integrity,
-					INTEGRITY_PRELOAD_ALLOW_SIGN,
-					INTEGRITY_MIXED_ALLOW_SIGN);
 			cause = "mixed-allow-sign";
 			state_tint = INTEGRITY_MIXED_ALLOW_SIGN;
 		} else {
-			task_integrity_set_unless(integrity,
-					INTEGRITY_MIXED,
-					INTEGRITY_NONE);
 			cause = "mixed";
 			state_tint = INTEGRITY_MIXED;
 		}
@@ -161,15 +152,9 @@ static bool set_next_state(struct integrity_iint_cache *iint,
 		break;
 	case INTEGRITY_PRELOAD:
 		if (dmv_protected) {
-			task_integrity_cmpxchg(integrity,
-					INTEGRITY_PRELOAD,
-					INTEGRITY_DMVERITY);
 			cause = "dmverity";
 			state_tint = INTEGRITY_DMVERITY;
 		} else {
-			task_integrity_set_unless(integrity,
-					INTEGRITY_MIXED,
-					INTEGRITY_NONE);
 			cause = "mixed";
 			state_tint = INTEGRITY_MIXED;
 		}
@@ -177,9 +162,6 @@ static bool set_next_state(struct integrity_iint_cache *iint,
 		break;
 	case INTEGRITY_MIXED_ALLOW_SIGN:
 		if (!dmv_protected && !is_system_label(label)) {
-			task_integrity_set_unless(integrity,
-					INTEGRITY_MIXED,
-					INTEGRITY_NONE);
 			cause = "mixed";
 			state_tint = INTEGRITY_MIXED;
 			is_newstate = true;
@@ -187,9 +169,6 @@ static bool set_next_state(struct integrity_iint_cache *iint,
 		break;
 	case INTEGRITY_DMVERITY:
 		if (!dmv_protected) {
-			task_integrity_set_unless(integrity,
-					INTEGRITY_MIXED,
-					INTEGRITY_NONE);
 			cause = "mixed";
 			state_tint = INTEGRITY_MIXED;
 			is_newstate = true;
@@ -198,15 +177,9 @@ static bool set_next_state(struct integrity_iint_cache *iint,
 	case INTEGRITY_DMVERITY_ALLOW_SIGN:
 		if (!dmv_protected) {
 			if (is_system_label(label)) {
-				task_integrity_cmpxchg(integrity,
-						INTEGRITY_DMVERITY_ALLOW_SIGN,
-						INTEGRITY_MIXED_ALLOW_SIGN);
 				cause = "mixed-allow-sign";
 				state_tint = INTEGRITY_MIXED_ALLOW_SIGN;
 			} else {
-				task_integrity_set_unless(integrity,
-						INTEGRITY_MIXED,
-						INTEGRITY_NONE);
 				cause = "mixed";
 				state_tint = INTEGRITY_MIXED;
 			}
@@ -219,7 +192,6 @@ static bool set_next_state(struct integrity_iint_cache *iint,
 		break;
 	default:
 		// Unknown state
-		task_integrity_reset(integrity);
 		cause = "unknown-source-integrity";
 		state_tint = INTEGRITY_NONE;
 		is_newstate = true;
@@ -228,10 +200,12 @@ static bool set_next_state(struct integrity_iint_cache *iint,
 out:
 
 	if (is_newstate) {
+		__task_integrity_set(integrity, state_tint);
 		*new_tint = state_tint;
 		if (msg)
 			*msg = cause;
 	}
+	spin_unlock(&integrity->value_lock);
 
 	return is_newstate;
 }

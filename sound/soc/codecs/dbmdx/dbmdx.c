@@ -71,7 +71,7 @@
 #define MAX_RETRIES_TO_WRITE_TOBUF		200
 #define MAX_AMODEL_SIZE				(148 * 1024)
 
-#define DRIVER_VERSION				"4.031"
+#define DRIVER_VERSION				"4.036.1"
 
 #define DBMDX_AUDIO_MODE_PCM			0
 #define DBMDX_AUDIO_MODE_MU_LAW			1
@@ -82,7 +82,7 @@
 #define DBMDX_SND_PCM_RATE_48000		0x0200
 #define DBMDX_SND_PCM_RATE_8000			0x0300
 #define DBMDX_SND_PCM_RATE_MASK			0xFCFF
-#define DBMDX_HW_VAD_MASK			0x00e0
+#define DBMDX_HW_VAD_MASK			0x0060
 
 #define DIGITAL_GAIN_TLV_MIN			0
 #if defined(DBMDX_FW_BELOW_300) || defined(DBMDX_FW_BELOW_280)
@@ -101,6 +101,11 @@
 #if defined(CONFIG_SND_SOC_DBMDX_SND_CAPTURE) && \
 	defined(DBMDX_USE_ASLA_CONTROLS_WITH_DBMDX_CARD_ONLY)
 #define SOC_CONTROLS_FOR_DBMDX_CODEC_ONLY 1
+#endif
+
+#if defined(SND_SOC_BYTES_TLV)
+#define EXTERNAL_SOC_AMODEL_LOADING_ENABLED 1
+#define SOC_BYTES_EXT_HAS_KCONTROL_FIELD 1
 #endif
 
 enum dbmdx_detection_mode {
@@ -174,6 +179,18 @@ static const char *dbmdx_fw_names[DBMDX_FW_MAX] = {
 	[DBMDX_FW_POWER_OFF_VA] = "POWER_OFF",
 };
 
+#ifdef DBMDX_VA_NS_SUPPORT
+enum dbmdx_va_ns_config {
+	VA_NS_CONFIG_DMIC_DETECTION = 0,
+	VA_NS_CONFIG_AMIC = 1,
+	VA_NS_CONFIG_DMIC_STREAMING_WITH_NS = 2,
+	VA_NS_CONFIG_DMIC_STREAMING_WITHOUT_NS = 3,
+	VA_NS_CONFIG_DISABLE = 4,
+	VA_NS_CONFIG_MAX = VA_NS_CONFIG_DISABLE
+};
+#endif
+
+
 /* Global Variables */
 struct dbmdx_private *dbmdx_data;
 struct snd_soc_codec *remote_codec;
@@ -198,6 +215,12 @@ static int dbmdx_va_amodel_load_file(struct dbmdx_private *p,
 			ssize_t *amodel_size,
 			int *num_of_amodel_chunks,
 			ssize_t *amodel_chunks_size);
+static int dbmdx_va_amodel_load_dummy_model(struct dbmdx_private *p,
+			u32 gram_addr,
+			char	*amodel_buf,
+			ssize_t *amodel_size,
+			int *num_of_amodel_chunks,
+			ssize_t *amodel_chunks_size);
 
 static int dbmdx_shutdown(struct dbmdx_private *p);
 static int dbmdx_set_sv_recognition_mode(struct dbmdx_private *p,
@@ -205,10 +228,14 @@ static int dbmdx_set_sv_recognition_mode(struct dbmdx_private *p,
 static int dbmdx_va_amodel_send(struct dbmdx_private *p,  const void *data,
 			   size_t size, int num_of_chunks, size_t *chunk_sizes,
 			   const void *checksum, size_t chksum_len,
-			   enum dbmdx_load_amodel_mode load_amodel_mode);
+			   u16 load_amodel_mode_cmd);
 #ifdef DMBDX_OKG_AMODEL_SUPPORT
 static int dbmdx_set_okg_recognition_mode(struct dbmdx_private *p,
 					enum dbmdx_okg_recognition_mode mode);
+#endif
+
+#ifdef DBMDX_VA_NS_SUPPORT
+static int dbmdx_configure_ns(struct dbmdx_private *p, int mode, bool enable);
 #endif
 
 #ifdef CONFIG_OF
@@ -358,7 +385,8 @@ static int dbmdx_can_wakeup(struct dbmdx_private *p)
 		return 0;
 
 	/* If use_gpio_for_wakeup equals zero than transmit operation
-	itself will wakeup the chip */
+	 * itself will wakeup the chip
+	 */
 	if (!p->cur_use_gpio_for_wakeup)
 		return 1;
 
@@ -368,7 +396,8 @@ static int dbmdx_can_wakeup(struct dbmdx_private *p)
 static void dbmdx_wakeup_set(struct dbmdx_private *p)
 {
 	/* If use_gpio_for_wakeup equals zero than transmit operation
-	itself will wakeup the chip */
+	 * itself will wakeup the chip
+	 */
 	if (p->cur_wakeup_disabled || p->cur_wakeup_gpio < 0 ||
 		!p->cur_use_gpio_for_wakeup)
 		return;
@@ -382,7 +411,8 @@ static void dbmdx_wakeup_set(struct dbmdx_private *p)
 static void dbmdx_wakeup_release(struct dbmdx_private *p)
 {
 	/* If use_gpio_for_wakeup equals zero than transmit operation
-	itself will wakeup the chip */
+	 * itself will wakeup the chip
+	 */
 	if (p->cur_wakeup_disabled || p->cur_wakeup_gpio < 0 ||
 		!p->cur_use_gpio_for_wakeup)
 		return;
@@ -390,6 +420,20 @@ static void dbmdx_wakeup_release(struct dbmdx_private *p)
 	dev_dbg(p->dev, "%s: %d==>gpio%d\n", __func__,
 		!(p->cur_wakeup_set_value), p->cur_wakeup_gpio);
 
+	gpio_set_value(p->cur_wakeup_gpio, !(p->cur_wakeup_set_value));
+}
+
+static void dbmdx_wakeup_toggle(struct dbmdx_private *p)
+{
+	/* If use_gpio_for_wakeup equals zero than transmit operation
+	 * itself will wakeup the chip
+	 */
+	if (p->cur_wakeup_disabled || p->cur_wakeup_gpio < 0 ||
+		!p->cur_use_gpio_for_wakeup)
+		return;
+
+	gpio_set_value(p->cur_wakeup_gpio, p->cur_wakeup_set_value);
+	usleep_range(1000, 1100);
 	gpio_set_value(p->cur_wakeup_gpio, !(p->cur_wakeup_set_value));
 }
 
@@ -556,10 +600,10 @@ static int dbmdx_va_alive_with_lock(struct dbmdx_private *p)
 }
 
 /* Place audio samples to kfifo according to operation flag
-	AUDIO_CHANNEL_OP_COPY - copy samples directly to kfifo
-	AUDIO_CHANNEL_OP_DUPLICATE_X_TO_Y - dupl. X to ch to Y (e.g.dual mono)
-	AUDIO_CHANNEL_OP_TRUNCATE_Y_TO_X - take samples from primary channel set
-*/
+ *	AUDIO_CHANNEL_OP_COPY - copy samples directly to kfifo
+ *	AUDIO_CHANNEL_OP_DUPLICATE_X_TO_Y - dupl. X to ch to Y (e.g.dual mono)
+ *	AUDIO_CHANNEL_OP_TRUNCATE_Y_TO_X - take samples from primary channel set
+ */
 static int dbmdx_add_audio_samples_to_kfifo(struct dbmdx_private *p,
 	struct kfifo *fifo,
 	const u8 *buf,
@@ -572,6 +616,7 @@ static int dbmdx_add_audio_samples_to_kfifo(struct dbmdx_private *p,
 	else if (audio_channel_op == AUDIO_CHANNEL_OP_DUPLICATE_1_TO_2) {
 		unsigned int i;
 		u8 cur_sample_buf[4];
+
 		for (i = 0; i < buf_length - 1; i += 2) {
 			cur_sample_buf[0] = buf[i];
 			cur_sample_buf[1] = buf[i+1];
@@ -583,6 +628,7 @@ static int dbmdx_add_audio_samples_to_kfifo(struct dbmdx_private *p,
 	} else if (audio_channel_op == AUDIO_CHANNEL_OP_DUPLICATE_1_TO_4) {
 		unsigned int i;
 		u8 cur_sample_buf[8];
+
 		for (i = 0; i < buf_length - 1; i += 2) {
 			cur_sample_buf[0] = buf[i];
 			cur_sample_buf[1] = buf[i+1];
@@ -597,6 +643,7 @@ static int dbmdx_add_audio_samples_to_kfifo(struct dbmdx_private *p,
 	} else if (audio_channel_op == AUDIO_CHANNEL_OP_DUPLICATE_2_TO_4) {
 		unsigned int i;
 		u8 cur_sample_buf[8];
+
 		for (i = 0; i < buf_length - 3; i += 4) {
 			cur_sample_buf[0] = buf[i];
 			cur_sample_buf[1] = buf[i+1];
@@ -612,6 +659,7 @@ static int dbmdx_add_audio_samples_to_kfifo(struct dbmdx_private *p,
 	} else if (audio_channel_op == AUDIO_CHANNEL_OP_TRUNCATE_2_TO_1) {
 		unsigned int i;
 		u8 cur_sample_buf[2];
+
 		for (i = 0; i < buf_length - 1; i += 4) {
 			cur_sample_buf[0] = buf[i];
 			cur_sample_buf[1] = buf[i+1];
@@ -621,6 +669,7 @@ static int dbmdx_add_audio_samples_to_kfifo(struct dbmdx_private *p,
 	} else if (audio_channel_op == AUDIO_CHANNEL_OP_TRUNCATE_4_TO_1) {
 		unsigned int i;
 		u8 cur_sample_buf[2];
+
 		for (i = 0; i < buf_length - 1; i += 8) {
 			cur_sample_buf[0] = buf[i];
 			cur_sample_buf[1] = buf[i+1];
@@ -629,6 +678,7 @@ static int dbmdx_add_audio_samples_to_kfifo(struct dbmdx_private *p,
 	} else if (audio_channel_op == AUDIO_CHANNEL_OP_TRUNCATE_4_TO_2) {
 		unsigned int i;
 		u8 cur_sample_buf[4];
+
 		for (i = 0; i < buf_length - 3; i += 8) {
 			cur_sample_buf[0] = buf[i];
 			cur_sample_buf[1] = buf[i+1];
@@ -650,7 +700,9 @@ static int dbmdx_add_audio_samples_to_kfifo(struct dbmdx_private *p,
 static int dbmdx_suspend_pcm_streaming_work(struct dbmdx_private *p)
 {
 	int ret;
+
 	p->va_flags.pcm_worker_active = 0;
+
 	flush_work(&p->pcm_streaming_work);
 
 	if (p->va_flags.pcm_streaming_active) {
@@ -742,22 +794,6 @@ static int dbmdx_va_set_speed(struct dbmdx_private *p,
 	return ret;
 }
 
-/* FIXME: likely to be removed when re-adding support for overlay FW */
-#if 0
-static int dbmdx_va_set_high_speed(struct dbmdx_private *p)
-{
-	int ret;
-
-	ret = dbmdx_va_set_speed(p, DBMDX_VA_SPEED_MAX);
-	if (ret != 0) {
-		dev_err(p->dev,
-			"%s: could not change to high speed\n",
-			__func__);
-	}
-	return ret;
-}
-#endif
-
 static int dbmdx_buf_to_int(const char *buf)
 {
 	unsigned long val;
@@ -769,59 +805,6 @@ static int dbmdx_buf_to_int(const char *buf)
 
 	return (int)val;
 }
-#if 0
-static int dbmdx_set_bytes_per_sample(struct dbmdx_private *p,
-				      unsigned int mode)
-{
-	int ret;
-	u16 resp = 0xffff;
-
-	/* Changing the buffer conversion causes trouble: adapting the
-	 * UART baudrate doesn't work anymore (firmware bug?) */
-	if (((mode == DBMDX_AUDIO_MODE_PCM) && (p->bytes_per_sample == 2)) ||
-	    ((mode == DBMDX_AUDIO_MODE_MU_LAW) &&
-	     (p->bytes_per_sample == 1)))
-		return 0;
-
-	/* read configuration */
-	ret = dbmdx_send_cmd(p,
-			     DBMDX_VA_AUDIO_BUFFER_CONVERSION,
-			     &resp);
-	if (ret < 0) {
-		dev_err(p->dev,
-			"%s: failed to read DBMDX_VA_AUDIO_BUFFER_CONVERSION\n",
-			__func__);
-		return ret;
-	}
-
-	resp &= ~(1 << 12);
-	resp |= (mode << 12);
-	ret = dbmdx_send_cmd(p,
-			     DBMDX_VA_AUDIO_BUFFER_CONVERSION | resp,
-			     NULL);
-	if (ret < 0) {
-		dev_err(p->dev,
-			"%s: failed to set DBMDX_VA_AUDIO_BUFFER_CONVERSION\n",
-			__func__);
-		return ret;
-	}
-
-	switch (mode) {
-	case DBMDX_AUDIO_MODE_PCM:
-		p->bytes_per_sample = 2;
-		p->audio_mode = mode;
-		break;
-	case DBMDX_AUDIO_MODE_MU_LAW:
-		p->bytes_per_sample = 1;
-		p->audio_mode = mode;
-		break;
-	default:
-		break;
-	}
-
-	return 0;
-}
-#endif
 
 static int dbmdx_set_backlog_len(struct dbmdx_private *p, u32 history)
 {
@@ -832,6 +815,7 @@ static int dbmdx_set_backlog_len(struct dbmdx_private *p, u32 history)
 #ifdef DMBDX_OKG_AMODEL_SUPPORT
 	bool okg_model_selected = false;
 	u16 cur_okg_backlog_size;
+
 	okg_model_selected = ((history & 0x1000) >> 12);
 #endif
 
@@ -840,8 +824,8 @@ static int dbmdx_set_backlog_len(struct dbmdx_private *p, u32 history)
 	dev_info(p->dev, "%s: history 0x%x\n", __func__, (u32)history);
 
 	/* If history is specified in ms, we should verify that
-	FW audio buffer size in large enough to contain the history
-	*/
+	 * FW audio buffer size in large enough to contain the history
+	 */
 	if (history > 2) {
 
 		u32 min_buffer_size_in_bytes;
@@ -936,10 +920,11 @@ static int dbmdx_sleeping(struct dbmdx_private *p)
 
 static int dbmdx_amodel_loaded(struct dbmdx_private *p)
 {
-	int model_loaded = p->va_flags.a_model_loaded;
+	int model_loaded = p->va_flags.a_model_downloaded_to_fw;
 
 #ifdef DMBDX_OKG_AMODEL_SUPPORT
-	model_loaded = (model_loaded || p->va_flags.okg_a_model_loaded);
+	model_loaded = (model_loaded ||
+		p->va_flags.okg_a_model_downloaded_to_fw);
 #endif
 
 	return model_loaded;
@@ -979,10 +964,6 @@ static int dbmdx_force_wake(struct dbmdx_private *p)
 
 	p->chip->transport_enable(p, true);
 
-	/* give some time to wakeup */
-#if 0
-	msleep(DBMDX_MSLEEP_WAKEUP);
-#endif
 	if (p->active_fw == DBMDX_FW_VA) {
 		/* test if VA firmware is up */
 		ret = dbmdx_va_alive(p);
@@ -1094,11 +1075,11 @@ static int dbmdx_set_power_mode(
 					"%s: Sleep mode is blocked\n",
 					__func__);
 			} else {
-			    /* queue delayed work to set the chip to sleep */
-			    queue_delayed_work(p->dbmdx_workq,
-				    &p->delayed_pm_work,
-				    msecs_to_jiffies(200));
-			    new_mode = mode;
+				/* queue delayed work to set the chip to sleep */
+				queue_delayed_work(p->dbmdx_workq,
+							&p->delayed_pm_work,
+							msecs_to_jiffies(200));
+				new_mode = mode;
 			}
 			break;
 
@@ -1212,7 +1193,7 @@ static int dbmdx_set_mode(struct dbmdx_private *p, int mode)
 	 * transform HIBERNATE to SLEEP in case no wakeup pin
 	 * is available
 	 */
-	 if (!dbmdx_can_wakeup(p) && mode == DBMDX_HIBERNATE)
+	if (!dbmdx_can_wakeup(p) && mode == DBMDX_HIBERNATE)
 		mode = DBMDX_SLEEP_PLL_ON;
 	if ((!dbmdx_can_wakeup(p) || p->va_flags.sleep_not_allowed ||
 		p->sleep_disabled) &&
@@ -1257,7 +1238,7 @@ static int dbmdx_set_mode(struct dbmdx_private *p, int mode)
 		break;
 	}
 
-	if (mode == DBMDX_IDLE || mode == DBMDX_BUFFERING)
+	if (mode == DBMDX_IDLE)
 		/* Stop PCM streaming work */
 		p->va_flags.pcm_worker_active = 0;
 	else if (mode == DBMDX_DETECTION) {
@@ -1319,11 +1300,22 @@ static int dbmdx_set_mode(struct dbmdx_private *p, int mode)
 				goto out;
 			}
 		}
-
+#ifdef DBMDX_VA_NS_SUPPORT
+		if (p->pdata->va_ns_supported) {
+			ret = dbmdx_configure_ns(p, mode, p->va_ns_enabled);
+			if (ret < 0) {
+				dev_err(p->dev,
+					"%s: failed to enable NS\n",
+					__func__);
+				goto out;
+			}
+		}
+#endif
 	} else if (mode == DBMDX_STREAMING) {
 
 		/* If DBMDX_STREAMING was requested, no passprase recog.
-		is required. Thus set recognition mode to 0 */
+		 * is required. Thus set recognition mode to 0
+		 */
 		ret = dbmdx_set_sv_recognition_mode(p,
 					SV_RECOGNITION_MODE_DISABLED);
 		if (ret < 0) {
@@ -1351,6 +1343,18 @@ static int dbmdx_set_mode(struct dbmdx_private *p, int mode)
 			p->va_flags.irq_inuse = 0;
 			goto out;
 		}
+
+#ifdef DBMDX_VA_NS_SUPPORT
+		if (p->pdata->va_ns_supported) {
+			ret = dbmdx_configure_ns(p, mode, p->va_ns_enabled);
+			if (ret < 0) {
+				dev_err(p->dev,
+					"%s: failed to enable NS\n",
+					__func__);
+				goto out;
+			}
+		}
+#endif
 
 		required_mode = DBMDX_DETECTION;
 	} else if (mode == DBMDX_DETECTION_AND_STREAMING) {
@@ -1383,6 +1387,20 @@ static int dbmdx_set_mode(struct dbmdx_private *p, int mode)
 		}
 		p->va_flags.irq_inuse = 1;
 
+	} else if (mode == DBMDX_BUFFERING) {
+		/* Stop PCM streaming work */
+		p->va_flags.pcm_worker_active = 0;
+#ifdef DBMDX_VA_NS_SUPPORT
+		if (p->pdata->va_ns_supported) {
+			ret = dbmdx_configure_ns(p, mode, p->va_ns_enabled);
+			if (ret < 0) {
+				dev_err(p->dev,
+					"%s: failed to enable NS\n",
+					__func__);
+				goto out;
+			}
+		}
+#endif
 	}
 
 	if (new_power_mode == DBMDX_PM_ACTIVE && required_mode != DBMDX_IDLE) {
@@ -1413,7 +1431,7 @@ static int dbmdx_set_mode(struct dbmdx_private *p, int mode)
 	/* Verify that mode was set */
 	if (!p->asleep && send_set_mode_cmd) {
 		unsigned short new_mode;
-		int retry = RETRY_COUNT;
+		int retry = 10;
 
 		while (retry--) {
 
@@ -1441,6 +1459,17 @@ static int dbmdx_set_mode(struct dbmdx_private *p, int mode)
 		usleep_range(DBMDX_USLEEP_SET_MODE,
 					DBMDX_USLEEP_SET_MODE + 1000);
 
+#ifdef DBMDX_VA_NS_SUPPORT
+	if (p->pdata->va_ns_supported &&
+		!(p->asleep) && (new_power_mode != DBMDX_PM_ACTIVE)) {
+		ret = dbmdx_configure_ns(p, mode, p->va_ns_enabled);
+		if (ret < 0) {
+			dev_err(p->dev,	"%s: failed to disable NS\n",
+				__func__);
+			goto out;
+		}
+	}
+#endif
 	if ((p->va_flags.disabling_mics_not_allowed == false) &&
 		!(p->asleep) && (new_power_mode != DBMDX_PM_ACTIVE)) {
 
@@ -1478,7 +1507,7 @@ static int dbmdx_set_mode(struct dbmdx_private *p, int mode)
 
 	ret = 0;
 	dev_dbg(p->dev,
-		"%s: Successfull mode transition from %d to mode is %d\n",
+		"%s: Successful mode transition from %d to mode is %d\n",
 		__func__, cur_opmode, p->va_flags.mode);
 	goto out;
 
@@ -1497,11 +1526,13 @@ static int dbmdx_trigger_detection(struct dbmdx_private *p)
 	}
 
 	p->va_flags.disabling_mics_not_allowed = true;
+	p->va_flags.sleep_not_allowed = true;
 
 	/* set chip to idle mode before entering detection mode */
 	ret = dbmdx_set_mode(p, DBMDX_IDLE);
 
 	p->va_flags.disabling_mics_not_allowed = false;
+	p->va_flags.sleep_not_allowed = false;
 
 	if (ret) {
 		dev_err(p->dev, "%s: failed to set device to idle mode\n",
@@ -1518,7 +1549,8 @@ static int dbmdx_trigger_detection(struct dbmdx_private *p)
 	}
 
 	/* disable transport (if configured) so the FW goes into best power
-	 * saving mode (only if no active pcm streaming in background) */
+	 * saving mode (only if no active pcm streaming in background)
+	 */
 	if (p->va_flags.mode != DBMDX_STREAMING &&
 		p->va_flags.mode != DBMDX_DETECTION_AND_STREAMING)
 		p->chip->transport_enable(p, false);
@@ -1918,6 +1950,34 @@ static int dbmdx_update_microphone_mode(struct dbmdx_private *p,
 	switch (mode) {
 	case DBMDX_MIC_MODE_DIGITAL_STEREO_TRIG_ON_LEFT:
 	case DBMDX_MIC_MODE_DIGITAL_STEREO_TRIG_ON_RIGHT:
+#ifdef DBMDX_VA_NS_SUPPORT
+		p->pdata->va_audio_channels = 1;
+		if (p->pdata->detection_buffer_channels == 0 ||
+			p->pdata->detection_buffer_channels == 1) {
+			p->detection_achannel_op = AUDIO_CHANNEL_OP_COPY;
+			new_detection_kfifo_size = MAX_KFIFO_BUFFER_SIZE_STEREO;
+#ifdef DBMDX_4CHANNELS_SUPPORT
+		} else if (p->pdata->detection_buffer_channels == 4) {
+			p->detection_achannel_op =
+			AUDIO_CHANNEL_OP_DUPLICATE_1_TO_4;
+			new_detection_kfifo_size = MAX_KFIFO_BUFFER_SIZE_4CH;
+#endif
+		} else {
+			p->detection_achannel_op =
+				AUDIO_CHANNEL_OP_DUPLICATE_1_TO_2;
+			new_detection_kfifo_size = MAX_KFIFO_BUFFER_SIZE_MONO;
+		}
+
+		if (p->audio_pcm_channels == 1)
+			p->pcm_achannel_op = AUDIO_CHANNEL_OP_COPY;
+#ifdef DBMDX_4CHANNELS_SUPPORT
+		else if (p->audio_pcm_channels == 4)
+			p->pcm_achannel_op = AUDIO_CHANNEL_OP_DUPLICATE_1_TO_4;
+#endif
+		else
+			p->pcm_achannel_op =
+				AUDIO_CHANNEL_OP_DUPLICATE_1_TO_2;
+#else /* DBMDX_VA_NS_SUPPORT */
 		p->pdata->va_audio_channels = 2;
 		if (p->pdata->detection_buffer_channels == 0 ||
 			p->pdata->detection_buffer_channels == 2) {
@@ -1944,7 +2004,7 @@ static int dbmdx_update_microphone_mode(struct dbmdx_private *p,
 		else
 			p->pcm_achannel_op =
 				AUDIO_CHANNEL_OP_TRUNCATE_2_TO_1;
-
+#endif
 		break;
 	case DBMDX_MIC_MODE_DIGITAL_LEFT:
 	case DBMDX_MIC_MODE_DIGITAL_RIGHT:
@@ -2042,6 +2102,14 @@ static int dbmdx_reconfigure_microphones(struct dbmdx_private *p,
 
 
 	dev_dbg(p->dev, "%s: val - %d\n", __func__, (int)mode);
+
+#ifdef DBMDX_VA_NS_SUPPORT
+	if ((mode == DBMDX_MIC_MODE_DIGITAL_LEFT) ||
+		(mode == DBMDX_MIC_MODE_DIGITAL_RIGHT)) {
+		mode = DBMDX_MIC_MODE_DIGITAL_STEREO_TRIG_ON_LEFT;
+		dev_info(p->dev, "%s: Enforcing Mic config: 2\n", __func__);
+	}
+#endif
 
 	current_mode = p->va_flags.mode;
 	current_audio_channels = p->pdata->va_audio_channels;
@@ -2233,12 +2301,13 @@ static int dbmdx_set_pcm_rate(struct dbmdx_private *p,
 #ifdef DBMDX_PCM_RATE_32000_SUPPORTED
 	case 32000:
 		rate_mask = DBMDX_SND_PCM_RATE_32000;
+		break;
 #endif
 #ifdef DBMDX_PCM_RATE_44100_SUPPORTED
 	case 44100:
 		rate_mask = DBMDX_SND_PCM_RATE_44100;
-#endif
 		break;
+#endif
 	case 48000:
 		rate_mask = DBMDX_SND_PCM_RATE_48000;
 		break;
@@ -2301,7 +2370,7 @@ static int dbmdx_read_fw_vad_settings(struct dbmdx_private *p)
 	}
 
 	cur_config &= DBMDX_HW_VAD_MASK;
-	p->fw_vad_type = ((cur_config >> 5) & 0x7);
+	p->fw_vad_type = ((cur_config >> 5) & 0x3);
 
 	dev_dbg(p->dev, "%s: FW Vad is set to 0x%08x\n",
 		__func__, p->fw_vad_type);
@@ -2368,6 +2437,7 @@ static int dbmdx_verify_model_support(struct dbmdx_private *p)
 static int dbmdx_disable_hw_vad(struct dbmdx_private *p)
 {
 	u16 cur_config = 0xffff;
+	u16 cur_fw_vad_config = 0;
 	int ret = 0;
 
 	if ((p->cur_firmware_id != DBMDX_FIRMWARE_ID_DBMD4) &&
@@ -2384,6 +2454,15 @@ static int dbmdx_disable_hw_vad(struct dbmdx_private *p)
 			"%s: failed to read DBMDX_VA_GENERAL_CONFIGURATION_2\n",
 			__func__);
 		return ret;
+	}
+
+	cur_fw_vad_config = cur_config & DBMDX_HW_VAD_MASK;
+
+	if (!cur_fw_vad_config) {
+		dev_dbg(p->dev,
+			"%s: The HW VAD is already disabled, do nothing\n",
+			__func__);
+		return 0;
 	}
 
 	cur_config &= (~(DBMDX_HW_VAD_MASK) & 0xffff);
@@ -2428,6 +2507,13 @@ static int dbmdx_restore_fw_vad_settings(struct dbmdx_private *p)
 		(p->cur_firmware_id != DBMDX_FIRMWARE_ID_DBMD6) &&
 		(p->cur_firmware_id != DBMDX_FIRMWARE_ID_DBMD8))
 		return 0;
+
+	if (!(p->fw_vad_type)) {
+		dev_dbg(p->dev,
+			"%s: The HW VAD is already disabled, do nothing\n",
+			__func__);
+		return 0;
+	}
 
 	/* read configuration */
 	ret = dbmdx_send_cmd(p,
@@ -2522,7 +2608,7 @@ static int dbmdx_calc_amodel_checksum(struct dbmdx_private *p,
 	u32 pos = 0, chunk_len;
 	int err = -1;
 
-	*chksum = (unsigned long)0 - 1;
+	*chksum = 0;
 
 	while (pos < len) {
 		val = *(u16 *)(&amodel[pos]);
@@ -2886,23 +2972,49 @@ static ssize_t dbmdx_acoustic_model_build_from_svt_multichunk_file(
 	size_t gram_size, net_size;
 	u32 gram_addr = 0x1;
 	u32 net_addr = 0x2;
+	int i = 0;
 
 	target_pos = 0;
 
-	/* File format is:
-		4 bytes net_size + net_data + 4 bytes gram_size + gram_data */
+	if (file_size < 4) {
+		dev_err(p->dev, "%s: File size is too small\n", __func__);
+		ret = -EINVAL;
+		goto out;
+	 }
+
+	 /* Check if it is special file that contains all zeroes for loading
+	  * dummy model
+	  */
+	for (i = 0; i < file_size; i++)
+		if (file_data[i])
+			break;
+
+	if (i == file_size) {
+		dev_info(p->dev, "%s: Detected svt dummy model file\n",
+				__func__);
+		return dbmdx_va_amodel_load_dummy_model(p,
+							0x1,
+							amodel_buf,
+							amodel_size,
+							num_of_amodel_chunks,
+							amodel_chunks_size);
+	 }
+
+	 /* File format is:
+	 * 4 bytes net_size + net_data + 4 bytes gram_size + gram_data
+	 */
 
 	/* The size is encoded in bytes */
 	net_size = (size_t)(file_data[0] | (file_data[1]<<8) |
 				(file_data[2]<<16) | (file_data[3]<<24));
 
 	/* File size should be at least:
-		net_data_size + 4 bytes net_size + 4 bytes gram_size */
+	 * net_data_size + 4 bytes net_size + 4 bytes gram_size
+	 */
 	if (net_size > (file_size - 8)) {
-			dev_err(p->dev,	"%s: Net Encoded size > File size\n",
-					__func__);
-			ret = -EINVAL;
-			goto out;
+		dev_err(p->dev,	"%s: Net Encoded size > File size\n", __func__);
+		ret = -EINVAL;
+		goto out;
 	}
 
 	gram_size = (size_t)(file_data[net_size+4] |
@@ -2911,7 +3023,8 @@ static ssize_t dbmdx_acoustic_model_build_from_svt_multichunk_file(
 				(file_data[net_size+7]<<24));
 
 	/* File size should be at least:
-	gram_data_size + net_data_size + 4 bytes net_size + 4 bytes gram_size */
+	 * gram_data_size + net_data_size + 4 bytes net_size + 4 bytes gram_size
+	 */
 	if ((net_size + gram_size + 8) > file_size) {
 		dev_err(p->dev,	"%s: Encoded size > File size\n", __func__);
 		ret = -EINVAL;
@@ -3056,6 +3169,146 @@ static int dbmdx_acoustic_model_build(struct dbmdx_private *p,
 	}
 
 }
+
+#ifdef EXTERNAL_SOC_AMODEL_LOADING_ENABLED
+static int dbmdx_acoustic_model_build_from_external(struct dbmdx_private *p,
+							const u8 *amodel_data,
+							unsigned int size)
+{
+	enum dbmdx_load_amodel_mode amode;
+	int cur_val;
+	int amodel_options;
+	int num_of_amodel_files;
+	const u8 *files_data[DBMDX_AMODEL_MAX_CHUNKS];
+	ssize_t amodel_files_size[DBMDX_AMODEL_MAX_CHUNKS];
+	int chunk_idx;
+	size_t off = 0;
+	struct amodel_info *cur_amodel = NULL;
+	unsigned int cur_amodel_options = p->pdata->amodel_options;
+	int ret = 0;
+
+	if (!p)
+		return -EAGAIN;
+
+	cur_val = amodel_data[0];
+	off += 1;
+
+	if (cur_val > LOAD_AMODEL_MAX) {
+		dev_err(p->dev,	"%s: invalid loading mode %d\n", __func__,
+			cur_val);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	amode = (enum dbmdx_load_amodel_mode)cur_val;
+	dev_dbg(p->dev, "%s: Loading mode %d (%d)\n", __func__,
+			cur_val, amode);
+
+	amodel_options = amodel_data[off];
+	off += 1;
+	dev_dbg(p->dev, "%s: Amodel options %d\n", __func__, amodel_options);
+
+	num_of_amodel_files = amodel_data[off];
+	off += 1;
+
+	dev_dbg(p->dev, "%s: Num Of Amodel files %d\n", __func__,
+							num_of_amodel_files);
+
+	for (chunk_idx = 0; chunk_idx < num_of_amodel_files; chunk_idx++)
+		files_data[chunk_idx] = NULL;
+
+	for (chunk_idx = 0; chunk_idx < num_of_amodel_files; chunk_idx++) {
+
+		/* The size is encoded in bytes */
+		amodel_files_size[chunk_idx] = (ssize_t)(amodel_data[off] |
+						(amodel_data[off+1]<<8) |
+						(amodel_data[off+2]<<16) |
+						(amodel_data[off+3]<<24));
+		off += 4;
+		dev_dbg(p->dev, "%s: Chunk size %d\n", __func__,
+			(int)(amodel_files_size[chunk_idx]));
+
+		/* File size should be at least:
+		 * net_data_size + 4 bytes net_size + 4 bytes gram_size
+		 */
+		if (amodel_files_size[chunk_idx] > (size - off)) {
+			dev_err(p->dev,	"%s: Chunk size exceeds buffer size\n",
+					__func__);
+			ret = -EINVAL;
+			goto out;
+		}
+
+		if (amodel_files_size[chunk_idx] == 0) {
+			dev_warn(p->dev, "%s Chunk size is 0. Ignore...\n",
+				__func__);
+			ret = -ENOENT;
+			goto out;
+		}
+
+		files_data[chunk_idx] = &(amodel_data[off]);
+		off += amodel_files_size[chunk_idx];
+
+		dev_dbg(p->dev, "%s Chunk #%d size=%zu bytes\n",
+			__func__, chunk_idx, amodel_files_size[chunk_idx]);
+	}
+
+	if (amode == LOAD_AMODEL_PRIMARY) {
+		cur_amodel = &(p->primary_amodel);
+		p->pdata->amodel_options = amodel_options;
+	} else if (amode == LOAD_AMODEL_2NDARY) {
+		cur_amodel = &(p->secondary_amodel);
+		p->pdata->amodel_options = amodel_options;
+	}
+#ifdef DMBDX_OKG_AMODEL_SUPPORT
+	else if (amode == LOAD_AMODEL_OKG) {
+		cur_amodel = &(p->okg_amodel);
+		p->pdata->amodel_options = DBMDX_AMODEL_INCLUDES_HEADERS;
+	}
+#endif
+
+	if (cur_amodel == NULL) {
+		dev_err(p->dev,	"%s: amodel loading mode is not supported\n",
+			__func__);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (cur_amodel->amodel_buf == NULL) {
+		cur_amodel->amodel_buf  = vmalloc(MAX_AMODEL_SIZE);
+		if (!cur_amodel->amodel_buf) {
+			ret = -ENOMEM;
+			goto out;
+		}
+	}
+
+	cur_amodel->amodel_loaded = false;
+
+	ret = dbmdx_acoustic_model_build(p,
+					num_of_amodel_files,
+					files_data,
+					amodel_files_size,
+					0x1,
+					cur_amodel->amodel_buf,
+					&cur_amodel->amodel_size,
+					&cur_amodel->num_of_amodel_chunks,
+					cur_amodel->amodel_chunks_size);
+
+	p->pdata->amodel_options = cur_amodel_options;
+
+	if (ret <= 0) {
+		dev_err(p->dev,	"%s: amodel build failed: %d\n",
+			__func__, ret);
+		ret = -EIO;
+		goto out;
+	}
+
+	ret = 0;
+
+	cur_amodel->amodel_loaded = true;
+out:
+	return ret;
+}
+#endif
 
 static void dbmdx_get_firmware_version(const char *data, size_t size,
 				       char *buf, size_t buf_size)
@@ -3396,6 +3649,7 @@ static int dbmdx_config_va_mode(struct dbmdx_private *p)
 	u16 fwver = 0xffff;
 	u16 cur_reg;
 	u16 cur_val;
+	u32 cur_mic_config;
 
 	dev_dbg(p->dev, "%s\n", __func__);
 #ifdef DBMDX_FW_BELOW_280
@@ -3477,10 +3731,14 @@ static int dbmdx_config_va_mode(struct dbmdx_private *p)
 
 	/* Enusre that PCM rate will be reconfigured */
 	p->current_pcm_rate = 0;
-	p->va_flags.microphones_enabled = true;
+	p->va_flags.microphones_enabled = false;
+	cur_mic_config = p->va_active_mic_config;
+	p->va_active_mic_config = DBMDX_MIC_MODE_DISABLE;
 
 	/* Set pcm rate and configure microphones*/
 	ret = dbmdx_set_pcm_rate(p, p->pdata->va_buffering_pcm_rate);
+
+	p->va_active_mic_config = cur_mic_config;
 
 	if (ret < 0) {
 		dev_err(p->dev, "%s: failed to set pcm rate\n", __func__);
@@ -3530,7 +3788,7 @@ static int dbmdx_config_va_mode(struct dbmdx_private *p)
 	}
 #ifdef DMBDX_OKG_AMODEL_SUPPORT
 	/* read fw register & set OKG algorithm enable/disable */
-	p->va_flags.okg_a_model_loaded = 0;
+	p->va_flags.okg_a_model_downloaded_to_fw = 0;
 	p->va_flags.okg_a_model_enabled = true;
 #endif
 	ret = dbmdx_verify_model_support(p);
@@ -3770,7 +4028,7 @@ static int dbmdx_vqe_firmware_ready(struct dbmdx_private *p,
 
 	dev_dbg(p->dev, "%s: non-overlay: %d\n", __func__, load_non_overlay);
 
-#if 0
+#ifdef DBMDX_OVERLAY_BOOT_SUPPORTED
 	/* check if non-overlay firmware is available */
 	if (p->vqe_non_overlay_fw && load_non_overlay) {
 		ssize_t send;
@@ -4115,7 +4373,8 @@ out:
 
 /* ------------------------------------------------------------------------
  * sysfs attributes
- * ------------------------------------------------------------------------ */
+ * ------------------------------------------------------------------------
+ */
 static ssize_t dbmdx_reg_show(struct device *dev, u32 command,
 			      struct device_attribute *attr, char *buf)
 {
@@ -4395,7 +4654,8 @@ static ssize_t dbmdx_fw_ver_show(struct device *dev,
 		p->unlock(p);
 
 		if (ret)
-			return sprintf(buf, "error reading firmware info\n");
+			return snprintf(buf, PAGE_SIZE,
+					"error reading firmware info\n");
 
 		off += snprintf(buf + off, PAGE_SIZE - off,
 			"%s version information\n",
@@ -4926,6 +5186,285 @@ static ssize_t dbmdx_va_cfg_values_show(struct device *dev,
 
 	return off;
 }
+#ifdef DBMDX_VA_NS_SUPPORT
+static ssize_t dbmdx_va_ns_enable_show(struct device *dev,
+				    struct device_attribute *attr, char *buf)
+{
+	struct dbmdx_private *p = dev_get_drvdata(dev);
+	int ret;
+
+	if (!p)
+		return -EAGAIN;
+
+	if (!p->device_ready) {
+		dev_err(p->dev, "%s: device not ready\n", __func__);
+		return -EAGAIN;
+	}
+
+	ret = snprintf(buf, PAGE_SIZE, "VA_NS enabled: %d\n", p->va_ns_enabled);
+
+	return ret;
+}
+
+static ssize_t dbmdx_va_ns_enable_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t size)
+{
+	struct dbmdx_private *p = dev_get_drvdata(dev);
+	unsigned long val;
+	int ret;
+
+	ret = kstrtoul(buf, 0, &val);
+	if (ret)
+		return -EINVAL;
+
+	if (!p)
+		return -EAGAIN;
+
+	if (val > 2) {
+		dev_err(p->dev, "%s: invalid value - supported values: [0/1]\n",
+			__func__);
+		return -EINVAL;
+	}
+
+	p->va_ns_enabled = (bool)val;
+
+	return size;
+}
+
+static ssize_t dbmdx_va_ns_pcm_streaming_enable_show(struct device *dev,
+				    struct device_attribute *attr, char *buf)
+{
+	struct dbmdx_private *p = dev_get_drvdata(dev);
+	int ret;
+
+	if (!p)
+		return -EAGAIN;
+
+	if (!p->device_ready) {
+		dev_err(p->dev, "%s: device not ready\n", __func__);
+		return -EAGAIN;
+	}
+
+	ret = snprintf(buf, PAGE_SIZE,
+		"VA_NS processing on PCM Streaming enabled: %d\n",
+		p->va_ns_pcm_streaming_enabled);
+
+	return ret;
+}
+
+static ssize_t dbmdx_va_ns_pcm_streaming_enable_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t size)
+{
+	struct dbmdx_private *p = dev_get_drvdata(dev);
+	unsigned long val;
+	int ret;
+
+	ret = kstrtoul(buf, 0, &val);
+	if (ret)
+		return -EINVAL;
+
+	if (!p)
+		return -EAGAIN;
+
+	if (val > 2) {
+		dev_err(p->dev, "%s: invalid value - supported values: [0/1]\n",
+			__func__);
+		return -EINVAL;
+	}
+
+	p->va_ns_pcm_streaming_enabled = (bool)val;
+
+	return size;
+}
+
+static ssize_t dbmdx_va_ns_cfg_values_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t size)
+{
+	struct dbmdx_private *p = dev_get_drvdata(dev);
+	struct dbmdx_platform_data *pdata;
+	char *str_p;
+	char *args =  (char *)buf;
+	unsigned long val;
+	u32 index = 0;
+	u32 new_value = 0;
+	u32 cfg_index = 0;
+	bool cfg_index_set = false, index_set = false, value_set = false;
+	int i, j;
+	u32 *cur_cfg_arr;
+
+	int ret = -EINVAL;
+
+	if (!p)
+		return -EAGAIN;
+
+	pdata = p->pdata;
+
+	if (!(pdata->va_ns_supported)) {
+		dev_err(p->dev, "%s: VA_NS is not supported\n",	__func__);
+		return -EINVAL;
+	}
+
+	while ((str_p = strsep(&args, " \t")) != NULL) {
+
+		if (!*str_p)
+			continue;
+
+		if (strncmp(str_p, "cfg_index=", 10) == 0) {
+			ret = kstrtoul((str_p+10), 0, &val);
+			if (ret) {
+				dev_err(p->dev, "%s: bad index\n", __func__);
+				ret = -EINVAL;
+				goto print_usage;
+			} else if (val >= pdata->va_ns_num_of_configs) {
+				dev_err(p->dev, "%s: index out of range: %d\n",
+					__func__, (int)val);
+				ret = -EINVAL;
+				goto print_usage;
+			}
+			cfg_index = (u32)val;
+			cfg_index_set = true;
+			continue;
+		}
+		if (strncmp(str_p, "index=", 6) == 0) {
+			ret = kstrtoul((str_p+6), 0, &val);
+			if (ret) {
+				dev_err(p->dev, "%s: bad index\n", __func__);
+				ret = -EINVAL;
+				goto print_usage;
+			} else if (val >=  pdata->va_ns_cfg_values) {
+				dev_err(p->dev, "%s: index out of range: %d\n",
+					__func__, (int)val);
+				ret = -EINVAL;
+				goto print_usage;
+			}
+			index = (u32)val;
+			index_set = true;
+			continue;
+		}
+		if (strncmp(str_p, "value=", 6) == 0) {
+			ret = kstrtoul((str_p+6), 0, &val);
+			if (ret) {
+				dev_err(p->dev, "%s: bad value\n", __func__);
+				ret = -EINVAL;
+				goto print_usage;
+			}
+
+			new_value = (u32)val;
+			value_set = true;
+			continue;
+		}
+	}
+
+	if (!cfg_index_set) {
+		dev_err(p->dev, "%s: config. index is not set\n", __func__);
+		ret = -EINVAL;
+		goto print_usage;
+	} else if (!index_set) {
+		dev_err(p->dev, "%s: index is not set\n", __func__);
+		ret = -EINVAL;
+		goto print_usage;
+	} else if (!value_set) {
+		dev_err(p->dev, "%s: value is not set\n", __func__);
+		ret = -EINVAL;
+		goto print_usage;
+	}
+
+	p->lock(p);
+
+	cur_cfg_arr = (u32 *)(&(pdata->va_ns_cfg_value[cfg_index*
+						pdata->va_ns_cfg_values]));
+
+	cur_cfg_arr[index] = new_value;
+
+	dev_info(p->dev, "%s: va_ns_cfg_value[%u][%u] was set to %u\n",
+		__func__, cfg_index, index, new_value);
+
+	p->unlock(p);
+
+	for (j = 0; j < pdata->va_ns_num_of_configs; j++) {
+
+		dev_info(dev, "%s:\n===== VA_NS configuration #%d =====\n",
+			__func__, j);
+
+		cur_cfg_arr = (u32 *)(&(pdata->va_ns_cfg_value[j*
+						pdata->va_ns_cfg_values]));
+
+		for (i = 0; i < pdata->va_ns_cfg_values; i++) {
+			dev_info(dev, "%s:\tVA_NS cfg %8.8x: 0x%8.8x\n",
+				__func__, i, cur_cfg_arr[i]);
+		}
+
+	}
+
+	return size;
+print_usage:
+	dev_info(p->dev,
+		"%s: Usage: cfg_index=[0-%u] index=[0-%u] value=newval\n",
+		__func__,
+		(u32)(pdata->va_ns_num_of_configs - 1),
+		(u32)(pdata->va_ns_cfg_values) - 1);
+	return ret;
+}
+
+
+static ssize_t dbmdx_va_ns_cfg_values_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct dbmdx_private *p = dev_get_drvdata(dev);
+	int off = 0;
+	struct dbmdx_platform_data *pdata;
+	int i;
+
+	if (!p)
+		return -EAGAIN;
+
+	pdata = p->pdata;
+
+	off += snprintf(buf + off, PAGE_SIZE - off,
+			"\tVA_NS supported %d\n", pdata->va_ns_supported);
+
+	if (pdata->va_ns_supported) {
+		int j;
+		u32 *cur_cfg_arr;
+
+		off += snprintf(buf + off, PAGE_SIZE - off,
+				"\tVA_NS enabled %d\n", p->va_ns_enabled);
+
+		off += snprintf(buf + off, PAGE_SIZE - off,
+				"\tVA_NS on PCM Streaming enabled %d\n",
+				p->va_ns_pcm_streaming_enabled);
+
+		off += snprintf(buf + off, PAGE_SIZE - off,
+				"\tVA_NS active cfg index %d\n",
+				p->va_ns_cfg_index);
+
+		off += snprintf(buf + off, PAGE_SIZE - off,
+				"\tNumber of VA_NS Configs %d\n",
+				pdata->va_ns_num_of_configs);
+
+		for (j = 0; j < pdata->va_ns_num_of_configs; j++) {
+
+			off += snprintf(buf + off, PAGE_SIZE - off,
+				"\n\t===== VA_NS configuration #%d =====\n", j);
+
+			cur_cfg_arr = (u32 *)(&(pdata->va_ns_cfg_value[j*
+						pdata->va_ns_cfg_values]));
+
+			for (i = 0; i < pdata->va_ns_cfg_values; i++)
+				off += snprintf(buf + off,
+					PAGE_SIZE - off,
+					"\t\tVA_NS cfg %8.8x: 0x%8.8x\n",
+					i, cur_cfg_arr[i]);
+		}
+	}
+
+	return off;
+}
+#endif
 
 static ssize_t dbmdx_va_mic_cfg_store(struct device *dev,
 					struct device_attribute *attr,
@@ -5097,7 +5636,8 @@ static ssize_t dbmdx_io_addr_store(struct device *dev,
 }
 
 static int dbmdx_set_sv_recognition_mode(struct dbmdx_private *p,
-	enum dbmdx_sv_recognition_mode mode) {
+	enum dbmdx_sv_recognition_mode mode)
+{
 
 	u16 cur_val = 0;
 
@@ -5181,7 +5721,8 @@ static ssize_t dbmdx_va_okg_amodel_enable_show(struct device *dev,
 	off += snprintf(buf + off, PAGE_SIZE - off, "OKG fw supported:\t%s\n",
 			p->okg_a_model_support ? "Yes" : "No");
 	off += snprintf(buf + off, PAGE_SIZE - off, "OKG amodel loaded:\t%s\n",
-			p->va_flags.okg_a_model_loaded ? "Yes" : "No");
+			p->va_flags.okg_a_model_downloaded_to_fw ?
+			"Yes" : "No");
 	off += snprintf(buf + off, PAGE_SIZE - off, "OKG amodel enable:\t%s\n",
 			p->va_flags.okg_a_model_enabled ? "Yes" : "No");
 	off += snprintf(buf + off, PAGE_SIZE - off,
@@ -5329,14 +5870,12 @@ release:
 }
 
 static int dbmdx_va_amodel_okg_load(struct dbmdx_private *p,
-			const char *dbmdx_okg_name)
+			const char *dbmdx_okg_name,
+			bool to_load_from_memory)
 {
 	int ret, ret2;
-	char *data_buf_okg;
-	ssize_t amodel_size = 0;
-	ssize_t amodel_chunks_size[DBMDX_AMODEL_MAX_CHUNKS];
-	int num_of_amodel_chunks = 0;
 	u16 load_result = 0;
+	struct amodel_info *cur_amodel = NULL;
 
 	if (!p)
 		return -EAGAIN;
@@ -5346,34 +5885,45 @@ static int dbmdx_va_amodel_okg_load(struct dbmdx_private *p,
 		return -EAGAIN;
 	}
 
-	if (p->va_flags.okg_a_model_loaded) {
+	cur_amodel = &(p->okg_amodel);
+
+	if (p->va_flags.okg_a_model_downloaded_to_fw) {
 		dev_info(p->dev, "%s: OKG model has been already loaded\n",
 			__func__);
 		return 0;
 	}
 
-	data_buf_okg = vmalloc(MAX_AMODEL_SIZE);
-	if (!data_buf_okg) {
-		dev_err(p->dev,
-			"%s: Cannot allocate memory for OKG model\n",
+	if (to_load_from_memory && !(p->okg_amodel.amodel_loaded)) {
+
+		dev_err(p->dev, "%s: OKG model was not loaded to memory\n",
 			__func__);
-		return -ENOMEM;
+		return -EAGAIN;
 	}
 
-	ret = dbmdx_va_amodel_okg_load_file(p,
+	if (!to_load_from_memory) {
+		if (cur_amodel->amodel_buf == NULL) {
+			cur_amodel->amodel_buf  = vmalloc(MAX_AMODEL_SIZE);
+			if (!cur_amodel->amodel_buf)
+				return -ENOMEM;
+		}
+
+		ret = dbmdx_va_amodel_okg_load_file(p,
 					dbmdx_okg_name,
-					data_buf_okg,
-					&amodel_size,
-					&num_of_amodel_chunks,
-					amodel_chunks_size);
+					cur_amodel->amodel_buf,
+					&cur_amodel->amodel_size,
+					&cur_amodel->num_of_amodel_chunks,
+					cur_amodel->amodel_chunks_size);
+		if (ret < 0) {
+			dev_err(p->dev, "%s: failed to load OKG amodel(%d)\n",
+				__func__, ret);
+			ret = -EFAULT;
+			goto out;
+		}
 
-	if (ret < 0) {
-		dev_err(p->dev, "%s: failed to load OKG amodel(%d)\n",
-			__func__, ret);
-		goto out_mem;
+		cur_amodel->amodel_loaded = true;
 	}
 
-	p->va_flags.okg_amodel_len = amodel_size;
+	p->va_flags.okg_amodel_len = cur_amodel->amodel_size;
 
 	p->device_ready = false;
 
@@ -5382,7 +5932,8 @@ static int dbmdx_va_amodel_okg_load(struct dbmdx_private *p,
 	if (ret) {
 		dev_err(p->dev, "%s: failed to set device to idle mode\n",
 			__func__);
-		goto out_mem;
+		ret = -EIO;
+		goto out;
 	}
 
 	dbmdx_set_power_mode(p, DBMDX_PM_ACTIVE);
@@ -5393,30 +5944,31 @@ static int dbmdx_va_amodel_okg_load(struct dbmdx_private *p,
 		dev_err(p->dev, "%s: failed to prepare A-Model loading\n",
 			__func__);
 		p->device_ready = true;
-		goto out_mem;
+		ret = -EIO;
+		goto out;
 	}
 
-	p->va_flags.okg_a_model_loaded = 0;
+	p->va_flags.okg_a_model_downloaded_to_fw = 0;
 
 	if (p->chip->load_amodel)
 		/* load A-Model and verify checksum */
 		ret = p->chip->load_amodel(p,
-					data_buf_okg,
-					amodel_size - 4,
-					num_of_amodel_chunks,
-					amodel_chunks_size,
-					&(data_buf_okg[amodel_size - 4]),
-					4,
-					LOAD_AMODEL_OKG);
+			cur_amodel->amodel_buf,
+			cur_amodel->amodel_size - 4,
+			cur_amodel->num_of_amodel_chunks,
+			cur_amodel->amodel_chunks_size,
+			&(cur_amodel->amodel_buf[cur_amodel->amodel_size - 4]),
+			4,
+			LOAD_AMODEL_OKG_FW_CMD);
 	else
 		ret = dbmdx_va_amodel_send(p,
-					data_buf_okg,
-					amodel_size - 4,
-					num_of_amodel_chunks,
-					amodel_chunks_size,
-					&(data_buf_okg[amodel_size - 4]),
-					4,
-					LOAD_AMODEL_OKG);
+			cur_amodel->amodel_buf,
+			cur_amodel->amodel_size - 4,
+			cur_amodel->num_of_amodel_chunks,
+			cur_amodel->amodel_chunks_size,
+			&(cur_amodel->amodel_buf[cur_amodel->amodel_size - 4]),
+			4,
+			LOAD_AMODEL_OKG_FW_CMD);
 
 	if (ret) {
 		dev_err(p->dev, "%s: sending amodel failed\n",
@@ -5465,7 +6017,7 @@ static int dbmdx_va_amodel_okg_load(struct dbmdx_private *p,
 	dev_info(p->dev, "%s: OKG acoustic model sent successfully\n",
 		__func__);
 
-	p->va_flags.okg_a_model_loaded = 1;
+	p->va_flags.okg_a_model_downloaded_to_fw = 1;
 
 out_finish_loading:
 	/* finish A-Model loading */
@@ -5476,11 +6028,461 @@ out_finish_loading:
 
 	p->device_ready = true;
 
-out_mem:
-	vfree(data_buf_okg);
+out:
 	return ret;
 }
 #endif /* DMBDX_OKG_AMODEL_SUPPORT */
+
+#ifdef DBMDX_VA_NS_SUPPORT
+static int dbmdx_send_asrp_params_buf(struct dbmdx_private *p,
+					const void *data,
+					size_t size)
+{
+	int retry = RETRY_COUNT;
+	int ret;
+	ssize_t send_bytes;
+
+	if (!p)
+		return -EAGAIN;
+
+	dev_dbg(p->dev, "%s\n", __func__);
+
+	while (retry--) {
+
+		if (size == 0 || data == NULL) {
+			dev_err(p->dev,
+				"%s: Illegal size of asrp params file\n",
+				__func__);
+			retry = -1;
+			break;
+		}
+
+		ret = dbmdx_send_cmd(p,
+				DBMDX_VA_LOAD_NEW_ACUSTIC_MODEL | 4,
+				NULL);
+
+		if (ret < 0) {
+			dev_err(p->dev,
+				"%s: failed to set fw to receive new asrp params\n",
+				__func__);
+			continue;
+		}
+
+		dev_dbg(p->dev, "%s, size = %d\n", __func__, (int)size);
+
+		dev_info(p->dev,
+			"%s: ---------> ASRP Params download start\n",
+			__func__);
+
+		/* Send ASRP Data */
+		send_bytes = p->chip->write(p, data, size);
+		if (send_bytes != size) {
+			dev_err(p->dev,
+				"%s: sending of Asrp params data failed\n",
+				__func__);
+
+			ret =  p->chip->send_cmd_boot(p, DBMDX_FIRMWARE_BOOT);
+			if (ret < 0)
+				dev_err(p->dev,
+					"%s: booting the firmware failed\n",
+					__func__);
+
+			continue;
+		}
+
+		dev_info(p->dev,
+			"%s: ---------> ASRP Params download done.\n",
+			__func__);
+
+		break;
+	}
+
+	/* no retries left, failed to load acoustic */
+	if (retry < 0) {
+		dev_err(p->dev, "%s: failed to send ASRP Params\n",
+			__func__);
+		return -EIO;
+	}
+
+	/* wait some time */
+	msleep(DBMDX_MSLEEP_AFTER_LOAD_ASRP);
+
+	return 0;
+}
+
+static int dbmdx_load_asrp_params_file(struct dbmdx_private *p,
+					const char *dbmdx_asrp_name,
+					char	*asrp_buf,
+					ssize_t *asrp_buf_size)
+{
+	int ret;
+	struct firmware	*va_asrp_fw = NULL;
+
+	if (!p)
+		return -EAGAIN;
+
+	if (!p->device_ready) {
+		dev_err(p->dev, "%s: device not ready\n", __func__);
+		return -EAGAIN;
+	}
+
+	if (!dbmdx_asrp_name[0]) {
+		dev_err(p->dev, "%s: Unknown ASRP Params file name\n",
+				__func__);
+			return -ENOENT;
+	}
+
+	dev_dbg(p->dev, "%s: loading %s\n", __func__, dbmdx_asrp_name);
+
+	ret = request_firmware((const struct firmware **)&va_asrp_fw,
+				dbmdx_asrp_name,
+				p->dbmdx_dev);
+	if (ret < 0) {
+		dev_err(p->dev, "%s: failed to request ASRP Params(%d)\n",
+			__func__, ret);
+		return -ENOENT;
+	}
+
+	dev_info(p->dev, "%s: ASRP Params requested\n", __func__);
+
+	dev_dbg(p->dev, "%s ASRP=%zu bytes\n",
+		__func__, va_asrp_fw->size);
+
+	if (!va_asrp_fw->size) {
+		dev_warn(p->dev, "%s ASRP size is 0. Ignore...\n",
+			__func__);
+		ret = -EIO;
+		goto release;
+	}
+
+	if (va_asrp_fw->size > MAX_AMODEL_SIZE) {
+		dev_err(p->dev,
+			"%s: model exceeds max size %zd>%d\n",
+			__func__, va_asrp_fw->size, MAX_AMODEL_SIZE);
+		ret = -EINVAL;
+		goto release;
+	}
+
+	memcpy(asrp_buf, va_asrp_fw->data, va_asrp_fw->size);
+
+	*asrp_buf_size = va_asrp_fw->size;
+
+release:
+	if (va_asrp_fw)
+		release_firmware(va_asrp_fw);
+
+	return ret;
+}
+
+
+static int dbmdx_va_load_asrp_params(struct dbmdx_private *p,
+			const char *dbmdx_asrp_name)
+{
+	int ret, ret2;
+	char *data_buf_asrp = NULL;
+	ssize_t asrp_bin_size = 0;
+	u16 val;
+
+	if (!p)
+		return -EAGAIN;
+
+	if (!p->device_ready) {
+		dev_err(p->dev, "%s: device not ready\n", __func__);
+		return -EAGAIN;
+	}
+
+	dev_dbg(p->dev, "%s:\n", __func__);
+
+	data_buf_asrp = vmalloc(MAX_AMODEL_SIZE);
+	if (!data_buf_asrp)
+		return -ENOMEM;
+
+	ret = dbmdx_load_asrp_params_file(p,
+					dbmdx_asrp_name,
+					data_buf_asrp,
+					&asrp_bin_size);
+
+	if (ret < 0) {
+		dev_err(p->dev, "%s: failed to load ASRP amodel(%d)\n",
+			__func__, ret);
+		goto out_mem;
+	}
+
+	p->device_ready = false;
+
+	/* prepare the chip interface for A-Model loading */
+	ret = p->chip->prepare_amodel_loading(p);
+	if (ret != 0) {
+		dev_err(p->dev, "%s: failed to prepare A-Model loading\n",
+			__func__);
+		p->device_ready = true;
+		goto out_mem;
+	}
+
+	ret = dbmdx_send_asrp_params_buf(p, data_buf_asrp, asrp_bin_size);
+
+	if (ret) {
+		dev_err(p->dev, "%s: sending ASRP params failed\n",
+			__func__);
+		ret = -EIO;
+		goto out_finish_loading;
+	}
+
+	ret = dbmdx_va_alive(p);
+	if (ret) {
+		dev_err(p->dev, "%s: fw is dead\n", __func__);
+		ret = -EIO;
+		goto out_finish_loading;
+	}
+
+	p->device_ready = true;
+
+	ret = dbmdx_indirect_register_read(p, DBMDX_VA_ASRP_PARAM_SIZE, &val);
+	if (ret < 0) {
+		dev_err(p->dev,
+			"%s: failed to read ASRP size after loading params\n",
+			__func__);
+		ret = -EIO;
+		goto out_finish_loading;
+	}
+
+	if (val == 0 || val == 0xffff) {
+		dev_err(p->dev,
+			"%s: Reported ASRP params size is invalid: %d\n",
+			__func__, (int)val);
+		ret = -EIO;
+		goto out_finish_loading;
+	}
+
+	ret = dbmdx_indirect_register_read(p, DBMDX_VA_ASRP_CONTROL, &val);
+	if (ret < 0) {
+		dev_err(p->dev,
+			"%s: failed to read ASRP control register\n",
+			__func__);
+		ret = -EIO;
+		goto out_finish_loading;
+	}
+
+	dev_info(p->dev, "%s: ASRP Control: 0x%x\n", __func__, val);
+
+	dev_info(p->dev, "%s: ASRP Params sent successfully\n",
+		__func__);
+
+out_finish_loading:
+	/* finish A-Model loading */
+	ret2 = p->chip->finish_amodel_loading(p);
+	if (ret2 != 0)
+		dev_err(p->dev, "%s: failed to finish A-Model loading\n",
+			__func__);
+
+	p->device_ready = true;
+out_mem:
+	vfree(data_buf_asrp);
+	return ret;
+}
+
+static int dbmdx_configure_ns(struct dbmdx_private *p, int mode, bool enable)
+{
+	int ret = 0;
+	u16 cur_reg;
+	u16 cur_val;
+	u16 bypass_val = 0;
+	int i;
+	u32 *cur_cfg_arr;
+	bool to_load_asrp_fw = false;
+	bool to_set_idle_mode = false;
+	bool to_set_bypass = false;
+	int retry = 10;
+
+
+	if (!p)
+		return -EAGAIN;
+
+	dev_dbg(p->dev, "%s: mode=%d, enable=%d\n",
+		__func__, mode, (int)enable);
+
+	if (mode == DBMDX_IDLE && !(p->va_flags.va_ns_active)) {
+		dev_dbg(p->dev, "%s VA_NS is not active", __func__);
+		return 0;
+	}
+
+	if (!enable)
+		bypass_val = 1;
+
+	if (p->pdata->va_ns_num_of_configs <= VA_NS_CONFIG_MAX) {
+		dev_err(p->dev, "%s: NS Configuration Set is Incomplete",
+			__func__);
+		return -EINVAL;
+	}
+
+	if (mode == DBMDX_IDLE) {
+		to_load_asrp_fw = false;
+		to_set_idle_mode = false;
+		to_set_bypass = false;
+		p->va_ns_cfg_index = VA_NS_CONFIG_DISABLE;
+	} else if (p->va_active_mic_config == DBMDX_MIC_MODE_ANALOG) {
+		to_set_idle_mode = true;
+		to_load_asrp_fw = false;
+		to_set_bypass = false;
+		p->va_ns_cfg_index = VA_NS_CONFIG_AMIC;
+	} else if (mode == DBMDX_STREAMING || mode == DBMDX_BUFFERING) {
+
+		to_set_idle_mode = true;
+		to_set_bypass = true;
+
+		if (p->va_ns_pcm_streaming_enabled) {
+			to_load_asrp_fw = true;
+			p->va_ns_cfg_index =
+				VA_NS_CONFIG_DMIC_STREAMING_WITH_NS;
+		} else {
+			to_load_asrp_fw = false;
+			p->va_ns_cfg_index =
+				VA_NS_CONFIG_DMIC_STREAMING_WITHOUT_NS;
+		}
+	} else if (mode == DBMDX_DETECTION ||
+		mode == DBMDX_DETECTION_AND_STREAMING) {
+		to_set_bypass = true;
+		to_set_idle_mode = true;
+		p->va_ns_cfg_index = VA_NS_CONFIG_DMIC_DETECTION;
+		to_load_asrp_fw = true;
+		/* Set Bypass mode for Voice Energy */
+		if (p->va_detection_mode == DETECTION_MODE_VOICE_ENERGY)
+			bypass_val = 1;
+	} else {
+		to_load_asrp_fw = false;
+		to_set_idle_mode = false;
+		to_set_bypass = false;
+		dev_warn(p->dev, "%s: Unexpected mode", __func__);
+		p->va_ns_cfg_index = VA_NS_CONFIG_DISABLE;
+	}
+
+	/* We must go trough IDLE mode */
+	if (to_set_idle_mode) {
+		ret = dbmdx_send_cmd(p, DBMDX_VA_OPR_MODE | DBMDX_IDLE, NULL);
+		if (ret < 0) {
+			dev_err(p->dev, "%s: failed to set IDLE mode\n",
+				__func__);
+			ret = -EIO;
+			goto out;
+		}
+
+		while (retry--) {
+
+			usleep_range(DBMDX_USLEEP_SET_MODE,
+					DBMDX_USLEEP_SET_MODE + 1000);
+
+			ret = dbmdx_send_cmd(p, DBMDX_VA_OPR_MODE, &cur_val);
+			if (ret < 0) {
+				dev_err(p->dev,
+				"%s: failed to read DBMDX_VA_OPR_MODE\n",
+					__func__);
+				ret = -EIO;
+				goto out;
+			}
+
+			if (DBMDX_IDLE == cur_val)
+				break;
+		}
+
+		/* no retries left, failed to verify mode */
+		if (retry < 0)
+			dev_err(p->dev,
+			"%s: Mode verification failed: got %d, expected %d\n",
+			__func__, cur_val, DBMDX_IDLE);
+	}
+
+	if (!to_load_asrp_fw) {
+		dev_dbg(p->dev,
+			"%s VA ASRP params loading is not required\n",
+			__func__);
+
+	} else if (p->va_flags.va_last_loaded_asrp_params_file_name &&
+		!strcmp(p->va_flags.va_last_loaded_asrp_params_file_name,
+			p->pdata->va_asrp_params_firmware_name)) {
+		dev_dbg(p->dev,
+			"%s VA ASRP params have been already loaded\n",
+			__func__);
+
+	} else {
+		ret = dbmdx_send_cmd(p, DBMDX_VA_AUDIO_PROC_CONFIG, NULL);
+
+		if (ret < 0) {
+			dev_err(p->dev,	"%s: failed to config ec\n", __func__);
+			ret = -EIO;
+			goto out;
+		}
+
+		usleep_range(DBMDX_USLEEP_AFTER_ECHO_CANCELLER,
+				DBMDX_USLEEP_AFTER_ECHO_CANCELLER + 1000);
+
+		ret = dbmdx_va_load_asrp_params(p,
+				p->pdata->va_asrp_params_firmware_name);
+		if (ret < 0) {
+			dev_err(p->dev,	"%s: failed to update VA ASRP params\n",
+					__func__);
+			ret = -EIO;
+			goto out;
+		}
+		dev_dbg(p->dev,
+			"%s VA ASRP params were successfully updated.\n",
+				__func__);
+
+		p->va_flags.va_last_loaded_asrp_params_file_name =
+				p->pdata->va_asrp_params_firmware_name;
+	}
+
+	cur_cfg_arr = (u32 *)(&(p->pdata->va_ns_cfg_value[p->va_ns_cfg_index*
+						p->pdata->va_ns_cfg_values]));
+
+	dev_dbg(p->dev, "%s: Loading VA_NS Configuration set #%d\n",
+		__func__, p->va_ns_cfg_index);
+
+	for (i = 0; i < p->pdata->va_ns_cfg_values; i++) {
+
+		cur_reg = (u16)((cur_cfg_arr[i] >> 16) & 0x0fff);
+		cur_val = (u16)((cur_cfg_arr[i]) & 0xffff);
+
+		if (cur_reg == 0)
+			continue;
+		else if (cur_reg == DBMDX_VA_USLEEP_FLAG) {
+			usleep_range(cur_val, cur_val + 100);
+			continue;
+		} else if  (cur_reg == DBMDX_VA_MSLEEP_FLAG) {
+			msleep(cur_val);
+			continue;
+		}
+
+		ret = dbmdx_send_cmd(p, cur_cfg_arr[i], NULL);
+		if (ret < 0) {
+			dev_err(p->dev,
+				"%s: failed to config VA_NS register\n",
+				__func__);
+			ret = -EIO;
+			goto out;
+		}
+	}
+
+	if (mode == DBMDX_IDLE)
+		p->va_flags.va_ns_active = false;
+	else
+		p->va_flags.va_ns_active = true;
+
+	if (to_set_bypass) {
+		ret = dbmdx_indirect_register_write(p,
+			DBMDX_VA_ASRP_IN_TO_OUT_IN_BYPASS_MODE, bypass_val);
+		if (ret < 0) {
+			dev_err(p->dev, "%s: failed to set ASRP bypass value\n",
+				__func__);
+			ret = -EIO;
+			goto out;
+		}
+	}
+
+out:
+	return ret;
+}
+
+#endif
 
 static int dbmdx_va_amodel_load_file(struct dbmdx_private *p,
 			int num_of_amodel_files,
@@ -5563,10 +6565,74 @@ release:
 	return ret;
 }
 
+#define DUMMY_MODEL_DATA_SIZE	4
+static int dbmdx_va_amodel_load_dummy_model(struct dbmdx_private *p,
+			u32 gram_addr,
+			char	*amodel_buf,
+			ssize_t *amodel_size,
+			int *num_of_amodel_chunks,
+			ssize_t *amodel_chunks_size)
+{
+	unsigned char head[DBMDX_AMODEL_HEADER_SIZE] = { 0 };
+	unsigned char dummy_data[DUMMY_MODEL_DATA_SIZE] = { 0 };
+	size_t target_pos = 0;
+	unsigned long checksum;
+	int ret = 0;
+	ssize_t head_size = DBMDX_AMODEL_HEADER_SIZE;
+	size_t gram_size = DUMMY_MODEL_DATA_SIZE;
+
+	dev_dbg(p->dev, "%s\n", __func__);
+
+	*num_of_amodel_chunks = 1;
+
+	head[0] = 0x0;
+	head[1] = 0x0;
+	head[2] = 0x5A;
+	head[3] = 0x02;
+	head[4] =  (gram_size/2)        & 0xff;
+	head[5] = ((gram_size/2) >>  8) & 0xff;
+	head[6] = ((gram_size/2) >> 16) & 0xff;
+	head[7] = ((gram_size/2) >> 24) & 0xff;
+	head[8] = (gram_addr)        & 0xff;
+	head[9] = ((gram_addr) >>  8) & 0xff;
+	head[10] = ((gram_addr) >> 16) & 0xff;
+	head[11] = ((gram_addr) >> 24) & 0xff;
+
+	memcpy(amodel_buf + target_pos, head, head_size);
+
+	target_pos += head_size;
+
+	memcpy(amodel_buf + target_pos, dummy_data, gram_size);
+
+	target_pos += gram_size;
+
+	amodel_chunks_size[0] = gram_size;
+
+	ret = dbmdx_calc_amodel_checksum(p,
+					(char *)amodel_buf,
+					target_pos,
+					&checksum);
+	if (ret) {
+		dev_err(p->dev, "%s: failed to calculate Amodel checksum\n",
+			__func__);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	*(unsigned long *)(amodel_buf + target_pos) = checksum;
+
+	*amodel_size = (ssize_t)(target_pos + 4);
+
+	ret = *amodel_size;
+
+out:
+	return ret;
+}
+
 static int dbmdx_va_amodel_send(struct dbmdx_private *p,  const void *data,
 			   size_t size, int num_of_chunks, size_t *chunk_sizes,
 			   const void *checksum, size_t chksum_len,
-			   enum dbmdx_load_amodel_mode load_amodel_mode)
+			   u16 load_amodel_mode_cmd)
 {
 	int retry = RETRY_COUNT;
 	int ret;
@@ -5598,7 +6664,7 @@ static int dbmdx_va_amodel_send(struct dbmdx_private *p,  const void *data,
 		ret = dbmdx_send_cmd(
 				p,
 				DBMDX_VA_LOAD_NEW_ACUSTIC_MODEL |
-				load_amodel_mode,
+				load_amodel_mode_cmd,
 				NULL);
 
 		if (ret < 0) {
@@ -5616,6 +6682,8 @@ static int dbmdx_va_amodel_send(struct dbmdx_private *p,  const void *data,
 
 		cur_pos = 0;
 		ret = 0;
+
+		p->wakeup_toggle(p);
 
 		for (chunk_ind = 0; chunk_ind < num_of_chunks; chunk_ind++) {
 			dev_info(p->dev,
@@ -5661,7 +6729,7 @@ static int dbmdx_va_amodel_send(struct dbmdx_private *p,  const void *data,
 			cur_pos += cur_size;
 		}
 
-		/* Check if error occured during acoustic model transfer */
+		/* Check if error occurred during acoustic model transfer */
 		if (ret < 0)
 			continue;
 
@@ -5703,21 +6771,18 @@ static int dbmdx_va_amodel_send(struct dbmdx_private *p,  const void *data,
 	return 0;
 }
 
-
 static int dbmdx_va_amodel_load_single(struct dbmdx_private *p,
 					int num_of_amodel_files,
 					const char **amodel_fnames,
-					enum dbmdx_load_amodel_mode amode)
+					enum dbmdx_load_amodel_mode amode,
+					bool to_load_from_memory)
 {
 	int ret, ret2;
-	ssize_t amodel_size;
-	char *data_buf = p->amodel_buf;
 	size_t model_size;
 	int model_size_fw;
 	u16 val;
-	ssize_t amodel_chunks_size[DBMDX_AMODEL_MAX_CHUNKS];
-	int num_of_amodel_chunks = 0;
 	int chunk_idx;
+	struct amodel_info *cur_amodel = NULL;
 
 	if (!p)
 		return -EAGAIN;
@@ -5727,22 +6792,51 @@ static int dbmdx_va_amodel_load_single(struct dbmdx_private *p,
 		return -EAGAIN;
 	}
 
-	ret = dbmdx_va_amodel_load_file(p,
+	if (to_load_from_memory && !(p->primary_amodel.amodel_loaded)) {
+
+		dev_err(p->dev, "%s: Primary model was not loaded to memory\n",
+			__func__);
+		return -EAGAIN;
+	}
+
+	cur_amodel = &(p->primary_amodel);
+
+	if (!to_load_from_memory) {
+		if (cur_amodel->amodel_buf == NULL) {
+			cur_amodel->amodel_buf  = vmalloc(MAX_AMODEL_SIZE);
+			if (!cur_amodel->amodel_buf)
+				return -ENOMEM;
+		}
+
+		if (p->pdata->amodel_options & DBMDX_VE_SEND_DUMMY_AMODEL_4B &&
+			p->va_detection_mode == DETECTION_MODE_VOICE_ENERGY)
+			ret = dbmdx_va_amodel_load_dummy_model(p,
+					0x1,
+					cur_amodel->amodel_buf,
+					&cur_amodel->amodel_size,
+					&cur_amodel->num_of_amodel_chunks,
+					cur_amodel->amodel_chunks_size);
+		else
+			ret = dbmdx_va_amodel_load_file(p,
 					num_of_amodel_files,
 					amodel_fnames,
 					0x1,
-					data_buf,
-					&amodel_size,
-					&num_of_amodel_chunks,
-					amodel_chunks_size);
+					cur_amodel->amodel_buf,
+					&cur_amodel->amodel_size,
+					&cur_amodel->num_of_amodel_chunks,
+					cur_amodel->amodel_chunks_size);
 
-	if (ret < 0) {
-		dev_err(p->dev, "%s: failed to load amodel(%d)\n",
-			__func__, ret);
-		return ret;
+		if (ret < 0) {
+			dev_err(p->dev, "%s: failed to load amodel(%d)\n",
+				__func__, ret);
+			ret = -EFAULT;
+			goto out;
+		}
+
+		cur_amodel->amodel_loaded = true;
 	}
 
-	p->va_flags.amodel_len = amodel_size;
+	p->va_flags.amodel_len = cur_amodel->amodel_size;
 
 	p->device_ready = false;
 
@@ -5751,6 +6845,7 @@ static int dbmdx_va_amodel_load_single(struct dbmdx_private *p,
 	if (ret) {
 		dev_err(p->dev, "%s: failed to set device to idle mode\n",
 			__func__);
+		ret = -EIO;
 		goto out;
 	}
 
@@ -5762,15 +6857,17 @@ static int dbmdx_va_amodel_load_single(struct dbmdx_private *p,
 		dev_err(p->dev, "%s: failed to prepare A-Model loading\n",
 			__func__);
 		p->device_ready = true;
+		ret = -EIO;
 		goto out;
 	}
 
-	p->va_flags.a_model_loaded = 0;
+	p->va_flags.a_model_downloaded_to_fw = 0;
 
 	model_size = 0;
 
-	for (chunk_idx = 0; chunk_idx < num_of_amodel_chunks; chunk_idx++)
-		model_size += (amodel_chunks_size[chunk_idx] +
+	for (chunk_idx = 0; chunk_idx < cur_amodel->num_of_amodel_chunks;
+								chunk_idx++)
+		model_size += (cur_amodel->amodel_chunks_size[chunk_idx] +
 						DBMDX_AMODEL_HEADER_SIZE);
 
 	model_size_fw = (int)(model_size / 16) + 1;
@@ -5789,22 +6886,22 @@ static int dbmdx_va_amodel_load_single(struct dbmdx_private *p,
 	/* load A-Model and verify checksum */
 	if (p->chip->load_amodel)
 		ret = p->chip->load_amodel(p,
-					data_buf,
-					amodel_size - 4,
-					num_of_amodel_chunks,
-					amodel_chunks_size,
-					&(data_buf[amodel_size - 4]),
-					4,
-					amode);
+			cur_amodel->amodel_buf,
+			cur_amodel->amodel_size - 4,
+			cur_amodel->num_of_amodel_chunks,
+			cur_amodel->amodel_chunks_size,
+			&(cur_amodel->amodel_buf[cur_amodel->amodel_size - 4]),
+			4,
+			amode);
 	else
 		ret = dbmdx_va_amodel_send(p,
-					data_buf,
-					amodel_size - 4,
-					num_of_amodel_chunks,
-					amodel_chunks_size,
-					&(data_buf[amodel_size - 4]),
-					4,
-					amode);
+			cur_amodel->amodel_buf,
+			cur_amodel->amodel_size - 4,
+			cur_amodel->num_of_amodel_chunks,
+			cur_amodel->amodel_chunks_size,
+			&(cur_amodel->amodel_buf[cur_amodel->amodel_size - 4]),
+			4,
+			amode);
 
 	if (ret) {
 		dev_err(p->dev, "%s: sending amodel failed\n",
@@ -5837,7 +6934,7 @@ static int dbmdx_va_amodel_load_single(struct dbmdx_private *p,
 
 	dev_info(p->dev, "%s: acoustic model sent successfully\n", __func__);
 
-	p->va_flags.a_model_loaded = 1;
+	p->va_flags.a_model_downloaded_to_fw = 1;
 
 out_finish_loading:
 	/* finish A-Model loading */
@@ -5856,20 +6953,15 @@ static int dbmdx_va_amodel_load_dual(struct dbmdx_private *p,
 					int num_of_amodel_files,
 					const char **amodel_fnames,
 					int num_of_amodel_files_sec,
-					const char **amodel_fnames_sec)
+					const char **amodel_fnames_sec,
+					bool to_load_from_memory)
 {
 	int ret, ret2;
-	ssize_t amodel_size, amodel_size_secondary;
-	char *data_buf = p->amodel_buf;
-	char *data_buf_secondary;
 	int model_size_fw;
 	size_t model_size;
 	u16 val;
-	ssize_t amodel_chunks_size[DBMDX_AMODEL_MAX_CHUNKS];
-	ssize_t amodel_chunks_size_sec[DBMDX_AMODEL_MAX_CHUNKS];
-	int num_of_amodel_chunks = 0;
-	int num_of_amodel_chunks_sec = 0;
 	int chunk_idx;
+	struct amodel_info *cur_amodel = NULL;
 
 	if (!p)
 		return -EAGAIN;
@@ -5879,45 +6971,83 @@ static int dbmdx_va_amodel_load_dual(struct dbmdx_private *p,
 		return -EAGAIN;
 	}
 
-	data_buf_secondary = vmalloc(MAX_AMODEL_SIZE);
-	if (!data_buf_secondary) {
-		dev_err(p->dev,
-			"%s: Cannot allocate memory for secondary model\n",
-			__func__);
-		return -ENOMEM;
-	}
+	if (to_load_from_memory) {
 
-	ret = dbmdx_va_amodel_load_file(p,
+		if (!(p->primary_amodel.amodel_loaded)) {
+			dev_err(p->dev,
+				"%s: Primary model wasn't loaded to memory\n",
+				__func__);
+			return -EAGAIN;
+		}
+		if (!(p->secondary_amodel.amodel_loaded)) {
+			dev_err(p->dev,
+				"%s: Secondary model wasn't loaded to memory\n",
+				__func__);
+			return -EAGAIN;
+		}
+	}
+	if (!to_load_from_memory) {
+
+		cur_amodel = &(p->primary_amodel);
+
+		if (cur_amodel->amodel_buf == NULL) {
+			cur_amodel->amodel_buf  = vmalloc(MAX_AMODEL_SIZE);
+			if (!cur_amodel->amodel_buf)
+				return -ENOMEM;
+		}
+
+		ret = dbmdx_va_amodel_load_file(p,
 					num_of_amodel_files,
 					amodel_fnames,
 					0x1,
-					data_buf,
-					&amodel_size,
-					&num_of_amodel_chunks,
-					amodel_chunks_size);
+					cur_amodel->amodel_buf,
+					&cur_amodel->amodel_size,
+					&cur_amodel->num_of_amodel_chunks,
+					cur_amodel->amodel_chunks_size);
 
-	if (ret < 0) {
-		dev_err(p->dev, "%s: failed to load primary amodel(%d)\n",
-			__func__, ret);
-		goto out_mem;
-	}
+		if (ret < 0) {
+			dev_err(p->dev,
+				"%s: failed to load primary amodel(%d)\n",
+				__func__, ret);
+			ret = -EFAULT;
+			goto out;
+		}
 
-	ret = dbmdx_va_amodel_load_file(p,
+		cur_amodel->amodel_loaded = true;
+
+		cur_amodel = &(p->secondary_amodel);
+
+		if (cur_amodel->amodel_buf == NULL) {
+			cur_amodel->amodel_buf  = vmalloc(MAX_AMODEL_SIZE);
+			if (!cur_amodel->amodel_buf) {
+				ret = -ENOMEM;
+				goto out;
+			}
+		}
+
+		ret = dbmdx_va_amodel_load_file(p,
 					num_of_amodel_files_sec,
 					amodel_fnames_sec,
 					0x1,
-					data_buf_secondary,
-					&amodel_size_secondary,
-					&num_of_amodel_chunks_sec,
-					amodel_chunks_size_sec);
+					cur_amodel->amodel_buf,
+					&cur_amodel->amodel_size,
+					&cur_amodel->num_of_amodel_chunks,
+					cur_amodel->amodel_chunks_size);
 
-	if (ret < 0) {
-		dev_err(p->dev, "%s: failed to load secondary amodel(%d)\n",
-			__func__, ret);
-		goto out_mem;
+		if (ret < 0) {
+			dev_err(p->dev,
+				"%s: failed to load secondary amodel(%d)\n",
+				__func__, ret);
+			ret = -EFAULT;
+			goto out;
+		}
+
+		cur_amodel->amodel_loaded = true;
 	}
 
-	p->va_flags.amodel_len = amodel_size;
+	cur_amodel = &(p->primary_amodel);
+
+	p->va_flags.amodel_len = cur_amodel->amodel_size;
 
 	p->device_ready = false;
 
@@ -5926,7 +7056,8 @@ static int dbmdx_va_amodel_load_dual(struct dbmdx_private *p,
 	if (ret) {
 		dev_err(p->dev, "%s: failed to set device to idle mode\n",
 			__func__);
-		goto out_mem;
+		ret = -EIO;
+		goto out;
 	}
 
 	dbmdx_set_power_mode(p, DBMDX_PM_ACTIVE);
@@ -5937,15 +7068,17 @@ static int dbmdx_va_amodel_load_dual(struct dbmdx_private *p,
 		dev_err(p->dev, "%s: failed to prepare A-Model loading\n",
 			__func__);
 		p->device_ready = true;
-		goto out_mem;
+		ret = -EIO;
+		goto out;
 	}
 
-	p->va_flags.a_model_loaded = 0;
+	p->va_flags.a_model_downloaded_to_fw = 0;
 
 	model_size = 0;
 
-	for (chunk_idx = 0; chunk_idx < num_of_amodel_chunks; chunk_idx++)
-		model_size += (amodel_chunks_size[chunk_idx] +
+	for (chunk_idx = 0; chunk_idx < cur_amodel->num_of_amodel_chunks;
+								chunk_idx++)
+		model_size += (cur_amodel->amodel_chunks_size[chunk_idx] +
 						DBMDX_AMODEL_HEADER_SIZE);
 
 	model_size_fw = (int)(model_size / 16) + 1;
@@ -5961,10 +7094,13 @@ static int dbmdx_va_amodel_load_dual(struct dbmdx_private *p,
 		goto out_finish_loading;
 	}
 #endif
+	cur_amodel = &(p->secondary_amodel);
+
 	model_size = 0;
 
-	for (chunk_idx = 0; chunk_idx < num_of_amodel_chunks_sec; chunk_idx++)
-		model_size += (amodel_chunks_size_sec[chunk_idx] +
+	for (chunk_idx = 0; chunk_idx < cur_amodel->num_of_amodel_chunks;
+								chunk_idx++)
+		model_size += (cur_amodel->amodel_chunks_size[chunk_idx] +
 						DBMDX_AMODEL_HEADER_SIZE);
 
 	model_size_fw = (int)(model_size / 16) + 1;
@@ -5980,22 +7116,23 @@ static int dbmdx_va_amodel_load_dual(struct dbmdx_private *p,
 		goto out_finish_loading;
 	}
 #endif
+
 	if (p->chip->load_amodel)
 		ret = p->chip->load_amodel(p,
-			data_buf_secondary,
-			amodel_size_secondary - 4,
-			num_of_amodel_chunks_sec,
-			amodel_chunks_size_sec,
-			&(data_buf_secondary[amodel_size_secondary - 4]),
-					4,
-					LOAD_AMODEL_2NDARY);
+			cur_amodel->amodel_buf,
+			cur_amodel->amodel_size - 4,
+			cur_amodel->num_of_amodel_chunks,
+			cur_amodel->amodel_chunks_size,
+			&(cur_amodel->amodel_buf[cur_amodel->amodel_size - 4]),
+			4,
+			LOAD_AMODEL_2NDARY);
 	else
 		ret = dbmdx_va_amodel_send(p,
-			data_buf_secondary,
-			amodel_size_secondary - 4,
-			num_of_amodel_chunks_sec,
-			amodel_chunks_size_sec,
-			&(data_buf_secondary[amodel_size_secondary - 4]),
+			cur_amodel->amodel_buf,
+			cur_amodel->amodel_size - 4,
+			cur_amodel->num_of_amodel_chunks,
+			cur_amodel->amodel_chunks_size,
+			&(cur_amodel->amodel_buf[cur_amodel->amodel_size - 4]),
 			4,
 			LOAD_AMODEL_2NDARY);
 
@@ -6006,25 +7143,27 @@ static int dbmdx_va_amodel_load_dual(struct dbmdx_private *p,
 		goto out_finish_loading;
 	}
 
+	cur_amodel = &(p->primary_amodel);
+
 	/* load A-Model and verify checksum */
 	if (p->chip->load_amodel)
 		ret = p->chip->load_amodel(p,
-					data_buf,
-					amodel_size - 4,
-					num_of_amodel_chunks,
-					amodel_chunks_size,
-					&(data_buf[amodel_size - 4]),
-					4,
-					LOAD_AMODEL_PRIMARY);
+			cur_amodel->amodel_buf,
+			cur_amodel->amodel_size - 4,
+			cur_amodel->num_of_amodel_chunks,
+			cur_amodel->amodel_chunks_size,
+			&(cur_amodel->amodel_buf[cur_amodel->amodel_size - 4]),
+			4,
+			LOAD_AMODEL_PRIMARY);
 	else
 		ret = dbmdx_va_amodel_send(p,
-					data_buf,
-					amodel_size - 4,
-					num_of_amodel_chunks,
-					amodel_chunks_size,
-					&(data_buf[amodel_size - 4]),
-					4,
-					LOAD_AMODEL_PRIMARY);
+			cur_amodel->amodel_buf,
+			cur_amodel->amodel_size - 4,
+			cur_amodel->num_of_amodel_chunks,
+			cur_amodel->amodel_chunks_size,
+			&(cur_amodel->amodel_buf[cur_amodel->amodel_size - 4]),
+			4,
+			LOAD_AMODEL_PRIMARY);
 
 	if (ret) {
 		dev_err(p->dev, "%s: sending amodel failed\n",
@@ -6057,7 +7196,7 @@ static int dbmdx_va_amodel_load_dual(struct dbmdx_private *p,
 
 	dev_info(p->dev, "%s: acoustic model sent successfully\n", __func__);
 
-	p->va_flags.a_model_loaded = 1;
+	p->va_flags.a_model_downloaded_to_fw = 1;
 
 out_finish_loading:
 	/* finish A-Model loading */
@@ -6068,8 +7207,7 @@ out_finish_loading:
 
 	p->device_ready = true;
 
-out_mem:
-	vfree(data_buf_secondary);
+out:
 	return ret;
 }
 
@@ -6088,6 +7226,7 @@ static int dbmdx_va_amodel_update(struct dbmdx_private *p, int val)
 	unsigned int  model_custom_params = 0;
 	bool do_not_reload_model = false;
 	bool do_not_set_detection_mode = false;
+	bool load_model_from_memory = false;
 	bool sv_model_selected = false;
 	bool sv_model_was_loaded = false;
 	unsigned int cur_opmode = p->va_flags.mode;
@@ -6114,8 +7253,11 @@ static int dbmdx_va_amodel_update(struct dbmdx_private *p, int val)
 	if (model_options_mask &  DBMDX_LOAD_MODEL_NO_DETECTION)
 		do_not_set_detection_mode = true;
 
-	if (model_options_mask &  DBMDX_DO_NOT_RELOAD_LOAD)
+	if (model_options_mask &  DBMDX_DO_NOT_RELOAD_MODEL)
 		do_not_reload_model = true;
+
+	if (model_options_mask &  DBMDX_LOAD_MODEL_FROM_MEMORY)
+		load_model_from_memory = true;
 
 	if (model_custom_params == 0)
 		model_custom_params = DBMDX_NO_EXT_DETECTION_MODE_PARAMS;
@@ -6377,14 +7519,42 @@ static int dbmdx_va_amodel_update(struct dbmdx_private *p, int val)
 			__func__);
 			return -EINVAL;
 		}
-		p->va_flags.sv_recognition_mode =
-					SV_RECOGNITION_MODE_VOICE_ENERGY;
-		p->va_detection_mode_custom_params = model_custom_params;
-		p->va_flags.sv_capture_on_detect_disabled = false;
+
 		p->va_detection_mode = detection_mode;
-		ret = dbmdx_trigger_detection(p);
-		p->unlock(p);
-		return ret;
+		p->va_flags.sv_capture_on_detect_disabled = false;
+
+		if (!do_not_set_detection_mode) {
+			p->va_flags.sv_recognition_mode =
+					SV_RECOGNITION_MODE_VOICE_ENERGY;
+			p->va_detection_mode_custom_params =
+					model_custom_params;
+		}
+
+		if (p->pdata->amodel_options & DBMDX_LOAD_AMODEL_FOR_VE) {
+			if (p->pdata->amodel_options &
+					DBMDX_AMODEL_INCLUDES_HEADERS) {
+				num_of_amodel_files = 1;
+				amodel_fnames[0] = DBMDX_VE_AMODEL_NAME;
+			} else {
+				if (p->pdata->amodel_options &
+					DBMDX_AMODEL_SINGLE_FILE_NO_HEADER) {
+					num_of_amodel_files = 1;
+					amodel_fnames[0] = DBMDX_VE_AMODEL_NAME;
+				} else {
+					num_of_amodel_files = 2;
+					amodel_fnames[0] = DBMDX_VE_GRAM_NAME;
+					amodel_fnames[1] = DBMDX_VE_NET_NAME;
+				}
+			}
+
+		} else {
+			if (!do_not_set_detection_mode) {
+				ret = dbmdx_trigger_detection(p);
+				p->unlock(p);
+				return ret;
+			}
+		}
+		break;
 	case DETECTION_MODE_PHRASE:
 		p->va_flags.sv_capture_on_detect_disabled = false;
 		if (p->pdata->amodel_options & DBMDX_AMODEL_INCLUDES_HEADERS) {
@@ -6462,7 +7632,8 @@ static int dbmdx_va_amodel_update(struct dbmdx_private *p, int val)
 		if (!do_not_reload_model) {
 			ret = dbmdx_va_amodel_load_dual(p,
 				num_of_amodel_files, amodel_fnames,
-				num_of_amodel_files_sec, amodel_fnames_sec);
+				num_of_amodel_files_sec, amodel_fnames_sec,
+				load_model_from_memory);
 			if (ret < 0) {
 				dev_err(p->dev,
 				"%s: Error loading dual acoustic model:%d\n",
@@ -6483,7 +7654,7 @@ static int dbmdx_va_amodel_update(struct dbmdx_private *p, int val)
 		if (!do_not_reload_model) {
 			ret = dbmdx_va_amodel_load_single(p,
 				num_of_amodel_files, amodel_fnames,
-				LOAD_AMODEL_PRIMARY);
+				LOAD_AMODEL_PRIMARY, load_model_from_memory);
 			if (ret < 0) {
 				dev_err(p->dev,
 				"%s: Error loading acoustic model:%d\n",
@@ -6495,26 +7666,33 @@ static int dbmdx_va_amodel_update(struct dbmdx_private *p, int val)
 		}
 	}
 #ifdef DMBDX_OKG_AMODEL_SUPPORT
-	/* Check wheter to load OKG model
-	* If SV amodel was loaded it is required to reload the OKG amodel */
+	/* Check whether to load OKG model
+	 * If SV amodel was loaded it is required to reload the OKG amodel
+	 */
 	load_okg_model =
 		p->okg_a_model_support && p->va_flags.okg_a_model_enabled &&
-		((sv_model_was_loaded && p->va_flags.okg_a_model_loaded) ||
+		((sv_model_was_loaded &&
+			p->va_flags.okg_a_model_downloaded_to_fw) ||
 			((p->va_detection_mode == DETECTION_MODE_PHRASE) &&
-				okg_model_selected && !do_not_reload_model));
+				okg_model_selected && !do_not_reload_model &&
+				!(p->va_flags.okg_a_model_downloaded_to_fw)));
 
 	if (load_okg_model) {
 
 		/* Reset the flag to ensure that the model will be reloaded */
-		p->va_flags.okg_a_model_loaded = 0;
+		p->va_flags.okg_a_model_downloaded_to_fw = 0;
 
-		ret = dbmdx_va_amodel_okg_load(p, DBMDX_VC_OKG_NAME);
-		if (ret < 0)
+		ret = dbmdx_va_amodel_okg_load(p, DBMDX_VC_OKG_NAME,
+						load_model_from_memory);
+		if (ret < 0) {
 			dev_err(p->dev,
 				"%s: Error loading acoustic model:%d\n",
 				__func__, val);
+			p->unlock(p);
+			return ret;
+		}
 	} else if (sv_model_was_loaded)
-		p->va_flags.okg_a_model_loaded = 0;
+		p->va_flags.okg_a_model_downloaded_to_fw = 0;
 #endif
 	if (p->pdata->auto_detection && !p->va_flags.auto_detection_disabled &&
 		!do_not_set_detection_mode) {
@@ -6561,7 +7739,8 @@ static int dbmdx_va_amodel_update(struct dbmdx_private *p, int val)
 				cur_opmode == DBMDX_DETECTION_AND_STREAMING) {
 #ifdef DMBDX_OKG_AMODEL_SUPPORT
 			/* If OKG  or SV were in detection mode were not,
-			* reloaded, put it back in detection mode */
+			 * reloaded, put it back in detection mode
+			 */
 			if ((sv_model_selected &&
 				(p->va_flags.okg_recognition_mode !=
 				OKG_RECOGNITION_MODE_DISABLED)) ||
@@ -6745,7 +7924,7 @@ static ssize_t dbmdx_va_capture_on_detect_store(struct device *dev,
 	if (!p)
 		return -EAGAIN;
 
-	if (2 < val) {
+	if (val > 2) {
 		dev_err(p->dev, "%s: invalid captute on detection mode\n",
 			__func__);
 		return -EINVAL;
@@ -7176,7 +8355,7 @@ static ssize_t dbmdx_va_direct_write_store(struct device *dev,
 	u32 reg = 0;
 	u32 new_value = 0;
 	bool reg_set = false, value_set = false;
-	u32 value_to_send;
+	u32 value_to_send = 0;
 
 	int ret = -EINVAL;
 
@@ -7235,11 +8414,14 @@ static ssize_t dbmdx_va_direct_write_store(struct device *dev,
 		p->unlock(p);
 		return ret;
 	}
-
-	value_to_send = DBMDX_VA_CMD_MASK |
+	if (reg > 0x00ff)
+		ret = dbmdx_indirect_register_write(p, reg, (u16)new_value);
+	else {
+		value_to_send = DBMDX_VA_CMD_MASK |
 			((reg & 0xff) << 16) | (new_value & 0xffff);
 
-	ret = dbmdx_send_cmd(p, (u32)value_to_send, NULL);
+		ret = dbmdx_send_cmd(p, (u32)value_to_send, NULL);
+	}
 
 	if (ret < 0) {
 		dev_err(p->dev, "%s: direct write error\n", __func__);
@@ -7249,8 +8431,8 @@ static ssize_t dbmdx_va_direct_write_store(struct device *dev,
 
 	p->unlock(p);
 
-	dev_dbg(dev, "%s: Reg 0x%04x was set to 0x%04x (0x%08x)\n",
-			__func__, reg, new_value, value_to_send);
+	dev_dbg(dev, "%s: Reg 0x%04x was set to 0x%04x\n",
+			__func__, reg, new_value);
 
 	return size;
 print_usage:
@@ -7269,7 +8451,7 @@ static ssize_t dbmdx_va_direct_read_store(struct device *dev,
 	char *args =  (char *)buf;
 	u32 reg = 0;
 	bool reg_set = false;
-	u32 value_to_send;
+	u32 value_to_send = 0;
 	u16 resp;
 
 	int ret = -EINVAL;
@@ -7314,9 +8496,13 @@ static ssize_t dbmdx_va_direct_read_store(struct device *dev,
 		return ret;
 	}
 
-	value_to_send = DBMDX_VA_CMD_MASK | ((reg & 0xff) << 16);
+	if (reg > 0x00ff)
+		ret = dbmdx_indirect_register_read(p, reg, &resp);
+	else {
+		value_to_send = DBMDX_VA_CMD_MASK | ((reg & 0xff) << 16);
 
-	ret = dbmdx_send_cmd(p, (u32)value_to_send, &resp);
+		ret = dbmdx_send_cmd(p, (u32)value_to_send, &resp);
+	}
 
 	if (ret < 0) {
 		dev_err(p->dev, "%s: direct read error\n", __func__);
@@ -7326,8 +8512,8 @@ static ssize_t dbmdx_va_direct_read_store(struct device *dev,
 
 	p->unlock(p);
 
-	dev_dbg(dev, "%s: Reg 0x%04x value is 0x%04x (0x%08x)\n",
-			__func__, reg, resp, value_to_send);
+	dev_dbg(dev, "%s: Reg 0x%04x value is 0x%04x\n",
+			__func__, reg, resp);
 
 	return size;
 print_usage:
@@ -7611,7 +8797,33 @@ static ssize_t dbmdx_dump_state(struct device *dev,
 			off += snprintf(buf + off, PAGE_SIZE - off,
 						"\tVA cfg %8.8x: 0x%8.8x\n",
 				i, pdata->va_cfg_value[i]);
+#ifdef DBMDX_VA_NS_SUPPORT
+		off += snprintf(buf + off, PAGE_SIZE - off, "\n");
 
+		off += snprintf(buf + off, PAGE_SIZE - off,
+			"\tVA_NS supported %d\n", pdata->va_ns_supported);
+
+		if (pdata->va_ns_supported) {
+
+			off += snprintf(buf + off, PAGE_SIZE - off,
+				"\tVA_NS enabled %d\n", p->va_ns_enabled);
+
+			off += snprintf(buf + off, PAGE_SIZE - off,
+				"\tVA_NS on PCM Streaming enabled %d\n",
+				p->va_ns_pcm_streaming_enabled);
+
+			off += snprintf(buf + off, PAGE_SIZE - off,
+				"\tVA_NS active cfg index %d\n",
+				p->va_ns_cfg_index);
+
+			off += snprintf(buf + off, PAGE_SIZE - off,
+					"\tNumber of VA_NS Configs %d\n",
+					pdata->va_ns_num_of_configs);
+		}
+
+		off += snprintf(buf + off, PAGE_SIZE - off, "\n");
+
+#endif
 		for (i = 0; i < VA_MIC_CONFIG_SIZE; i++)
 			off += snprintf(buf + off, PAGE_SIZE - off,
 					"\tVA mic cfg %8.8x: 0x%8.8x\n",
@@ -7920,7 +9132,7 @@ static ssize_t dbmdx_dump_current_state(struct device *dev,
 			p->sv_a_model_support ? "ON" : "OFF");
 		off += snprintf(buf + off, PAGE_SIZE - off,
 						"\tAcoustic model:\t\t%s\n",
-				p->va_flags.a_model_loaded == 1 ?
+				p->va_flags.a_model_downloaded_to_fw == 1 ?
 					"Loaded" : "None");
 		off += snprintf(buf + off, PAGE_SIZE - off,
 					"\tAcoustic model size\t%d bytes\n",
@@ -7942,7 +9154,7 @@ static ssize_t dbmdx_dump_current_state(struct device *dev,
 			p->va_flags.okg_a_model_enabled ? "ON" : "OFF");
 		off += snprintf(buf + off, PAGE_SIZE - off,
 						"\tOKG Acoustic model:\t\t%s\n",
-				p->va_flags.okg_a_model_loaded == 1 ?
+				p->va_flags.okg_a_model_downloaded_to_fw == 1 ?
 					"Loaded" : "None");
 		off += snprintf(buf + off, PAGE_SIZE - off,
 					"\tOKG Recognition mode:\t\t%s\n",
@@ -8487,7 +9699,7 @@ static ssize_t dbmdx_vqe_vc_syscfg_store(struct device *dev,
 	if (!p)
 		return -EAGAIN;
 
-	if (2 < val || val < 0) {
+	if (val > 2 || val < 0) {
 		dev_err(p->dev, "%s: invalid vqe vc system config value [0,1,2]\n",
 			__func__);
 		return -EINVAL;
@@ -8571,10 +9783,11 @@ static ssize_t dbmdx_raw_cmd_show(struct device *dev,
 
 	if (read > 0) {
 		for (i = 0; i < read; i++)
-			ret += sprintf(&buf[ret], " %02x", values[i]);
+			ret += snprintf(&buf[ret], PAGE_SIZE,
+							" %02x", values[i]);
 	}
 
-	ret += sprintf(&buf[ret], "\n");
+	ret += snprintf(&buf[ret], PAGE_SIZE, "\n");
 	return ret;
 #undef __MAX_RAW_READ
 }
@@ -8625,120 +9838,130 @@ static ssize_t dbmdx_raw_cmd_store(struct device *dev,
 }
 
 
-static DEVICE_ATTR(fwver, S_IRUGO,
+static DEVICE_ATTR(fwver, 0444,
 		   dbmdx_fw_ver_show, NULL);
-static DEVICE_ATTR(paramaddr, S_IWUSR,
+static DEVICE_ATTR(paramaddr, 0200,
 		   NULL, dbmdx_param_addr_store);
-static DEVICE_ATTR(param, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(param, 0644,
 		   dbmdx_param_show, dbmdx_param_store);
-static DEVICE_ATTR(dump,  S_IRUGO,
+static DEVICE_ATTR(dump, 0444,
 		   dbmdx_dump_state, NULL);
-static DEVICE_ATTR(dump_cur_state,  S_IRUGO,
+static DEVICE_ATTR(dump_cur_state, 0444,
 		   dbmdx_dump_current_state, NULL);
-static DEVICE_ATTR(io_addr, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(io_addr, 0644,
 		   dbmdx_io_addr_show, dbmdx_io_addr_store);
-static DEVICE_ATTR(io_value, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(io_value, 0644,
 		   dbmdx_io_value_show, dbmdx_io_value_store);
-static DEVICE_ATTR(direct_write, S_IWUSR,
+static DEVICE_ATTR(direct_write, 0200,
 		   NULL, dbmdx_va_direct_write_store);
-static DEVICE_ATTR(direct_read, S_IWUSR,
+static DEVICE_ATTR(direct_read, 0200,
 		   NULL, dbmdx_va_direct_read_store);
-static DEVICE_ATTR(power_mode,  S_IRUGO,
+static DEVICE_ATTR(power_mode, 0444,
 		   dbmdx_power_mode_show, NULL);
-static DEVICE_ATTR(reboot, S_IWUSR,
+static DEVICE_ATTR(reboot, 0200,
 		   NULL, dbmdx_reboot_store);
-static DEVICE_ATTR(reset, S_IWUSR,
+static DEVICE_ATTR(reset, 0200,
 		   NULL, dbmdx_reset_store);
-static DEVICE_ATTR(va_dump_regs,  S_IRUGO,
+static DEVICE_ATTR(va_dump_regs, 0444,
 		   dbmdx_va_regs_dump_state, NULL);
-static DEVICE_ATTR(va_debug, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(va_debug, 0644,
 		   dbmdx_va_debug_show, dbmdx_va_debug_store);
-static DEVICE_ATTR(vqe_debug, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(vqe_debug, 0644,
 		   dbmdx_vqe_debug_show, dbmdx_vqe_debug_store);
-static DEVICE_ATTR(va_speed_cfg, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(va_speed_cfg, 0644,
 		   dbmdx_va_speed_cfg_show, dbmdx_va_speed_cfg_store);
-static DEVICE_ATTR(va_cfg_values, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(va_cfg_values, 0644,
 		   dbmdx_va_cfg_values_show, dbmdx_va_cfg_values_store);
-static DEVICE_ATTR(va_mic_cfg, S_IRUGO | S_IWUSR,
+#ifdef DBMDX_VA_NS_SUPPORT
+static DEVICE_ATTR(va_ns_enable, 0644,
+		   dbmdx_va_ns_enable_show,
+		   dbmdx_va_ns_enable_store);
+static DEVICE_ATTR(va_ns_pcm_streaming_enable, 0644,
+		   dbmdx_va_ns_pcm_streaming_enable_show,
+		   dbmdx_va_ns_pcm_streaming_enable_store);
+static DEVICE_ATTR(va_ns_cfg_values, 0644,
+		   dbmdx_va_ns_cfg_values_show, dbmdx_va_ns_cfg_values_store);
+#endif
+static DEVICE_ATTR(va_mic_cfg, 0644,
 		   dbmdx_va_mic_cfg_show, dbmdx_va_mic_cfg_store);
-static DEVICE_ATTR(va_audioconv, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(va_audioconv, 0644,
 		   dbmdx_va_audio_conv_show, dbmdx_va_audio_conv_store);
-static DEVICE_ATTR(va_backlog_size, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(va_backlog_size, 0644,
 		   dbmdx_va_backlog_size_show, dbmdx_va_backlog_size_store);
-static DEVICE_ATTR(va_buffsize, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(va_buffsize, 0644,
 		   dbmdx_va_buffer_size_show, dbmdx_va_buffer_size_store);
-static DEVICE_ATTR(va_buffsmps, S_IRUGO,
+static DEVICE_ATTR(va_buffsmps, 0444,
 		   dbmdx_va_buffsmps_show, NULL);
-static DEVICE_ATTR(va_capture_on_detect, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(va_capture_on_detect, 0644,
 		   dbmdx_va_capture_on_detect_show,
 		   dbmdx_va_capture_on_detect_store);
-static DEVICE_ATTR(va_detection_after_buffering, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(va_detection_after_buffering, 0644,
 		   dbmdx_va_detection_after_buffering_show,
 		   dbmdx_va_detection_after_buffering_store);
-static DEVICE_ATTR(va_disable_recovery, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(va_disable_recovery, 0644,
 		   dbmdx_va_disable_recovery_show,
 		   dbmdx_va_disable_recovery_store);
-static DEVICE_ATTR(va_digital_gain, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(va_digital_gain, 0644,
 		   dbmdx_va_digital_gain_show,
 		   dbmdx_va_digital_gain_store);
-static DEVICE_ATTR(va_load_amodel, S_IRUGO | S_IWUSR ,
+static DEVICE_ATTR(va_load_amodel, 0644,
 		   NULL, dbmdx_va_acoustic_model_store);
-static DEVICE_ATTR(va_max_sample, S_IRUGO,
+static DEVICE_ATTR(va_max_sample, 0444,
 		   dbmdx_va_max_sample_show, NULL);
-static DEVICE_ATTR(va_analog_micgain, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(va_analog_micgain, 0644,
 		   dbmdx_va_analog_micgain_show, dbmdx_va_analog_micgain_store);
-static DEVICE_ATTR(va_opmode,  S_IRUGO | S_IWUSR ,
+static DEVICE_ATTR(va_opmode,  0644,
 		   dbmdx_va_opmode_show, dbmdx_opr_mode_store);
-static DEVICE_ATTR(va_cur_opmode,  S_IRUGO,
+static DEVICE_ATTR(va_cur_opmode, 0444,
 		   dbmdx_cur_opmode_show, NULL);
-static DEVICE_ATTR(va_mic_mode,  S_IRUGO | S_IWUSR ,
+static DEVICE_ATTR(va_mic_mode,  0644,
 		   dbmdx_va_mic_mode_show, dbmdx_va_mic_mode_store);
-static DEVICE_ATTR(va_clockcfg,  S_IRUGO | S_IWUSR ,
+static DEVICE_ATTR(va_clockcfg,  0644,
 		   dbmdx_va_clockcfg_show, dbmdx_va_clockcfg_store);
-static DEVICE_ATTR(va_rsize, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(va_rsize, 0644,
 		   dbmdx_va_rsize_show, dbmdx_va_rsize_store);
-static DEVICE_ATTR(va_rxsize, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(va_rxsize, 0644,
 		   dbmdx_va_rxsize_show, dbmdx_va_rxsize_store);
-static DEVICE_ATTR(va_trigger_level, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(va_trigger_level, 0644,
 		   dbmdx_va_trigger_level_show, dbmdx_va_trigger_level_store);
-static DEVICE_ATTR(va_verif_level, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(va_verif_level, 0644,
 		   dbmdx_va_verification_level_show,
 		   dbmdx_va_verification_level_store);
-static DEVICE_ATTR(va_wsize, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(va_wsize, 0644,
 		   dbmdx_va_wsize_show, dbmdx_va_wsize_store);
-static DEVICE_ATTR(va_detection_buffer_channels, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(va_detection_buffer_channels, 0644,
 		   dbmdx_va_detection_buffer_channels_show,
 		   dbmdx_va_detection_buffer_channels_store);
-static DEVICE_ATTR(va_min_samples_chunk_size, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(va_min_samples_chunk_size, 0644,
 		   dbmdx_va_min_samples_chunk_size_show,
 		   dbmdx_va_min_samples_chunk_size_store);
-static DEVICE_ATTR(va_max_detection_buffer_size, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(va_max_detection_buffer_size, 0644,
 		   dbmdx_va_max_detection_buffer_size_show,
 		   dbmdx_va_max_detection_buffer_size_store);
-static DEVICE_ATTR(vqe_ping,  S_IRUGO,
+static DEVICE_ATTR(vqe_ping, 0444,
 		   dbmdx_vqe_ping_show, NULL);
-static DEVICE_ATTR(vqe_use_case, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(vqe_use_case, 0644,
 		   dbmdx_vqe_use_case_show, dbmdx_vqe_use_case_store);
-static DEVICE_ATTR(vqe_d2syscfg,  S_IRUGO | S_IWUSR ,
+static DEVICE_ATTR(vqe_d2syscfg,  0644,
 		   dbmdx_vqe_d2syscfg_show, dbmdx_vqe_d2syscfg_store);
-static DEVICE_ATTR(vqe_vc_syscfg,  S_IRUGO | S_IWUSR ,
+static DEVICE_ATTR(vqe_vc_syscfg,  0644,
 		   dbmdx_vqe_vc_syscfg_show, dbmdx_vqe_vc_syscfg_store);
-static DEVICE_ATTR(vqe_hwbypass, S_IWUSR,
+static DEVICE_ATTR(vqe_hwbypass, 0200,
 		   NULL, dbmdx_vqe_hwbypass_store);
-static DEVICE_ATTR(vqe_spkvollvl, S_IRUGO | S_IWUSR ,
+static DEVICE_ATTR(vqe_spkvollvl, 0644,
 		   dbmdx_vqe_spkvollvl_show, dbmdx_vqe_spkvollvl_store);
-static DEVICE_ATTR(wakeup, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(wakeup, 0644,
 		   dbmdx_wakeup_show, dbmdx_wakeup_store);
 #ifdef DMBDX_OKG_AMODEL_SUPPORT
-static DEVICE_ATTR(va_okg_amodel_enable,  S_IRUGO | S_IWUSR ,
+static DEVICE_ATTR(va_okg_amodel_enable,  0644,
 		dbmdx_va_okg_amodel_enable_show, dbmdx_okg_amodel_enable_store);
 #endif
-static DEVICE_ATTR(raw_cmd, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(raw_cmd, 0644,
 		   dbmdx_raw_cmd_show, dbmdx_raw_cmd_store);
-static DEVICE_ATTR(va_boot_options, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(va_boot_options, 0644,
 		   dbmdx_va_boot_options_show,
 		   dbmdx_va_boot_options_store);
-static DEVICE_ATTR(va_amodel_options, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(va_amodel_options, 0644,
 		   dbmdx_va_amodel_options_show,
 		   dbmdx_va_amodel_options_store);
 
@@ -8750,6 +9973,11 @@ static struct attribute *dbmdx_va_attributes[] = {
 	&dev_attr_va_debug.attr,
 	&dev_attr_va_dump_regs.attr,
 	&dev_attr_va_cfg_values.attr,
+#ifdef DBMDX_VA_NS_SUPPORT
+	&dev_attr_va_ns_cfg_values.attr,
+	&dev_attr_va_ns_enable.attr,
+	&dev_attr_va_ns_pcm_streaming_enable.attr,
+#endif
 	&dev_attr_va_mic_cfg.attr,
 	&dev_attr_va_audioconv.attr,
 	&dev_attr_va_backlog_size.attr,
@@ -8845,13 +10073,7 @@ static int dbmdx_shutdown(struct dbmdx_private *p)
 			__func__);
 
 	p->lock(p);
-/*
-	ret = dbmdx_set_mode(p, DBMDX_IDLE);
-	if (ret)
-		dev_err(p->dev,
-			"%s: failed to set device to idle mode\n",
-			__func__);
-*/
+
 	p->device_ready = false;
 
 	p->asleep = false;
@@ -8920,19 +10142,21 @@ static int dbmdx_perform_recovery(struct dbmdx_private *p)
 	if (active_fw == DBMDX_FW_VA) {
 
 		bool sv_a_model_loaded = saved_va_flags.amodel_len > 0 &&
-						saved_va_flags.a_model_loaded;
+					saved_va_flags.a_model_downloaded_to_fw;
 #ifdef DMBDX_OKG_AMODEL_SUPPORT
-		bool okg_a_model_loaded = saved_va_flags.okg_a_model_enabled &&
-					saved_va_flags.okg_amodel_len > 0 &&
-					saved_va_flags.okg_a_model_loaded;
-		bool model_loaded = (sv_a_model_loaded || okg_a_model_loaded);
+		bool okg_a_model_downloaded_to_fw =
+				saved_va_flags.okg_a_model_enabled &&
+				saved_va_flags.okg_amodel_len > 0 &&
+				saved_va_flags.okg_a_model_downloaded_to_fw;
+		bool model_loaded = (sv_a_model_loaded ||
+			okg_a_model_downloaded_to_fw);
 
 		p->va_flags.okg_a_model_enabled =
 			saved_va_flags.okg_a_model_enabled;
 
 		if (p->va_flags.okg_a_model_enabled)
-			p->va_flags.okg_a_model_loaded =
-				saved_va_flags.okg_a_model_loaded;
+			p->va_flags.okg_a_model_downloaded_to_fw =
+				saved_va_flags.okg_a_model_downloaded_to_fw;
 		p->va_flags.okg_recognition_mode =
 					saved_va_flags.okg_recognition_mode;
 #else
@@ -8948,22 +10172,73 @@ static int dbmdx_perform_recovery(struct dbmdx_private *p)
 			saved_va_flags.pcm_streaming_pushing_zeroes;
 
 		if (model_loaded) {
+			int amodel_mode = 0;
+			unsigned int  model_select_mask = 0;
+			unsigned int  model_options_mask = 0;
+			unsigned int  model_custom_params =
+				p->va_detection_mode_custom_params;
 			p->unlock(p);
 
 			p->va_flags.auto_detection_disabled = true;
 #ifdef DMBDX_OKG_AMODEL_SUPPORT
 			/* If SV model is not loaded OKG model should be
-			reloaded explicitly, otherwise it will be loaded after
-			SV model is reloaded */
-			if (!sv_a_model_loaded)
-				ret = dbmdx_va_amodel_update(p,
-					DETECTION_MODE_OKG);
-			else
-				ret = dbmdx_va_amodel_update(p,
-					p->va_detection_mode);
+			 * reloaded explicitly, otherwise it will be loaded
+			 * after SV model is reloaded
+			 */
+			if (!sv_a_model_loaded) {
+				amodel_mode = DETECTION_MODE_PHRASE;
+				model_select_mask = DBMDX_OKG_MODEL_SELECTED;
+				model_options_mask =
+						DBMDX_LOAD_MODEL_NO_DETECTION;
+				if (p->okg_amodel.amodel_loaded)
+					model_options_mask |=
+						DBMDX_LOAD_MODEL_FROM_MEMORY;
+
+				amodel_mode |=
+					((model_select_mask << 4) & 0x30);
+
+				amodel_mode |=
+					((model_options_mask << 8) & 0xf00);
+
+				ret = dbmdx_va_amodel_update(p, amodel_mode);
+			} else {
+				amodel_mode = p->va_detection_mode;
+				model_select_mask = DBMDX_SV_MODEL_SELECTED;
+				if (okg_a_model_downloaded_to_fw)
+					model_select_mask |=
+						DBMDX_OKG_MODEL_SELECTED;
+				model_options_mask =
+						DBMDX_LOAD_MODEL_NO_DETECTION;
+				if (p->primary_amodel.amodel_loaded)
+					model_options_mask |=
+						DBMDX_LOAD_MODEL_FROM_MEMORY;
+
+				amodel_mode |=
+					((model_select_mask << 4) & 0x30);
+
+				amodel_mode |=
+					((model_options_mask << 8) & 0xf00);
+
+				amodel_mode |=
+					((model_custom_params << 12) & 0xf000);
+
+				ret = dbmdx_va_amodel_update(p, amodel_mode);
+			}
 #else
-			ret = dbmdx_va_amodel_update(p,
-					p->va_detection_mode);
+			amodel_mode = p->va_detection_mode;
+			model_select_mask = DBMDX_SV_MODEL_SELECTED;
+			model_options_mask = DBMDX_LOAD_MODEL_NO_DETECTION;
+			if (p->primary_amodel.amodel_loaded)
+				model_options_mask |=
+						DBMDX_LOAD_MODEL_FROM_MEMORY;
+
+			amodel_mode |=	((model_select_mask << 4) & 0x30);
+
+			amodel_mode |=	((model_options_mask << 8) & 0xf00);
+
+			amodel_mode |=	((model_custom_params << 12) & 0xf000);
+
+			ret = dbmdx_va_amodel_update(p, amodel_mode);
 #endif
 			p->va_flags.auto_detection_disabled = false;
 
@@ -8977,10 +10252,39 @@ static int dbmdx_perform_recovery(struct dbmdx_private *p)
 			if (current_mode == DBMDX_DETECTION ||
 				current_mode == DBMDX_DETECTION_AND_STREAMING) {
 
-				ret = dbmdx_trigger_detection(p);
+				amodel_mode = p->va_detection_mode;
+				model_select_mask = 0;
+				if (saved_va_flags.sv_recognition_mode !=
+					SV_RECOGNITION_MODE_DISABLED)
+					model_select_mask |=
+						DBMDX_SV_MODEL_SELECTED;
+#ifdef DMBDX_OKG_AMODEL_SUPPORT
+				if (saved_va_flags.okg_recognition_mode !=
+					OKG_RECOGNITION_MODE_DISABLED)
+					model_select_mask |=
+						DBMDX_OKG_MODEL_SELECTED;
+#endif
+				model_options_mask =
+						DBMDX_DO_NOT_RELOAD_MODEL;
+
+				amodel_mode |=
+					((model_select_mask << 4) & 0x30);
+
+				amodel_mode |=
+					((model_options_mask << 8) & 0xf00);
+
+				amodel_mode |=
+					((model_custom_params << 12) & 0xf000);
+
+				p->unlock(p);
+
+				ret = dbmdx_va_amodel_update(p, amodel_mode);
+
+				p->lock(p);
+
 				if (ret) {
 					dev_err(p->dev,
-						"%s: Failed to trigger detection\n",
+					"%s: Failed to trigger detection\n",
 						__func__);
 				}
 
@@ -8989,7 +10293,7 @@ static int dbmdx_perform_recovery(struct dbmdx_private *p)
 
 				if (ret < 0) {
 					dev_err(p->dev,
-						"%s: Failed to set DBMDX_STREAMING mode\n",
+					"%s: Failed to set DBMDX_STREAMING mode\n",
 						__func__);
 				}
 			} else
@@ -9024,8 +10328,9 @@ out:
 
 #ifndef ALSA_SOC_INTERFACE_NOT_SUPPORTED
 /* ------------------------------------------------------------------------
- * interface functions for platform driver
- * ------------------------------------------------------------------------ */
+ * Interface functions for platform driver
+ * ------------------------------------------------------------------------
+ */
 
 int dbmdx_get_samples(struct snd_soc_codec *codec, char *buffer,
 	unsigned int samples)
@@ -9040,9 +10345,8 @@ int dbmdx_get_samples(struct snd_soc_codec *codec, char *buffer,
 	int ret;
 	int err = -1;
 
-#if 0
-	pr_debug("%s Requested %u, Available %d\n",
-			__func__, samples, avail);
+#ifdef DBMDX_VV_DEBUG
+	pr_debug("%s Requested %u, Available %d\n", __func__, samples, avail);
 #endif
 	if (p->va_flags.pcm_streaming_pushing_zeroes)
 		return err;
@@ -9067,7 +10371,7 @@ int dbmdx_codec_lock(struct snd_soc_codec *codec)
 #endif
 
 	if (!p)
-		return -1;
+		return -EAGAIN;
 
 	if (!atomic_add_unless(&p->audio_owner, 1, 1))
 		return -EBUSY;
@@ -9085,7 +10389,7 @@ int dbmdx_codec_unlock(struct snd_soc_codec *codec)
 #endif
 
 	if (!p)
-		return -1;
+		return -EAGAIN;
 
 	atomic_dec(&p->audio_owner);
 	return 0;
@@ -9109,8 +10413,9 @@ int dbmdx_start_pcm_streaming(struct snd_soc_codec *codec,
 		return -EIO;
 	}
 
-	/* Do not interfere buffering mode , wait till the end
-		Just set the flag			*/
+	/* Do not interfere buffering mode, wait till the end
+	 * Just set the flag
+	 */
 	if (p->va_flags.mode == DBMDX_BUFFERING) {
 		dev_dbg(p->dev, "%s: Buffering mode\n", __func__);
 		p->va_flags.pcm_streaming_active = 1;
@@ -9143,7 +10448,8 @@ int dbmdx_start_pcm_streaming(struct snd_soc_codec *codec,
 	p->unlock(p);
 
 	/* Do not interfere buffering mode , wait till the end
-		Just set the flag			*/
+	 * Just set the flag
+	 */
 	if (p->va_flags.mode == DBMDX_BUFFERING) {
 		p->va_flags.pcm_streaming_active = 1;
 		p->active_substream = substream;
@@ -9329,8 +10635,9 @@ int dbmdx_stop_pcm_streaming(struct snd_soc_codec *codec)
 
 	p->lock(p);
 
-	/* Do not interfere buffering mode , wait till the end
-		Just set the flag			*/
+	/* Do not interfere buffering mode, wait till the end
+	 * Just set the flag
+	 */
 	if (p->va_flags.mode == DBMDX_BUFFERING) {
 		p->va_flags.pcm_streaming_active = 0;
 		dev_dbg(p->dev,
@@ -9366,7 +10673,8 @@ int dbmdx_stop_pcm_streaming(struct snd_soc_codec *codec)
 	}
 
 	/* disable transport (if configured) so the FW goes into best power
-	 * saving mode (only if no active pcm streaming in background) */
+	 * saving mode (only if no active pcm streaming in background)
+	 */
 	if (required_mode == DBMDX_DETECTION)
 		p->chip->transport_enable(p, false);
 
@@ -9379,8 +10687,9 @@ EXPORT_SYMBOL(dbmdx_stop_pcm_streaming);
 #endif
 
 /* ------------------------------------------------------------------------
- * codec driver section
- * ------------------------------------------------------------------------ */
+ * Codec driver section
+ * ------------------------------------------------------------------------
+ */
 
 #define DUMMY_REGISTER 0
 
@@ -9409,34 +10718,6 @@ static int dbmdx_dai_hw_params(struct snd_pcm_substream *substream,
 	}
 
 	dev_dbg(p->dev, "%s:\n", __func__);
-
-#if 0
-	/* flush pending sv work if any */
-	p->va_flags.buffering = 0;
-	flush_work(&p->sv_work);
-
-	p->lock(p);
-
-	ret = dbmdx_set_power_mode(p, DBMDX_PM_ACTIVE);
-	if (ret < 0) {
-		dev_err(p->dev, "%s: failed to set PM_ACTIVE\n", __func__);
-		ret = -EINVAL;
-		goto out_unlock;
-	}
-
-	p->va_flags.disabling_mics_not_allowed = true;
-
-	/* set chip to idle mode */
-	ret = dbmdx_set_mode(p, DBMDX_IDLE);
-
-	p->va_flags.disabling_mics_not_allowed = false;
-
-	if (ret) {
-		dev_err(p->dev, "%s: failed to set device to idle mode\n",
-			__func__);
-		goto out_unlock;
-	}
-#endif
 
 	channels = params_channels(params);
 	p->audio_pcm_channels = channels;
@@ -9478,9 +10759,6 @@ static int dbmdx_dai_hw_params(struct snd_pcm_substream *substream,
 
 	switch (params_format(params)) {
 	case SNDRV_PCM_FORMAT_S16_LE:
-#if 0
-		ret = dbmdx_set_bytes_per_sample(p, DBMDX_AUDIO_MODE_PCM);
-#endif
 		dev_dbg(p->dev, "%s: set pcm format: SNDRV_PCM_FORMAT_S16_LE\n",
 			__func__);
 		break;
@@ -9491,19 +10769,23 @@ static int dbmdx_dai_hw_params(struct snd_pcm_substream *substream,
 	if (ret) {
 		dev_err(p->dev, "%s: failed to set pcm format\n",
 			__func__);
-		goto out_unlock;
+		goto out;
 	}
 
 	switch (params_rate(params)) {
 #ifdef DBMDX_PCM_RATE_8000_SUPPORTED
 	case 8000:
+		/* Fall through */
 #endif
 	case 16000:
+		/* Fall through */
 #ifdef DBMDX_PCM_RATE_32000_SUPPORTED
 	case 32000:
+		/* Fall through */
 #endif
 #ifdef DBMDX_PCM_RATE_44100_SUPPORTED
 	case 44100:
+		/* Fall through */
 #endif
 	case 48000:
 		p->audio_pcm_rate = params_rate(params);
@@ -9517,14 +10799,9 @@ static int dbmdx_dai_hw_params(struct snd_pcm_substream *substream,
 	if (ret) {
 		dev_err(p->dev, "%s: failed to set pcm rate: %u\n",
 			__func__, params_rate(params));
-		goto out_unlock;
+		goto out;
 	}
 
-out_unlock:
-#if 0
-	dbmdx_set_power_mode(p, DBMDX_PM_FALLING_ASLEEP);
-	p->unlock(p);
-#endif
 out:
 	return ret;
 }
@@ -9708,12 +10985,7 @@ static int dbmdx_dev_write(struct snd_soc_codec *codec, unsigned int reg,
 		dev_err(p->dev, "%s: device not ready\n", __func__);
 		return -EAGAIN;
 	}
-#if 0
-	if (!snd_soc_codec_writable_register(codec, reg)) {
-		dev_err(p->dev, "%s: register not writable\n", __func__);
-		return -EIO;
-	}
-#endif
+
 	dev_dbg(p->dev, "%s: ------- VA control ------\n", __func__);
 	if (p->active_fw != DBMDX_FW_VA) {
 		dev_dbg(p->dev, "%s: VA firmware not active\n", __func__);
@@ -9821,6 +11093,7 @@ static int dbmdx_va_update_reg(struct dbmdx_private *p,
 		}
 	} else if (va_reg == DBMDX_VA_DIGITAL_GAIN) {
 		short sval = ((short)val - DIGITAL_GAIN_TLV_SHIFT) & 0x0fff;
+
 		ret = dbmdx_send_cmd(p, va_reg | sval, NULL);
 		if (ret < 0) {
 			dev_err(p->dev, "%s: write 0x%x to 0x%x error\n",
@@ -10373,6 +11646,85 @@ out:
 	return ret;
 }
 
+#ifdef EXTERNAL_SOC_AMODEL_LOADING_ENABLED
+#ifdef SOC_BYTES_EXT_HAS_KCONTROL_FIELD
+static int dbmdx_external_amodel_put(struct snd_kcontrol *kcontrol,
+				 const unsigned int __user *bytes,
+				 unsigned int size)
+{
+#if defined(SOC_CONTROLS_FOR_DBMDX_CODEC_ONLY)
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	struct dbmdx_private *p = snd_soc_codec_get_drvdata(codec);
+#else
+	struct dbmdx_private *p = dbmdx_data;
+#endif
+#else /* SOC_BYTES_EXT_HAS_KCONTROL_FIELD */
+static int dbmdx_external_amodel_put(const unsigned int __user *bytes,
+				 unsigned int size)
+{
+	struct dbmdx_private *p = dbmdx_data;
+#endif /* SOC_BYTES_EXT_HAS_KCONTROL_FIELD */
+	int ret = 0;
+	char *data_buf;
+
+	if (!p)
+		return -EAGAIN;
+
+	if (!p->device_ready) {
+		dev_err(p->dev, "%s: device not ready\n", __func__);
+		return -EAGAIN;
+	}
+
+	/* Buffer format is:
+	 * 8B:TLV Header + 1B:Model type + 1B:Model Options + 1B:Number of files
+	 * 4B:1st File Len + 1st File Data + [4B:2nd File Len + 2nd File Data]..
+	 */
+#ifdef SOC_TLV_HEADER_ENABLED
+	if (size < 15) {
+#else
+	if (size < 9) {
+#endif
+		dev_err(p->dev, "%s: Header is too short\n", __func__);
+		return -EINVAL;
+	}
+
+	if (size > MAX_AMODEL_SIZE) {
+		dev_err(p->dev, "%s: Size exceeds max amodel size\n", __func__);
+		return -EINVAL;
+	}
+
+	data_buf = vmalloc(MAX_AMODEL_SIZE);
+
+	if (!data_buf)
+		return -ENOMEM;
+
+	dev_info(p->dev, "%s: Buffer size is %d\n", __func__, size);
+
+#ifdef SOC_TLV_HEADER_ENABLED
+	/* Skips the TLV header. */
+	bytes += 2;
+#endif
+	if (copy_from_user(data_buf, bytes, size)) {
+		dev_err(p->dev,
+			"%s: Error during copying data from user\n", __func__);
+		ret = -EFAULT;
+		goto out_mem;
+	}
+	ret = dbmdx_acoustic_model_build_from_external(p, data_buf, size);
+	if (ret < 0) {
+		dev_err(p->dev,
+			"%s: Error building amodel from provided buffer\n",
+			__func__);
+		return -EFAULT;
+	}
+
+out_mem:
+	vfree(data_buf);
+	return ret;
+
+}
+#endif
+
 static int dbmdx_wordid_get(struct snd_kcontrol *kcontrol,
 			    struct snd_ctl_elem_value *ucontrol)
 {
@@ -10592,6 +11944,53 @@ static int dbmdx_va_capture_on_detect_set(struct snd_kcontrol *kcontrol,
 	return ret;
 }
 
+#ifdef DBMDX_VA_NS_SUPPORT
+
+static int dbmdx_va_pcm_streaming_ns_enable_get(struct snd_kcontrol *kcontrol,
+				     struct snd_ctl_elem_value *ucontrol)
+{
+#if defined(SOC_CONTROLS_FOR_DBMDX_CODEC_ONLY)
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	struct dbmdx_private *p = snd_soc_codec_get_drvdata(codec);
+#else
+	struct dbmdx_private *p = dbmdx_data;
+#endif
+	int ret = 0;
+
+	if (!p)
+		return -EAGAIN;
+
+	if (!p->device_ready) {
+		dev_err(p->dev, "%s: device not ready\n", __func__);
+		return -EAGAIN;
+	}
+
+	p->lock(p);
+	ucontrol->value.integer.value[0] = p->va_ns_pcm_streaming_enabled;
+	p->unlock(p);
+
+	return ret;
+}
+
+static int dbmdx_va_pcm_streaming_ns_enable_set(struct snd_kcontrol *kcontrol,
+				     struct snd_ctl_elem_value *ucontrol)
+{
+#if defined(SOC_CONTROLS_FOR_DBMDX_CODEC_ONLY)
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	struct dbmdx_private *p = snd_soc_codec_get_drvdata(codec);
+#else
+	struct dbmdx_private *p = dbmdx_data;
+#endif
+	int ret = 0;
+
+	p->lock(p);
+	p->va_ns_pcm_streaming_enabled = ucontrol->value.integer.value[0];
+	p->unlock(p);
+
+	return ret;
+}
+#endif
+
 static const char * const dbmdx_microphone_mode_texts[] = {
 	"DigitalLeft",
 	"DigitalRight",
@@ -10644,6 +12043,15 @@ static const struct snd_kcontrol_new dbmdx_va_snd_controls[] = {
 		dbmdx_microphone_mode_get, dbmdx_microphone_mode_set),
 	SOC_ENUM_EXT("Capture on detection", dbmdx_va_off_on_enum,
 		dbmdx_va_capture_on_detect_get, dbmdx_va_capture_on_detect_set),
+#ifdef DBMDX_VA_NS_SUPPORT
+	SOC_ENUM_EXT("Streaming NS", dbmdx_va_off_on_enum,
+		dbmdx_va_pcm_streaming_ns_enable_get,
+		dbmdx_va_pcm_streaming_ns_enable_set),
+#endif
+#ifdef EXTERNAL_SOC_AMODEL_LOADING_ENABLED
+	SND_SOC_BYTES_TLV("Acoustic Model", MAX_AMODEL_SIZE, NULL,
+				dbmdx_external_amodel_put),
+#endif
 };
 
 static const struct snd_kcontrol_new dbmdx_vqe_snd_controls[] = {
@@ -10791,25 +12199,6 @@ static int dbmdx_dev_resume(struct snd_soc_codec *codec)
 #endif
 
 
-#if 0
-static int dbmdx_is_writeable_register(struct snd_soc_codec *codec,
-				       unsigned int reg)
-{
-	int ret = 0;
-
-	/* VA control registers */
-	switch (reg) {
-	case VA_MIXER_REG(DBMDX_VA_SENS_TG_THRESHOLD):
-	case VA_MIXER_REG(DBMDX_VA_SENS_VERIF_THRESHOLD):
-		ret = 1;
-		break;
-	default:
-		break;
-	}
-	return ret;
-}
-#endif
-
 static struct snd_soc_codec_driver soc_codec_dev_dbmdx = {
 	.probe   = dbmdx_dev_probe,
 	.remove  = dbmdx_dev_remove,
@@ -10818,9 +12207,6 @@ static struct snd_soc_codec_driver soc_codec_dev_dbmdx = {
 	.set_bias_level = dbmdx_set_bias_level,
 	.read = dbmdx_dev_read,
 	.write = dbmdx_dev_write,
-#if 0
-	.writable_register = dbmdx_is_writeable_register,
-#endif
 	.reg_cache_size = 0,
 	.reg_word_size = 0,
 	.reg_cache_default = NULL,
@@ -10873,6 +12259,7 @@ int dbmdx_remote_add_codec_controls(struct snd_soc_codec *codec)
 	return ret;
 }
 #else
+EXPORT_SYMBOL(dbmdx_remote_add_codec_controls);
 int dbmdx_remote_add_codec_controls(struct snd_soc_codec *codec)
 {
 	dev_dbg(codec->dev, "%s\n", __func__);
@@ -10880,8 +12267,6 @@ int dbmdx_remote_add_codec_controls(struct snd_soc_codec *codec)
 	return 0;
 }
 #endif
-
-EXPORT_SYMBOL(dbmdx_remote_add_codec_controls);
 
 #endif /* ALSA_SOC_INTERFACE_NOT_SUPPORTED */
 
@@ -10998,7 +12383,8 @@ static int dbmdx_process_detection_irq(struct dbmdx_private *p,
 
 			if (event_id == 3) {
 				/* as per SV Algo implementer's recommendation
-				* --> it 1 */
+				 * --> it 1
+				 */
 				dev_dbg(p->dev, "%s: fixing to 1\n", __func__);
 				event_id = 1;
 			}
@@ -11145,10 +12531,12 @@ static void dbmdx_uevent_work(struct work_struct *work)
 
 	if (ret < 0)
 		dev_err(p->dev,
-			"%s: Error occured during processing detection IRQ\n",
+			"%s: Error occurred during processing detection IRQ\n",
 			__func__);
 
 }
+
+#define DBMDX_FW_AUDIO_BUFFER_MIN_SIZE	60
 
 static void dbmdx_sv_work(struct work_struct *work)
 {
@@ -11157,7 +12545,7 @@ static void dbmdx_sv_work(struct work_struct *work)
 	int ret;
 	int bytes_per_sample = p->bytes_per_sample;
 	unsigned int bytes_to_read;
-	u16 nr_samples;
+	u16 nr_samples, nr_samples_in_fw;
 	size_t avail_samples;
 	unsigned int total = 0;
 	int kfifo_space = 0;
@@ -11267,12 +12655,23 @@ static void dbmdx_sv_work(struct work_struct *work)
 			break;
 		}
 
+#if DBMDX_FW_AUDIO_BUFFER_MIN_SIZE
+		/* Do not go below the low border - can cause clicks */
+		if (nr_samples < DBMDX_FW_AUDIO_BUFFER_MIN_SIZE)
+			nr_samples = 0;
+		else
+			nr_samples -= DBMDX_FW_AUDIO_BUFFER_MIN_SIZE;
+#endif
+
+		nr_samples_in_fw = nr_samples;
+
 		p->unlock(p);
 
 		/* Now fill the kfifo. The user can access the data in
 		 * parallel. The kfifo is safe for concurrent access of one
 		 * reader (ALSA-capture/character device) and one writer (this
-		 * work-queue). */
+		 * work-queue).
+		 */
 		if (nr_samples) {
 			bytes_to_read = nr_samples * 8 * bytes_per_sample;
 
@@ -11332,6 +12731,11 @@ static void dbmdx_sv_work(struct work_struct *work)
 			retries = 0;
 
 			p->unlock(p);
+
+			if ((nr_samples == nr_samples_in_fw) &&
+				DBMDX_MSLEEP_IF_AUDIO_BUFFER_EMPTY)
+				msleep(DBMDX_MSLEEP_IF_AUDIO_BUFFER_EMPTY);
+
 		} else {
 			usleep_range(DBMDX_USLEEP_NO_SAMPLES,
 				DBMDX_USLEEP_NO_SAMPLES + 1000);
@@ -11485,10 +12889,8 @@ static void dbmdx_pcm_streaming_work_mod_0(struct work_struct *work)
 		(int)samples_chunk_size);
 
 	local_samples_buf = kmalloc(bytes_to_read + 8, GFP_KERNEL);
-	if (!local_samples_buf) {
-		dev_err(p->dev,	"%s Memory allocation error\n",	__func__);
+	if (!local_samples_buf)
 		return;
-	}
 
 	read_samples_buf = local_samples_buf;
 
@@ -11555,7 +12957,8 @@ static void dbmdx_pcm_streaming_work_mod_0(struct work_struct *work)
 		/* Now fill the kfifo. The user can access the data in
 		 * parallel. The kfifo is safe for concurrent access of one
 		 * reader (ALSA-capture/character device) and one writer (this
-		 * work-queue). */
+		 * work-queue).
+		 */
 		if (nr_samples >= samples_chunk_size) {
 
 			if (nr_samples >= 2*samples_chunk_size)
@@ -11694,6 +13097,7 @@ out_fail_unlock:
 
 
 #define DBMDX_EXTENDED_STREAMIN_DBG_INFO	0
+#define DBMDX_MIN_SAMPLES_IN_FW			64
 
 static void dbmdx_pcm_streaming_work_mod_1(struct work_struct *work)
 {
@@ -11771,10 +13175,8 @@ static void dbmdx_pcm_streaming_work_mod_1(struct work_struct *work)
 
 	/* Ensure that there enough space for metadata , add 8 bytes */
 	local_samples_buf = kmalloc(bytes_to_read + 8, GFP_KERNEL);
-	if (!local_samples_buf) {
-		dev_err(p->dev,	"%s Memory allocation error\n",	__func__);
+	if (!local_samples_buf)
 		return;
-	}
 
 	read_samples_buf = local_samples_buf;
 
@@ -11855,11 +13257,14 @@ static void dbmdx_pcm_streaming_work_mod_1(struct work_struct *work)
 
 		bytes_to_read = samples_chunk_size * 8 * bytes_per_sample;
 
-		if (avail_samples >= samples_chunk_size)
-				sleep_time_ms = 0;
+		if (avail_samples >= samples_chunk_size +
+						DBMDX_MIN_SAMPLES_IN_FW)
+			sleep_time_ms = 0;
 		else {
-			missing_samples = samples_chunk_size -
+			missing_samples = samples_chunk_size +
+						DBMDX_MIN_SAMPLES_IN_FW -
 						avail_samples;
+
 			sleep_time_ms =
 				(u32)(missing_samples * 8 * 1000) /
 				p->current_pcm_rate;
@@ -11986,13 +13391,13 @@ static void dbmdx_pcm_streaming_work_mod_1(struct work_struct *work)
 		} else {
 
 #if DBMDX_EXTENDED_STREAMIN_DBG_INFO
-		dev_dbg(p->dev,
+			dev_dbg(p->dev,
 			"%s Chunk was read (no samples): Avail. Samples (%d),Samples Chunk (%d), Kfifo Bytes (%d), Retries (%d)\n",
-			__func__,
-			(int)avail_samples,
-			(int)samples_chunk_size,
-			(int)bytes_in_kfifo,
-			(int)retries+1);
+				__func__,
+				(int)avail_samples,
+				(int)samples_chunk_size,
+				(int)bytes_in_kfifo,
+				(int)retries+1);
 #endif
 
 			retries++;
@@ -12074,10 +13479,6 @@ static int dbmdx_get_va_resources(struct dbmdx_private *p)
 
 	dev_dbg(p->dev, "%s\n", __func__);
 
-	p->amodel_buf = vmalloc(MAX_AMODEL_SIZE);
-	if (!p->amodel_buf)
-		return -ENOMEM;
-
 	atomic_set(&p->audio_owner, 0);
 
 #if defined(CONFIG_SND_SOC_DBMDX_SND_CAPTURE)
@@ -12099,7 +13500,7 @@ static int dbmdx_get_va_resources(struct dbmdx_private *p)
 	if (ret)  {
 		dev_err(p->dev, "%s: no kfifo memory\n", __func__);
 		ret = -ENOMEM;
-		goto err_vfree;
+		goto err;
 	}
 
 	p->detection_samples_kfifo_buf_size = MAX_KFIFO_BUFFER_SIZE;
@@ -12108,13 +13509,22 @@ static int dbmdx_get_va_resources(struct dbmdx_private *p)
 	kmalloc(MAX_KFIFO_BUFFER_SIZE, GFP_KERNEL);
 
 	if (!p->detection_samples_kfifo_buf) {
-		dev_err(p->dev, "%s: no kfifo memory\n", __func__);
 		ret = -ENOMEM;
 		goto err_kfifo_pcm_free;
 	}
 
 	kfifo_init(&p->detection_samples_kfifo,
 		p->detection_samples_kfifo_buf, MAX_KFIFO_BUFFER_SIZE);
+
+	p->primary_amodel.amodel_loaded = false;
+	p->primary_amodel.amodel_buf = NULL;
+	p->secondary_amodel.amodel_loaded = false;
+	p->secondary_amodel.amodel_buf = NULL;
+
+#ifdef DMBDX_OKG_AMODEL_SUPPORT
+	p->okg_amodel.amodel_loaded = false;
+	p->okg_amodel.amodel_buf = NULL;
+#endif
 
 	/* Switch ON capture backlog by default */
 	p->va_capture_on_detect = true;
@@ -12162,17 +13572,21 @@ err_kfifo_free:
 	kfifo_free(&p->detection_samples_kfifo);
 err_kfifo_pcm_free:
 	kfifo_free(&p->pcm_kfifo);
-err_vfree:
-	vfree(p->amodel_buf);
-
+err:
 	return ret;
 }
 
 static void dbmdx_free_va_resources(struct dbmdx_private *p)
 {
 	dev_dbg(p->dev, "%s\n", __func__);
-
-	vfree(p->amodel_buf);
+	if (p->primary_amodel.amodel_buf)
+		vfree(p->primary_amodel.amodel_buf);
+	if (p->secondary_amodel.amodel_buf)
+		vfree(p->secondary_amodel.amodel_buf);
+#ifdef DMBDX_OKG_AMODEL_SUPPORT
+	if (p->okg_amodel.amodel_buf)
+		vfree(p->okg_amodel.amodel_buf);
+#endif
 	kfifo_free(&p->pcm_kfifo);
 	kfifo_free(&p->detection_samples_kfifo);
 	p->va_flags.irq_inuse = 0;
@@ -12535,6 +13949,10 @@ static void dbmdx_common_remove(struct dbmdx_private *p)
 		kfree(p->pdata->vqe_modes_value);
 	if (p->pdata->va_cfg_values)
 		kfree(p->pdata->va_cfg_value);
+#ifdef DBMDX_VA_NS_SUPPORT
+	if (p->pdata->va_ns_cfg_values)
+		kfree(p->pdata->va_ns_cfg_value);
+#endif
 #endif
 	/* disable constant clock */
 	p->clk_disable(p, DBMDX_CLK_CONSTANT);
@@ -12635,6 +14053,142 @@ static int dbmdx_of_get_clk_info(struct dbmdx_private *p,
 
 	return 0;
 }
+#ifdef DBMDX_VA_NS_SUPPORT
+static int dbmdx_get_va_ns_devtree_pdata(struct device *dev,
+						struct dbmdx_private *p)
+{
+	struct dbmdx_platform_data *pdata = p->pdata;
+	struct device_node *np;
+	struct property *property = NULL;
+	int ret = 0;
+	int i, j;
+	u32 *cur_cfg_arr;
+	int min_arr_size;
+
+	np = dev->of_node;
+
+	ret = of_property_read_u32(np, "va_ns_supported",
+			&pdata->va_ns_supported);
+	if ((ret && ret != -EINVAL) ||
+			(p->pdata->va_ns_supported != 0 &&
+			p->pdata->va_ns_supported != 1)) {
+		dev_err(p->dev, "%s: invalid 'va_ns_supported'\n",
+			__func__);
+		return -EINVAL;
+	}
+
+	dev_info(p->dev, "%s: using va_ns_supported of %d\n",
+		 __func__, pdata->va_ns_supported);
+
+	if (!(pdata->va_ns_supported))
+		return 0;
+
+	ret = of_property_read_u32(np, "va_ns-num_of_configs",
+			&pdata->va_ns_num_of_configs);
+	if ((ret && ret != -EINVAL)) {
+		dev_err(p->dev, "%s: invalid 'va_ns-num_of_configs'\n",
+			__func__);
+		return -EINVAL;
+	} else if (ret == -EINVAL) {
+		dev_info(p->dev,
+			"%s: no va_ns-num_of_configs, setting to 1\n",
+			__func__);
+		pdata->va_ns_num_of_configs = 1;
+	}
+
+	property = of_find_property(np, "va-ns-config",
+					&pdata->va_ns_cfg_values);
+	if (!property) {
+		pdata->va_ns_cfg_values = 0;
+		pdata->va_ns_num_of_configs = 0;
+		return 0;
+	}
+
+	pdata->va_ns_cfg_values /= sizeof(u32);
+
+	min_arr_size = (pdata->va_ns_cfg_values +
+			(pdata->va_ns_cfg_values %
+				pdata->va_ns_num_of_configs)) *	sizeof(u32);
+
+	pdata->va_ns_cfg_value = kzalloc(min_arr_size, GFP_KERNEL);
+
+	if (!pdata->va_ns_cfg_value)
+		return -ENOMEM;
+
+	if (pdata->va_ns_num_of_configs == 1) {
+		ret = of_property_read_u32_array(np,
+						 "va-ns-config",
+						 pdata->va_ns_cfg_value,
+						 pdata->va_ns_cfg_values);
+		if (ret) {
+			dev_err(dev, "%s: Couldn't read VA_NS config\n",
+				__func__);
+			kfree(pdata->va_ns_cfg_value);
+			return -EIO;
+		}
+	} else {
+		u32 *tmp_arr;
+		int cfg_arr_len;
+		int cur_idx = 0;
+		int cur_val_ind;
+
+		tmp_arr = kzalloc(min_arr_size, GFP_KERNEL);
+
+		if (!tmp_arr) {
+			kfree(pdata->va_ns_cfg_value);
+			return -ENOMEM;
+		}
+
+		ret = of_property_read_u32_array(np,
+						 "va-ns-config",
+						 tmp_arr,
+						 pdata->va_ns_cfg_values);
+
+		if (ret) {
+			dev_err(dev, "%s: Couldn't read VA_NS config\n",
+					__func__);
+			kfree(pdata->va_ns_cfg_value);
+			kfree(tmp_arr);
+			return -EIO;
+		}
+
+		cfg_arr_len = (int)(pdata->va_ns_cfg_values /
+						pdata->va_ns_num_of_configs);
+
+		for (i = 0; i < pdata->va_ns_cfg_values;
+					i += pdata->va_ns_num_of_configs) {
+			for (j = 0; j < pdata->va_ns_num_of_configs; j++) {
+				cur_val_ind = (cfg_arr_len * j) + cur_idx;
+				pdata->va_ns_cfg_value[cur_val_ind] =
+								tmp_arr[i+j];
+			}
+			cur_idx++;
+		}
+
+		pdata->va_ns_cfg_values = cfg_arr_len;
+		kfree(tmp_arr);
+	}
+	dev_info(dev, "%s: using %u VA_NS config values from dev-tree\n",
+		__func__, pdata->va_cfg_values);
+
+	for (j = 0; j < pdata->va_ns_num_of_configs; j++) {
+
+		dev_info(dev, "%s:\n===== VA_NS configuration #%d =====\n",
+			__func__, j);
+
+		cur_cfg_arr = (u32 *)(&(pdata->va_ns_cfg_value[j*
+						pdata->va_ns_cfg_values]));
+
+		for (i = 0; i < pdata->va_ns_cfg_values; i++) {
+			dev_info(dev, "%s:\tVA_NS cfg %8.8x: 0x%8.8x\n",
+				__func__, i, cur_cfg_arr[i]);
+		}
+
+	}
+
+	return 0;
+}
+#endif
 
 static int dbmdx_get_va_devtree_pdata(struct device *dev,
 		struct dbmdx_private *p)
@@ -12678,6 +14232,24 @@ static int dbmdx_get_va_devtree_pdata(struct device *dev,
 		dev_info(dev,
 			"%s: using device-tree VA preboot firmware name: %s\n",
 			__func__, pdata->va_preboot_firmware_name);
+
+#ifdef DBMDX_VA_NS_SUPPORT
+	ret = of_property_read_string(np,
+				      "va-asrp-params-firmware-name",
+				      &pdata->va_asrp_params_firmware_name);
+
+	if (ret != 0) {
+		/* set default name */
+		pdata->va_asrp_params_firmware_name =
+			DBMD4_VA_ASRP_PARAMS_FIRMWARE_NAME;
+		dev_info(dev,
+			"%s: using default VA ASRP firmware name: %s\n",
+			 __func__, pdata->va_asrp_params_firmware_name);
+	} else
+		dev_info(dev,
+			"%s: using device-tree VA ASRP firmware name: %s\n",
+			__func__, pdata->va_asrp_params_firmware_name);
+#endif
 
 	ret = of_property_read_u32(np, "auto_buffering",
 		&p->pdata->auto_buffering);
@@ -12834,7 +14406,15 @@ static int dbmdx_get_va_devtree_pdata(struct device *dev,
 			dev_dbg(dev, "%s: VA cfg %8.8x: 0x%8.8x\n",
 				__func__, i, pdata->va_cfg_value[i]);
 	}
-
+#ifdef DBMDX_VA_NS_SUPPORT
+	ret = dbmdx_get_va_ns_devtree_pdata(dev, p);
+	if (ret) {
+		dev_err(p->dev, "%s: Error getting VA NS Dev Tree data\n",
+			__func__);
+		ret = -EINVAL;
+		goto out_err;
+	}
+#endif
 	ret = of_property_read_u32_array(np,
 					 "va-mic-config",
 					 pdata->va_mic_config,
@@ -12956,6 +14536,11 @@ out_free_va_resources:
 	if (pdata->va_cfg_values)
 		kfree(pdata->va_cfg_value);
 	pdata->va_cfg_values = 0;
+#ifdef DBMDX_VA_NS_SUPPORT
+	if (pdata->va_ns_cfg_values)
+		kfree(pdata->va_ns_cfg_value);
+	pdata->va_ns_cfg_values = 0;
+#endif
 out_err:
 	return ret;
 }
@@ -13761,6 +15346,10 @@ static int verify_platform_data(struct device *dev,
 
 		dev_info(dev, "%s: VA preboot firmware name: %s\n",
 				 __func__, pdata->va_preboot_firmware_name);
+#ifdef DBMDX_VA_NS_SUPPORT
+		dev_info(dev, "%s: VA ASRP firmware name: %s\n",
+				 __func__, pdata->va_asrp_params_firmware_name);
+#endif
 
 		if (pdata->auto_buffering != 0 &&
 		    pdata->auto_buffering != 1)
@@ -13828,7 +15417,7 @@ static int verify_platform_data(struct device *dev,
 			__func__, pdata->va_buffering_pcm_rate);
 
 		for (i = 0; i < pdata->va_cfg_values; i++)
-				dev_dbg(dev, "%s: VA cfg %8.8x: 0x%8.8x\n",
+			dev_dbg(dev, "%s: VA cfg %8.8x: 0x%8.8x\n",
 					__func__, i, pdata->va_cfg_value[i]);
 
 		for (i = 0; i < VA_MIC_CONFIG_SIZE; i++)
@@ -13898,7 +15487,31 @@ static int verify_platform_data(struct device *dev,
 
 		pdata->vqe_tdm_bypass_config &= 0x7;
 	}
+#ifdef DBMDX_VA_NS_SUPPORT
+	if (pdata->va_ns_supported > 1)
+		pdata->va_ns_supported = 1;
 
+	dev_info(dev, "%s: using va_ns_supported of %d\n",
+		 __func__, pdata->va_ns_supported);
+
+	if (pdata->va_ns_supported) {
+		int j;
+
+		dev_info(dev, "%s: using va_ns-num_of_configs of %d\n",
+				__func__, pdata->va_ns_num_of_configs);
+
+		for (j = 0; j < pdata->va_ns_num_of_configs; j++) {
+			dev_info(dev,
+				"%s:\n===== VA_NS configuration #%d =====\n",
+				__func__, j);
+
+			for (i = 0; i < pdata->va_ns_cfg_values; i++)
+				dev_info(dev, "%s:\tVA_NS cfg %8.8x: 0x%8.8x\n",
+					__func__, i,
+					pdata->va_ns_cfg_value[j][i]);
+		}
+	}
+#endif
 	for (i = 0; i < DBMDX_VA_NR_OF_SPEEDS; i++)
 		dev_dbg(dev, "%s: VA speed cfg %8.8x: 0x%8.8x %u %u %u\n",
 			__func__,
@@ -14345,6 +15958,32 @@ static int dbmdx_platform_probe(struct platform_device *pdev)
 	p->va_current_mic_config = pdata->va_initial_mic_config;
 	p->va_active_mic_config = pdata->va_initial_mic_config;
 
+	if ((pdata->va_initial_mic_config == DBMDX_MIC_MODE_DIGITAL_LEFT) ||
+		(pdata->va_initial_mic_config ==
+				DBMDX_MIC_MODE_DIGITAL_RIGHT) ||
+		(pdata->va_initial_mic_config == DBMDX_MIC_MODE_ANALOG)) {
+
+		p->pdata->va_audio_channels = 1;
+
+	} else if (pdata->va_initial_mic_config ==
+			DBMDX_MIC_MODE_DIGITAL_STEREO_TRIG_ON_LEFT ||
+		pdata->va_initial_mic_config ==
+			DBMDX_MIC_MODE_DIGITAL_STEREO_TRIG_ON_RIGHT) {
+
+#ifdef DBMDX_VA_NS_SUPPORT
+		p->pdata->va_audio_channels = 1;
+#else
+		p->pdata->va_audio_channels = 2;
+#endif
+
+#ifdef DBMDX_4CHANNELS_SUPPORT
+	} else if (pdata->va_initial_mic_config == DBMDX_MIC_MODE_DIGITAL_4CH) {
+
+		p->pdata->va_audio_channels = 4;
+
+#endif
+	}
+
 	p->va_cur_digital_mic_digital_gain =
 		pdata->va_mic_gain_config[DBMDX_DIGITAL_MIC_DIGITAL_GAIN];
 	p->va_cur_analog_mic_analog_gain =
@@ -14355,6 +15994,10 @@ static int dbmdx_platform_probe(struct platform_device *pdev)
 
 	p->vqe_vc_syscfg = DBMDX_VQE_SET_SYSTEM_CONFIG_SECONDARY_CFG;
 
+#ifdef DBMDX_VA_NS_SUPPORT
+	p->va_ns_enabled = true;
+	p->va_ns_pcm_streaming_enabled = false;
+#endif
 	/* initialize delayed pm work */
 	INIT_DELAYED_WORK(&p->delayed_pm_work,
 			  dbmdx_delayed_pm_work_hibernate);
@@ -14372,6 +16015,7 @@ static int dbmdx_platform_probe(struct platform_device *pdev)
 	p->reset_sequence = dbmdx_reset_sequence;
 	p->wakeup_set = dbmdx_wakeup_set;
 	p->wakeup_release = dbmdx_wakeup_release;
+	p->wakeup_toggle = dbmdx_wakeup_toggle;
 	p->lock = dbmdx_lock;
 	p->unlock = dbmdx_unlock;
 	p->verify_checksum = dbmdx_verify_checksum;
@@ -14431,7 +16075,7 @@ static int dbmdx_platform_remove(struct platform_device *pdev)
 }
 
 #ifdef CONFIG_OF
-static struct of_device_id dbmdx_of_match[] = {
+static const struct of_device_id dbmdx_of_match[] = {
 	{ .compatible = "dspg,dbmdx-codec", },
 	{}
 };

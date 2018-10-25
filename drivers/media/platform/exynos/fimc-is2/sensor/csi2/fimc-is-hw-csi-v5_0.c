@@ -177,7 +177,21 @@ int csi_hw_s_lane(u32 __iomem *base_reg,
 		u32 phy_val = 0;
 		deskew = true;
 
+#ifdef CONFIG_SOC_EXYNOS7885
 		/*
+		 * for 14nm
+		 * 1. D-phy Slave S_DPHYCTL[63:0] setting
+		 *	 [33]	= 0b1		 / Skew Calibration Enable
+		 *	 [39:34] = 0b10_0100 / RX Skew Calibration Max Code Control.
+		 *	 [63:60] = 0b11 	 / RX Skew Calibration Compare-run time Control
+		 */
+		phy_val = fimc_is_hw_get_reg(base_reg, &csi_regs[CSIS_R_PHY_SCTRL_1]);
+		phy_val &= ~(0xF00000FE);
+		phy_val |= ((1 << 1) | (0x24 << 2) | (0x3 << 28));
+		fimc_is_hw_set_reg(base_reg, &csi_regs[CSIS_R_PHY_SCTRL_1], phy_val);
+#else
+		/*
+		 * for 10nm
 		 * 1. D-phy Slave S_DPHYCTL[13:0] setting
 		 *   [0]     = 0b1	/ Skew calibration enable (default disabled)
 		 *   [13:12] = 0bxx	/ Coarse delay selection for skew calibration
@@ -193,6 +207,7 @@ int csi_hw_s_lane(u32 __iomem *base_reg,
 		else if (mipi_speed > 2000)
 			phy_val &= ~(1 << 12);
 		fimc_is_hw_set_reg(base_reg, &csi_regs[CSIS_R_PHY_SCTRL_0], phy_val);
+#endif
 
 		/*
 		 * 2. D-phy Slave byte clock control register enable

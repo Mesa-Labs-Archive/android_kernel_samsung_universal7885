@@ -368,6 +368,10 @@ config SND_SOC_SAMSUNG_EXYNOS7885_COD3035
 	tristate "S.LSI audio codec COD3035 support on exynos7885"
 	select SND_SOC_COD3035X
 
+config SND_SOC_SAMSUNG_EXYNOS7885_COD3035_MULTI
+	tristate "S.LSI audio codec COD3035 support on exynos7885 with multi codec"
+	select SND_SOC_COD3035X
+
 config SND_SOC_I2S_TXSLOT_NUMBER
 	int "Number of tx slots including audio sample"
 	depends on SND_SAMSUNG_I2S && SND_SAMSUNG_AUDSS

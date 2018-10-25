@@ -564,7 +564,9 @@ static int (* module_3p8_power_setpin[MAX_3P8_SETPIN_CNT])(struct platform_devic
 int sensor_module_3p8_probe(struct platform_device *pdev)
 {
 	int ret = 0;
+#ifdef USE_AP_PDAF
 	bool use_pdaf = false;
+#endif
 	u8 exist_actuator = 0;
 	int ch;
 	struct fimc_is_core *core;
@@ -586,11 +588,13 @@ int sensor_module_3p8_probe(struct platform_device *pdev)
 
 	dev = &pdev->dev;
 
+#ifdef USE_AP_PDAF
 	if (of_property_read_bool(dev->of_node, "use_pdaf")) {
 		use_pdaf = true;
 	}
 
 	probe_info("%s use_pdaf(%d)\n", __func__, use_pdaf);
+#endif
 
 	af_np = of_find_node_by_name(dev->of_node, "af");
 	if (!af_np)
@@ -638,9 +642,12 @@ int sensor_module_3p8_probe(struct platform_device *pdev)
 	module->vcis = ARRAY_SIZE(vci_module_3p8);
 	module->vci = vci_module_3p8;
 	module->sensor_maker = "SLSI";
+#ifdef USE_AP_PDAF
 	if (use_pdaf == true) {
 		module->sensor_name = "S5K3P8SX";
-	} else {
+	} else
+#endif
+	{
 		module->sensor_name = "S5K3P8SN";
 	}
 	if (pdata->position == SENSOR_MODULE_3P8_REAR) {

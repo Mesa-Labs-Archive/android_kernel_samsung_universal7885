@@ -578,4 +578,11 @@ struct ff_effect {
 #define FF_MAX		0x7f
 #define FF_CNT		(FF_MAX+1)
 
+#ifdef CONFIG_USB_HMT_SAMSUNG_INPUT
+#define KEY_START_NOTA_CMD		0x2fc
+#define KEY_START_TA_CMD		0x2fd
+#define KEY_ONGOING_TA_CMD		0x2fe
+#define KEY_HMT_CMD_START		KEY_START_NOTA_CMD
+#endif
+
 #endif /* _UAPI_INPUT_H */

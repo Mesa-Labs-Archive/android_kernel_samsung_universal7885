@@ -129,6 +129,8 @@ static const char *dev_to_str(muic_attached_dev_t n)
 	ENUM_STR(ATTACHED_DEV_AFC_CHARGER_9V_DUPLI_MUIC);
 	ENUM_STR(ATTACHED_DEV_UNKNOWN_MUIC);
 	ENUM_STR(ATTACHED_DEV_NUM);
+	default:
+		return "invalid";
 	}
 	return "invalid";
 }
@@ -1226,6 +1228,9 @@ static void s2mu005_muic_handle_attach(struct s2mu005_muic_data *muic_data,
 	case ATTACHED_DEV_JIG_UART_OFF_MUIC:
 	case ATTACHED_DEV_JIG_UART_ON_MUIC:
 	case ATTACHED_DEV_VZW_INCOMPATIBLE_MUIC:
+#if IS_ENABLED(CONFIG_MUIC_S2MU005_SUPPORT_HMT)
+	case ATTACHED_DEV_HMT_MUIC:
+#endif
 #if IS_ENABLED(CONFIG_SEC_FACTORY) && IS_ENABLED(CONFIG_MUIC_S2MU005_DISCHARGING_WA)
 	case ATTACHED_DEV_CARKIT_MUIC:
 #endif
@@ -1264,6 +1269,9 @@ static void s2mu005_muic_handle_attach(struct s2mu005_muic_data *muic_data,
 		msleep(100);
 #endif
 	case ATTACHED_DEV_OTG_MUIC:
+#if IS_ENABLED(CONFIG_MUIC_S2MU005_SUPPORT_HMT)
+	case ATTACHED_DEV_HMT_MUIC:
+#endif
 		ret = attach_usb(muic_data);
 		break;
 	case ATTACHED_DEV_TA_MUIC:
@@ -1613,6 +1621,11 @@ static void s2mu005_muic_detect_dev(struct s2mu005_muic_data *muic_data)
 			else
 				new_dev = ATTACHED_DEV_DESKDOCK_MUIC;
 			break;
+#if IS_ENABLED(CONFIG_MUIC_S2MU005_SUPPORT_HMT)
+		case ADC_HMT:
+			new_dev = ATTACHED_DEV_HMT_MUIC;
+			break;
+#endif
 		case ADC_OPEN:
 			break;
 		default:

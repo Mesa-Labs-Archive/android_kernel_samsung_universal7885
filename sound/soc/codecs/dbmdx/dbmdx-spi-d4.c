@@ -1,5 +1,5 @@
 /*
- * DSPG DBMD4/DBMD6 SPI interface driver
+ * DSPG DBMD4/DBMD6/DBMD8 SPI interface driver
  *
  * Copyright (C) 2014 DSP Group
  *
@@ -34,6 +34,8 @@
 static const u8 clr_crc_cmd[] = {0x5A, 0x0F};
 static const u8 chng_pll_cmd_32k[] = {0x5A, 0x10, 0x00, 0xEC, 0x0B, 0x00};
 static const u8 chng_pll_cmd_24m[] = {0x5A, 0x10, 0x00, 0x04, 0x00, 0x00};
+static const u8 set_gpio_8_in[] = {0x5A, 0x04, 0x4C, 0x00, 0x00,
+					0x03, 0x14, 0x55, 0x00, 0x88};
 
 
 
@@ -65,6 +67,20 @@ static int dbmd4_spi_boot(const void *fw_data, size_t fw_size,
 					break;
 				}
 			}
+
+			/* Disable GPIO 8 */
+			if (p->cur_boot_options &
+				DBMDX_BOOT_OPT_SET_GPIO_8_IN) {
+				ret = send_spi_data(p, set_gpio_8_in,
+						sizeof(set_gpio_8_in));
+				if (ret != sizeof(set_gpio_8_in)) {
+					dev_err(p->dev,
+					"%s: failed to set gpio 8 to input\n",
+						__func__);
+					continue;
+				}
+			}
+
 
 			/* delay before sending commands */
 			if (p->clk_get_rate(p, DBMDX_CLK_MASTER) <= 32768)
@@ -121,6 +137,7 @@ static int dbmd4_spi_boot(const void *fw_data, size_t fw_size,
 					continue;
 				}
 			}
+
 			/* verify chip id */
 			if (p->cur_boot_options &
 				DBMDX_BOOT_OPT_VERIFY_CHIP_ID) {
@@ -191,7 +208,7 @@ static int dbmd4_spi_boot(const void *fw_data, size_t fw_size,
 	/* no retries left, failed to boot */
 	if (retry <= 0) {
 		dev_err(p->dev, "%s: failed to load firmware\n", __func__);
-		return -1;
+		return -EIO;
 	}
 
 	if (!(p->cur_boot_options & DBMDX_BOOT_OPT_DONT_SEND_START_BOOT)) {
@@ -200,7 +217,7 @@ static int dbmd4_spi_boot(const void *fw_data, size_t fw_size,
 		if (ret < 0) {
 			dev_err(p->dev,
 				"%s: booting the firmware failed\n", __func__);
-			return -1;
+			return -EIO;
 		}
 	}
 
@@ -635,66 +652,68 @@ static int dbmd4_spi_probe(struct spi_device *client)
 	return rc;
 }
 
-static const struct of_device_id dbmd_4_6_spi_of_match[] = {
+static const struct of_device_id dbmd_4_8_spi_of_match[] = {
 	{ .compatible = "dspg,dbmd4-spi", },
 	{ .compatible = "dspg,dbmd6-spi", },
+	{ .compatible = "dspg,dbmd8-spi", },
 	{},
 };
 
 #ifdef CONFIG_SND_SOC_DBMDX
-MODULE_DEVICE_TABLE(of, dbmd_4_6_spi_of_match);
+MODULE_DEVICE_TABLE(of, dbmd_4_8_spi_of_match);
 #endif
 
-static const struct spi_device_id dbmd_4_6_spi_id[] = {
+static const struct spi_device_id dbmd_4_8_spi_id[] = {
 	{ "dbmdx-spi", 0 },
 	{ "dbmd4-spi", 0 },
 	{ "dbmd6-spi", 0 },
+	{ "dbmd8-spi", 0 },
 	{ }
 };
-MODULE_DEVICE_TABLE(spi, dbmd_4_6_spi_id);
+MODULE_DEVICE_TABLE(spi, dbmd_4_8_spi_id);
 
-static struct spi_driver dbmd_4_6_spi_driver = {
+static struct spi_driver dbmd_4_8_spi_driver = {
 	.driver = {
-		.name = "dbmd_4_6-spi",
+		.name = "dbmd_4_8-spi",
 		.bus	= &spi_bus_type,
 		.owner = THIS_MODULE,
 #ifdef CONFIG_OF
-		.of_match_table = dbmd_4_6_spi_of_match,
+		.of_match_table = dbmd_4_8_spi_of_match,
 #endif
 		.pm = &dbmdx_spi_pm,
 	},
 	.probe =    dbmd4_spi_probe,
 	.remove =   spi_common_remove,
-	.id_table = dbmd_4_6_spi_id,
+	.id_table = dbmd_4_8_spi_id,
 };
 
 #ifdef CONFIG_SND_SOC_DBMDX
-static int __init dbmd_4_6_modinit(void)
+static int __init dbmd_4_8_modinit(void)
 {
-	return spi_register_driver(&dbmd_4_6_spi_driver);
+	return spi_register_driver(&dbmd_4_8_spi_driver);
 }
-module_init(dbmd_4_6_modinit);
+module_init(dbmd_4_8_modinit);
 
-static void __exit dbmd_4_6_exit(void)
+static void __exit dbmd_4_8_exit(void)
 {
-	spi_unregister_driver(&dbmd_4_6_spi_driver);
+	spi_unregister_driver(&dbmd_4_8_spi_driver);
 }
-module_exit(dbmd_4_6_exit);
+module_exit(dbmd_4_8_exit);
 #else
 int dbmd4_spi_init_interface(void)
 {
-	spi_register_driver(&dbmd_4_6_spi_driver);
+	spi_register_driver(&dbmd_4_8_spi_driver);
 	return 0;
 }
 
 void  dbmd4_spi_deinit_interface(void)
 {
-	spi_unregister_driver(&dbmd_4_6_spi_driver);
+	spi_unregister_driver(&dbmd_4_8_spi_driver);
 }
 
 int (*dbmdx_init_interface)(void) = &dbmd4_spi_init_interface;
 void (*dbmdx_deinit_interface)(void) = &dbmd4_spi_deinit_interface;
 #endif
 
-MODULE_DESCRIPTION("DSPG DBMD4/DBMD6 spi interface driver");
+MODULE_DESCRIPTION("DSPG DBMD4/DBMD6/DBMD8 spi interface driver");
 MODULE_LICENSE("GPL");

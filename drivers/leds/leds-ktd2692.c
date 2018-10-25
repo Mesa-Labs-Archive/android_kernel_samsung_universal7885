@@ -342,7 +342,7 @@ int32_t ktd2692_led_mode_ctrl(int state)
 			if (ret) {
 				LED_ERROR("Failed to request ktd2692_led_mode_ctrl\n");
 			} else {
-				LED_INFO("KTD2692-TORCH ON E(%d)\n", state);
+				LED_INFO("KTD2692-TORCH ON E(%d) movie current [%d] \n", state, global_ktd2692data->movie_current_value);
 				global_ktd2692data->mode_status = KTD2692_ENABLE_MOVIE_MODE;
 				spin_lock_irqsave(&global_ktd2692data->int_lock, flags);
 				ktd2692_write_data(global_ktd2692data->LVP_Voltage|

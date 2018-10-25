@@ -26,6 +26,9 @@
 #include "mmc_ops.h"
 #include "sd_ops.h"
 
+#include <linux/io.h>
+#include "../host/cmdq_hci.h"
+
 static const unsigned int tran_exp[] = {
 	10000,		100000,		1000000,	10000000,
 	0,		0,		0,		0
@@ -2183,6 +2186,25 @@ static int mmc_suspend(struct mmc_host *host)
 {
 	int err;
 
+	if (host->pm_caps & MMC_PM_SKIP_MMC_RESUME_INIT) {
+		if (host->card->cmdq_init) {
+			struct cmdq_host *cq_host = mmc_cmdq_private(host);
+			BUG_ON(host->cmdq_ctx.active_reqs);
+			/* cmdq halt */
+			err = mmc_cmdq_halt_on_empty_queue(host);
+			if (err) {
+				pr_err("%s: halt: failed: %d\n", mmc_hostname(host), err);
+				return err;
+			}
+			host->cmdq_ops->disable(host, true);
+
+			if (cq_host->ops->resume_skip)
+				cq_host->ops->resume_skip(host);
+		}
+		pr_err("%s: eMMC Suspend\n", mmc_hostname(host));
+		return 0;
+	}
+
 	err = _mmc_suspend(host, true);
 	if (!err) {
 		pm_runtime_disable(&host->card->dev);
@@ -2250,6 +2272,39 @@ static int mmc_shutdown(struct mmc_host *host)
 static int mmc_resume(struct mmc_host *host)
 {
 	int err = 0;
+	u32 status;
+
+	if (host->pm_caps & MMC_PM_SKIP_MMC_RESUME_INIT) {
+		mmc_claim_host(host);
+
+		/* Check status */
+		err = mmc_send_status(host->card, &status);
+		mmc_release_host(host);
+
+		if (!err && (R1_CURRENT_STATE(status) == R1_STATE_TRAN)) {
+			if (host->card->cmdq_init) {
+				struct cmdq_host *cq_host = mmc_cmdq_private(host);
+
+				/* Unhalt */
+				err = mmc_cmdq_halt(host, false);
+				if (err)
+					pr_err("%s: un-halt: failed: %d\n", __func__, err);
+
+				/* Enable CMDQ engine */
+				host->cmdq_ops->enable(host);
+
+				/* Host DMA reset */
+				if (cq_host->ops->reset)
+					cq_host->ops->reset(host);
+			}
+			pr_err("%s: eMMC Resume with init skip\n", mmc_hostname(host));
+			return 0;
+		}
+		mmc_power_off(host);
+		mmc_card_set_suspended(host->card);
+		err = mmc_resume(host);
+		return err;
+	}
 
 	if (!(host->caps & MMC_CAP_RUNTIME_RESUME)) {
 		err = _mmc_resume(host);

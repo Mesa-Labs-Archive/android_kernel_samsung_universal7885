@@ -20,6 +20,20 @@
 
 #define MAX_SENSOR_SHARED_RSC	10
 
+enum sensor_shared_rsc_pin_t{
+	SHARED_PIN0 = 0,
+	SHARED_PIN1,
+	SHARED_PIN2,
+	SHARED_PIN3,
+	SHARED_PIN4,
+	SHARED_PIN5,
+	SHARED_PIN6,
+	SHARED_PIN7,
+	SHARED_PIN8,
+	SHARED_PIN9,
+	SHARED_PIN_MAX,
+};
+
 enum shared_rsc_type_t {
 	SRT_ACQUIRE = 1,
 	SRT_RELEASE,

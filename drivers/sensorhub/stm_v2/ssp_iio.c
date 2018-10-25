@@ -149,8 +149,8 @@ void report_sensor_data(struct ssp_data *data, int type,
 	} else if (type == SENSOR_TYPE_PROXIMITY_RAW) {
 		report_prox_raw_data(data, type, event);
 		return;
-
 	} else if (type == SENSOR_TYPE_LIGHT) {
+#ifdef CONFIG_SENSORS_SSP_LIGHT
 		event->a_gain &= 0x03;
 		if (data->light_log_cnt < 3) {
 			ssp_info("Light Sensor : lux=%d r=%d g=%d b=%d c=%d atime=%d again=%d",
@@ -161,8 +161,10 @@ void report_sensor_data(struct ssp_data *data, int type,
 			         data->buf[SENSOR_TYPE_LIGHT].a_gain);
 			data->light_log_cnt++;
 		}
+#endif
 #ifdef SENSOR_TYPE_LIGHT_CCT
 	} else if (type == SENSOR_TYPE_LIGHT_CCT) {
+#ifdef CONFIG_SENSORS_SSP_LIGHT
 		event->a_gain &= 0x03;
 		if (data->light_log_cnt < 3) {
 			ssp_info("Light cct Sensor : lux=%d r=%d g=%d b=%d c=%d atime=%d again=%d",
@@ -173,6 +175,7 @@ void report_sensor_data(struct ssp_data *data, int type,
 			         data->buf[SENSOR_TYPE_LIGHT_CCT].a_gain);
 			data->light_log_cnt++;
 		}
+#endif
 #endif
 	} else if (type == SENSOR_TYPE_STEP_COUNTER) {
 		data->buf[type].step_total += event->step_diff;

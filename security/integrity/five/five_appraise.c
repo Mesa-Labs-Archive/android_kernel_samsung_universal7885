@@ -174,7 +174,6 @@ static int five_fix_xattr(struct task_struct *task,
 			if (!rc) {
 				rc = update_label(iint,
 						file_label, file_label_len);
-				iint->version = file_inode(file)->i_version;
 			}
 		}
 	}
@@ -237,6 +236,14 @@ static bool bad_fs(struct inode *inode)
 	return false;
 }
 
+static bool readonly_sb(struct inode *inode)
+{
+	if (inode->i_sb->s_flags & MS_RDONLY)
+		return true;
+
+	return false;
+}
+
 /*
  * five_appraise_measurement - appraise file measurement
  *
@@ -245,7 +252,6 @@ static bool bad_fs(struct inode *inode)
 int five_appraise_measurement(struct task_struct *task, int func,
 			      struct integrity_iint_cache *iint,
 			      struct file *file,
-			      const unsigned char *filename,
 			      struct five_cert *cert)
 {
 	static const char op[] = "appraise_data";
@@ -260,7 +266,7 @@ int five_appraise_measurement(struct task_struct *task, int func,
 	size_t hash_len = sizeof(hash), hash_file_len;
 	struct five_cert_header *header;
 
-	BUG_ON(!task || !iint || !file || !filename);
+	BUG_ON(!task || !iint || !file);
 
 	prev_integrity = task_integrity_read(task->integrity);
 	dentry = file->f_path.dentry;
@@ -583,6 +589,11 @@ int five_fcntl_sign(struct file *file, struct integrity_label __user *label)
 		return -EINVAL;
 	}
 
+	if (readonly_sb(inode)) {
+		pr_err("FIVE: Can't sign a file on RO FS\n");
+		return -EROFS;
+	}
+
 	if (tint == INTEGRITY_PRELOAD_ALLOW_SIGN
 		|| tint == INTEGRITY_MIXED_ALLOW_SIGN
 		|| tint == INTEGRITY_DMVERITY_ALLOW_SIGN) {
@@ -626,11 +637,12 @@ int five_fcntl_sign(struct file *file, struct integrity_label __user *label)
 		return -ENOMEM;
 	}
 
-	if (file->f_op && file->f_op->flush)
+	if (file->f_op && file->f_op->flush) {
 		if (file->f_op->flush(file, current->files)) {
 			kfree(l);
 			return -EOPNOTSUPP;
 		}
+	}
 
 	inode_lock(inode);
 	rc = five_update_xattr(current, iint, file, l);

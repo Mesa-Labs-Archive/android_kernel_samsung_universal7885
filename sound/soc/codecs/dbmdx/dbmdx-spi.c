@@ -142,10 +142,6 @@ ssize_t send_spi_cmd_vqe(struct dbmdx_private *p,
 	do {
 		ret = spi_read(spi_p->client, recv, 4);
 		if (ret < 0) {
-#if 0
-			dev_dbg(spi_p->dev, "%s: read failed; retries:%d\n",
-				__func__, retries);
-#endif
 			/* Wait before polling again */
 			usleep_range(10000, 11000);
 
@@ -190,6 +186,9 @@ ssize_t send_spi_cmd_va(struct dbmdx_private *p, u32 command,
 	int ret;
 
 	dev_dbg(spi_p->dev, "%s: Send 0x%02x\n", __func__, command);
+
+	p->wakeup_toggle(p);
+
 	if (response) {
 
 		ret = snprintf(tmp, 3, "%02x", (command >> 16) & 0xff);
@@ -210,8 +209,9 @@ ssize_t send_spi_cmd_va(struct dbmdx_private *p, u32 command,
 
 		ret = 0;
 
-		/* the sleep command cannot be acked before the device
-		 * goes to sleep */
+		/* The sleep command cannot be acked before the device
+		 * goes to sleep
+		 */
 		ret = read_spi_data(p, recv, 5);
 		if (ret < 0) {
 			dev_err(spi_p->dev, "%s:spi_read failed =%d\n",
@@ -282,6 +282,9 @@ ssize_t send_spi_cmd_va_padded(struct dbmdx_private *p,
 	u32 padded_cmd_r_size = 5;
 
 	dev_dbg(spi_p->dev, "%s: Send 0x%02x\n", __func__, command);
+
+	p->wakeup_toggle(p);
+
 	if (response) {
 
 		ret = snprintf(tmp, 3, "%02x", (command >> 16) & 0xff);
@@ -302,7 +305,8 @@ ssize_t send_spi_cmd_va_padded(struct dbmdx_private *p,
 		ret = 0;
 
 		/* the sleep command cannot be acked before the device
-		 * goes to sleep */
+		 * goes to sleep
+		 */
 		ret = read_spi_data(p, recv, padded_cmd_r_size);
 		if (ret < 0) {
 			dev_err(spi_p->dev, "%s:spi_read failed =%d\n",
@@ -455,8 +459,7 @@ ssize_t send_spi_data(struct dbmdx_private *p, const void *buf,
 
 		ret = write_spi_data(p, send, cur_send_size);
 		if (ret < 0) {
-			dev_err(spi_p->dev,
-				"%s: send_spi_data failed ret=%d\n",
+			dev_err(spi_p->dev, "%s: Failed ret=%d\n",
 				__func__, ret);
 			break;
 		}
@@ -475,7 +478,7 @@ int send_spi_cmd_boot(struct dbmdx_private *p, u32 command)
 	int ret = 0;
 
 
-	dev_dbg(spi_p->dev, "%s: send_spi_cmd_boot = %x\n", __func__, command);
+	dev_dbg(spi_p->dev, "%s: command = %x\n", __func__, command);
 	send[0] = 0;
 	send[1] = 0;
 	send[2] = (command >> 16) & 0xff;
@@ -483,13 +486,13 @@ int send_spi_cmd_boot(struct dbmdx_private *p, u32 command)
 
 	ret = send_spi_data(p, send, 4);
 	if (ret < 0) {
-		dev_err(spi_p->dev, "%s: send_spi_cmd_boot ret = %d\n",
-			__func__, ret);
+		dev_err(spi_p->dev, "%s: ret = %d\n", __func__, ret);
 		return ret;
 	}
 
 	/* A host command received will blocked until the current audio frame
-	   processing is finished, which can take up to 10 ms */
+	 *  processing is finished, which can take up to 10 ms
+	 */
 	usleep_range(DBMDX_USLEEP_SPI_VA_CMD_AFTER_BOOT,
 		DBMDX_USLEEP_SPI_VA_CMD_AFTER_BOOT + 1000);
 
@@ -614,7 +617,7 @@ int spi_verify_chip_id(struct dbmdx_private *p)
 		(recv_chip_rev_id_low != chip_rev_id_low_b))) {
 
 		dev_err(spi_p->dev,
-			"%s: Wrong chip ID: Recieved 0x%2x%2x Expected: 0x%2x%2x | 0x%2x%2x\n",
+			"%s: Wrong chip ID: Received 0x%2x%2x Expected: 0x%2x%2x | 0x%2x%2x\n",
 				__func__,
 				recv_chip_rev_id_high,
 				recv_chip_rev_id_low,
@@ -728,7 +731,7 @@ static void spi_transport_enable(struct dbmdx_private *p, bool enable)
 	if (enable) {
 
 #ifdef CONFIG_PM_WAKELOCKS
-		wake_lock(&spi_p->ps_nosuspend_wl);
+		__pm_stay_awake(&spi_p->ps_nosuspend_wl);
 #endif
 		ret = wait_event_interruptible(dbmdx_wq,
 			spi_p->interface_enabled);
@@ -747,7 +750,7 @@ static void spi_transport_enable(struct dbmdx_private *p, bool enable)
 		msleep(DBMDX_MSLEEP_SPI_WAKEUP);
 	} else {
 #ifdef CONFIG_PM_WAKELOCKS
-		wake_unlock(&spi_p->ps_nosuspend_wl);
+		__pm_relax(&spi_p->ps_nosuspend_wl);
 #endif
 		p->wakeup_release(p);
 	}
@@ -885,7 +888,8 @@ static int spi_read_audio_data(struct dbmdx_private *p,
 	ret = samples;
 
 	/* FW performes SPI reset after each chunk transaction
-	  Thus delay is required */
+	 * Thus delay is required
+	 */
 	usleep_range(DBMDX_USLEEP_SPI_AFTER_CHUNK_READ,
 		DBMDX_USLEEP_SPI_AFTER_CHUNK_READ + 100);
 out:
@@ -1119,24 +1123,15 @@ int spi_common_probe(struct spi_device *client)
 	p->pdata = pdata;
 
 	pdata->send = kmalloc(MAX_SPI_WRITE_CHUNK_SIZE, GFP_KERNEL | GFP_DMA);
-	if (!pdata->send) {
-		dev_err(p->dev,
-			"%s: Cannot allocate memory spi send buffer\n",
-			__func__);
+	if (!pdata->send)
 		goto out_err_mem_free;
-	}
 
 	pdata->recv = kmalloc(MAX_SPI_READ_CHUNK_SIZE, GFP_KERNEL | GFP_DMA);
-	if (!pdata->recv) {
-		dev_err(p->dev,
-			"%s: Cannot allocate memory spi recv buffer\n",
-			__func__);
+	if (!pdata->recv)
 		goto out_err_mem_free1;
-	}
 
 #ifdef CONFIG_PM_WAKELOCKS
-	wake_lock_init(&p->ps_nosuspend_wl, WAKE_LOCK_SUSPEND,
-		"dbmdx_nosuspend_wakelock_spi");
+	wakeup_source_init(&p->ps_nosuspend_wl, "dbmdx_nosuspend_wakelock_spi");
 #endif
 
 	/* fill in chip interface functions */
@@ -1189,7 +1184,7 @@ int spi_common_remove(struct spi_device *client)
 	struct dbmdx_spi_private *p = (struct dbmdx_spi_private *)ci->pdata;
 
 #ifdef CONFIG_PM_WAKELOCKS
-	wake_lock_destroy(&p->ps_nosuspend_wl);
+	wakeup_source_trash(&p->ps_nosuspend_wl);
 #endif
 	kfree(p->pdata->send);
 	kfree(p->pdata->recv);

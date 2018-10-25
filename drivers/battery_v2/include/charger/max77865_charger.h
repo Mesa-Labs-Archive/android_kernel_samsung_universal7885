@@ -251,6 +251,9 @@ struct max77865_charger_data {
 	int uvlo_attach_flag;
 	int uvlo_attach_cable_type;
 
+	int		irq_bat;
+	int		irq_tm;
+
 	int		irq_bypass;
 	int		irq_batp;
 
@@ -285,6 +288,8 @@ struct max77865_charger_data {
 	bool enable_sysovlo_irq;
 	int irq_sysovlo;
 	struct wake_lock sysovlo_wake_lock;
+
+	u8 vsys_ocp;
 
 	bool is_mdock;
 	bool otg_on;

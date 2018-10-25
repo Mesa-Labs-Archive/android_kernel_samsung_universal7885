@@ -92,6 +92,7 @@ static void brush_enable(void *device_data);
 static void set_touchable_area(void *device_data);
 static void set_log_level(void *device_data);
 static void debug(void *device_data);
+static void check_connection(void *device_data);
 static void set_factory_level(void *device_data);
 static void not_support_cmd(void *device_data);
 
@@ -182,6 +183,7 @@ static struct sec_cmd sec_cmds[] = {
 	{SEC_CMD("set_touchable_area", set_touchable_area),},
 	{SEC_CMD("set_log_level", set_log_level),},
 	{SEC_CMD("debug", debug),},
+	{SEC_CMD("check_connection", check_connection),},
 	{SEC_CMD("set_factory_level", set_factory_level),},
 	{SEC_CMD("not_support_cmd", not_support_cmd),},
 };
@@ -391,7 +393,8 @@ static ssize_t read_vendor_show(struct device *dev,
 	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
 	unsigned char buffer[10] = { 0 };
 
-	snprintf(buffer, 5, ts->plat_data->firmware_name + 8);
+	if (ts->plat_data->firmware_name != NULL)
+		snprintf(buffer, 5, ts->plat_data->firmware_name + 8);
 
 	return snprintf(buf, SEC_CMD_BUF_SIZE, "LSI_%s", buffer);
 }
@@ -5870,6 +5873,125 @@ static void debug(void *device_data)
 	snprintf(buff, sizeof(buff), "%s", "OK");
 	sec->cmd_state = SEC_CMD_STATUS_OK;
 	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+}
+
+static void check_connection(void *device_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
+	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
+	char buff[SEC_CMD_STR_LEN] = {0};
+	int rc;
+	int size = SEC_TS_SELFTEST_REPORT_SIZE + ts->tx_count * ts->rx_count * 2;
+	u8 *rBuff = NULL;
+	int ii;
+	u8 data[8] = { 0 };
+	int result = 0;
+
+	sec_cmd_set_default_result(sec);
+
+	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
+		input_err(true, &ts->client->dev, "%s: Touch is stopped!\n", __func__);
+		snprintf(buff, sizeof(buff), "%s", "TSP turned off");
+		sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+		sec->cmd_state = SEC_CMD_STATUS_NOT_APPLICABLE;
+		return;
+	}
+
+	rBuff = kzalloc(size, GFP_KERNEL);
+	if (!rBuff) {
+		snprintf(buff, sizeof(buff), "%s", "NG");
+		sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+		sec->cmd_state = SEC_CMD_STATUS_FAIL;
+		return;
+	}
+
+	memset(rBuff, 0x00, size);
+	memset(data, 0x00, 8);
+
+	disable_irq(ts->client->irq);
+
+	sec_ts_locked_release_all_finger(ts);
+
+	input_info(true, &ts->client->dev, "%s: set power mode to test mode\n", __func__);
+	data[0] = 0x02;
+	rc = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SET_POWER_MODE, data, 1);
+	if (rc < 0) {
+		input_err(true, &ts->client->dev, "%s: set test mode failed\n", __func__);
+		goto err_conn_check;
+	}
+
+	input_info(true, &ts->client->dev, "%s: clear event stack\n", __func__);
+	rc = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_CLEAR_EVENT_STACK, NULL, 0);
+	if (rc < 0) {
+		input_err(true, &ts->client->dev, "%s: clear event stack failed\n", __func__);
+		goto err_conn_check;
+	}
+
+	data[0] = 0xB7;
+	input_info(true, &ts->client->dev, "%s: self test start\n", __func__);
+	rc = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SELFTEST, data, 1);
+	if (rc < 0) {
+		input_err(true, &ts->client->dev, "%s: Send selftest cmd failed!\n", __func__);
+		goto err_conn_check;
+	}
+
+	sec_ts_delay(700);
+
+	rc = sec_ts_wait_for_ready(ts, SEC_TS_VENDOR_ACK_SELF_TEST_DONE);
+	if (rc < 0) {
+		input_err(true, &ts->client->dev, "%s: Selftest execution time out!\n", __func__);
+		goto err_conn_check;
+	}
+
+	input_info(true, &ts->client->dev, "%s: self test done\n", __func__);
+	rc = ts->sec_ts_i2c_read(ts, SEC_TS_READ_SELFTEST_RESULT, rBuff, size);
+	if (rc < 0) {
+		input_err(true, &ts->client->dev, "%s: Selftest execution time out!\n", __func__);
+		goto err_conn_check;
+	}
+
+	data[0] = TO_TOUCH_MODE;
+	rc = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SET_POWER_MODE, data, 1);
+	if (rc < 0) {
+		input_err(true, &ts->client->dev, "%s: mode changed failed!\n", __func__);
+		goto err_conn_check;
+	}
+
+	input_info(true, &ts->client->dev, "%s: %02X, %02X, %02X, %02X\n",
+			__func__, rBuff[16], rBuff[17], rBuff[18], rBuff[19]);
+
+	memcpy(data, &rBuff[48], 8);
+
+	for (ii = 0; ii < 8; ii++) {
+		input_info(true, &ts->client->dev, "%s: [%d] %02X\n", __func__, ii, data[ii]);
+
+		result += data[ii];
+	}
+
+	if (result != 0)
+		goto err_conn_check;
+
+	enable_irq(ts->client->irq);
+
+	snprintf(buff, sizeof(buff), "%s", "OK");
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+	sec->cmd_state = SEC_CMD_STATUS_OK;
+
+	kfree(rBuff);
+	input_info(true, &ts->client->dev, "%s: %s\n", __func__, buff);
+	return;
+
+err_conn_check:
+	data[0] = TO_TOUCH_MODE;
+	ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SET_POWER_MODE, data, 1);
+	enable_irq(ts->client->irq);
+
+	snprintf(buff, sizeof(buff), "%s", "NG");
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+	sec->cmd_state = SEC_CMD_STATUS_FAIL;
+
+	kfree(rBuff);
+	input_info(true, &ts->client->dev, "%s: %s\n", __func__, buff);
 }
 
 static void not_support_cmd(void *device_data)

@@ -72,6 +72,8 @@ struct decon_lcd {
 	unsigned int data_lane;
 	unsigned int cmd_underrun_lp_ref;
 	unsigned int vt_compensation;
+
+	unsigned int clklane_onoff;
 };
 
 struct decon_dsc {
