@@ -2729,9 +2729,9 @@ static int proc_integrity_label_read(struct seq_file *m,
 {
 	struct integrity_label *l;
 
-	spin_lock(&task->integrity->lock);
+	spin_lock(&task->integrity->value_lock);
 	l = task->integrity->label;
-	spin_unlock(&task->integrity->lock);
+	spin_unlock(&task->integrity->value_lock);
 
 	if (l) {
 		size_t remaining_len;

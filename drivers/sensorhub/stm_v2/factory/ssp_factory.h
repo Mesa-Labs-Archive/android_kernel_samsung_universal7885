@@ -23,9 +23,6 @@
 #define GYROSCOPE_DPS500                500
 #define GYROSCOPE_DPS2000               2000
 
-/* Gesture Sensor Current */
-#define DEFUALT_IR_CURRENT              100 //0xF0
-
 /* Proxy threshold */
 #define DEFUALT_HIGH_THRESHOLD          50
 #define DEFUALT_LOW_THRESHOLD           35
@@ -37,6 +34,7 @@
 
 struct ssp_data;
 
+#ifdef CONFIG_SENSORS_SSP_ACCELOMETER
 /* accleometer sensor */
 struct accelometer_sensor_operations {
 	ssize_t (*get_accel_name)(char *);
@@ -51,6 +49,10 @@ struct accelometer_sensor_operations {
 };
 
 void initialize_accel_factorytest(struct ssp_data *);
+void remove_accel_factorytest(struct ssp_data *);
+int accel_open_calibration(struct ssp_data *);
+int set_accel_cal(struct ssp_data *);
+
 #if defined(CONFIG_SENSORS_SSP_ACCELOMETER_LSM6DSL)
 void accelometer_lsm6dsl_function_pointer_initialize(struct ssp_data *);
 #elif defined(CONFIG_SENSORS_SSP_ACCELOMETER_K6DS3TR)
@@ -60,10 +62,16 @@ void accelometer_mpu6500_function_pointer_initialize(struct ssp_data *);
 #else
 void accelometer_bmi168_function_pointer_initialize(struct ssp_data *);
 #endif
+#endif
 
-
+#ifdef CONFIG_SENSORS_SSP_GYROSCOPE
 /* gyroscope sensor */
 void initialize_gyro_factorytest(struct ssp_data *);
+void remove_gyro_factorytest(struct ssp_data *);
+int gyro_open_calibration(struct ssp_data *data);
+int set_gyro_cal(struct ssp_data *data);
+int save_gyro_cal_data(struct ssp_data *data, s16 *cal_data);
+
 struct gyroscope_sensor_operations {
 	ssize_t (*get_gyro_name)(char *);
 	ssize_t (*get_gyro_vendor)(char *);
@@ -84,10 +92,14 @@ void gyroscope_mpu6500_function_pointer_initialize(struct ssp_data *);
 #else
 void gyroscope_bmi168_function_pointer_initialize(struct ssp_data *);
 #endif
+#endif
 
-
+#ifdef CONFIG_SENSORS_SSP_MAGNETIC
 /* magnetic sensor */
 void initialize_magnetic_factorytest(struct ssp_data *);
+void remove_magnetic_factorytest(struct ssp_data *);
+int initialize_magnetic_sensor(struct ssp_data *);
+
 struct magnetic_sensor_operations {
 	ssize_t (*get_magnetic_name)(char *);
 	ssize_t (*get_magnetic_vendor)(char *);
@@ -115,7 +127,9 @@ void magnetic_lsm303ah_function_pointer_initialize(struct ssp_data *);
 #elif defined(CONFIG_SENSORS_SSP_MAGNETIC_YAS539)
 void magnetic_yas539_function_pointer_initialize(struct ssp_data *);
 #endif
+#endif
 
+#ifdef CONFIG_SENSORS_SSP_PROXIMITY
 /* proximity sensor */
 struct proximity_sensor_operations {
 	ssize_t (*get_proximity_name)(char *);
@@ -146,6 +160,10 @@ struct proximity_sensor_operations {
 };
 
 void initialize_prox_factorytest(struct ssp_data *);
+void remove_prox_factorytest(struct ssp_data *);
+int proximity_open_calibration(struct ssp_data *);
+void get_proximity_threshold(struct ssp_data *);
+
 #if defined(CONFIG_SENSORS_SSP_PROXIMITY_TMD3700)
 void proximity_tmd3700_function_pointer_initialize(struct ssp_data *);
 #elif defined(CONFIG_SENSORS_SSP_PROXIMITY_AUTO_CAL_TMD3725)
@@ -155,8 +173,9 @@ void proximity_tmd3725_function_pointer_initialize(struct ssp_data *);
 #else
 void proximity_tmg399x_function_pointer_initialize(struct ssp_data *);
 #endif
+#endif
 
-
+#ifdef CONFIG_SENSORS_SSP_LIGHT
 /* light sensor */
 struct light_sensor_operations {
 	ssize_t (*get_light_name)(char *);
@@ -167,6 +186,8 @@ struct light_sensor_operations {
 };
 
 void initialize_light_factorytest(struct ssp_data *);
+void remove_light_factorytest(struct ssp_data *);
+
 #if defined(CONFIG_SENSORS_SSP_LIGHT_TMD3700)
 void light_tmd3700_function_pointer_initialize(struct ssp_data *);
 #elif defined(CONFIG_SENSORS_SSP_LIGHT_TMD3725)
@@ -174,10 +195,14 @@ void light_tmd3725_function_pointer_initialize(struct ssp_data *);
 #else
 void light_tmg399x_function_pointer_initialize(struct ssp_data *);
 #endif
+#endif
 
-
+#ifdef CONFIG_SENSORS_SSP_BAROMETER
 /* barometer sensor */
 void initialize_barometer_factorytest(struct ssp_data *);
+void remove_barometer_factorytest(struct ssp_data *);
+int pressure_open_calibration(struct ssp_data *);
+
 struct barometer_sensor_operations {
 	ssize_t (*get_barometer_name)(char *);
 	ssize_t (*get_barometer_vendor)(char *);
@@ -195,30 +220,11 @@ void barometer_lps25h_function_pointer_initialize(struct ssp_data *);
 #else
 void barometer_bmp280_function_pointer_initialize(struct ssp_data *);
 #endif
+#endif
 
-void initialize_gesture_factorytest(struct ssp_data *data);
-void initialize_irled_factorytest(struct ssp_data *data);
-void remove_accel_factorytest(struct ssp_data *);
-void remove_gyro_factorytest(struct ssp_data *);
-void remove_prox_factorytest(struct ssp_data *);
-void remove_light_factorytest(struct ssp_data *);
-void remove_barometer_factorytest(struct ssp_data *);
-void remove_magnetic_factorytest(struct ssp_data *);
-void remove_gesture_factorytest(struct ssp_data *data);
-void remove_irled_factorytest(struct ssp_data *data);
 #ifdef CONFIG_SENSORS_SSP_MOBEAM
 void initialize_mobeam(struct ssp_data *data);
 void remove_mobeam(struct ssp_data *data);
 #endif
-
-int accel_open_calibration(struct ssp_data *);
-int pressure_open_calibration(struct ssp_data *);
-int proximity_open_calibration(struct ssp_data *);
-int set_accel_cal(struct ssp_data *);
-int initialize_magnetic_sensor(struct ssp_data *);
-void get_proximity_threshold(struct ssp_data *);
-int gyro_open_calibration(struct ssp_data *data);
-int set_gyro_cal(struct ssp_data *data);
-int save_gyro_cal_data(struct ssp_data *data, s16 *cal_data);
 
 #endif

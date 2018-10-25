@@ -79,6 +79,7 @@ int set_sensor_position(struct ssp_data *data)
 	return 0;
 }
 
+#ifdef CONFIG_SENSORS_SSP_PROXIMITY
 void set_proximity_threshold(struct ssp_data *data)
 {
 	int ret = 0;
@@ -107,6 +108,7 @@ void set_proximity_threshold(struct ssp_data *data)
 	         data->uProxLoThresh,
 	         data->uProxHiThresh_detect, data->uProxLoThresh_detect);
 }
+#endif
 
 void set_proximity_barcode_enable(struct ssp_data *data, bool bEnable)
 {
@@ -115,6 +117,7 @@ void set_proximity_barcode_enable(struct ssp_data *data, bool bEnable)
 	ssp_info("Proximity Barcode En : %u", bEnable);
 }
 
+#ifdef CONFIG_SENSORS_SSP_LIGHT
 void set_light_coef(struct ssp_data *data)
 {
 	int ret = 0;
@@ -140,7 +143,7 @@ void set_light_coef(struct ssp_data *data)
 	        data->light_coef[3], data->light_coef[4], data->light_coef[5],
 	        data->light_coef[6]);
 }
-
+#endif
 
 uint64_t get_sensor_scanning_info(struct ssp_data *data)
 {
@@ -328,7 +331,6 @@ int parse_dataframe(struct ssp_data *data, char *dataframe, int frame_len)
 
 	int type, index;
 	u16 length = 0;
-	s16 caldata[3] = {0, };
 	bool parsing_error = false;
 
 	if (data->is_ssp_shutdown) {
@@ -408,15 +410,20 @@ int parse_dataframe(struct ssp_data *data, char *dataframe, int frame_len)
 				ssp_infof("skip reset msg");
 			}
 			break;
+#ifdef CONFIG_SENSORS_SSP_GYROSCOPE
 		case MSG2AP_INST_GYRO_CAL:
-			ssp_infof("Gyro caldata received from MCU\n");
-			memcpy(caldata, dataframe + index, sizeof(caldata));
+			{
+				s16 caldata[3] = {0, };
+				ssp_infof("Gyro caldata received from MCU\n");
+				memcpy(caldata, dataframe + index, sizeof(caldata));
 
-			wake_lock(&data->ssp_wake_lock);
-			save_gyro_cal_data(data, caldata);
-			wake_unlock(&data->ssp_wake_lock);
-			index += sizeof(caldata);
+				wake_lock(&data->ssp_wake_lock);
+				save_gyro_cal_data(data, caldata);
+				wake_unlock(&data->ssp_wake_lock);
+				index += sizeof(caldata);
+			}
 			break;
+#endif
 		case MSG2AP_INST_DUMP_DATA:
 			debug_crash_dump(data, dataframe, frame_len);
 			index += 1025;

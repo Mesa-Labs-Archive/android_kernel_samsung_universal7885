@@ -557,6 +557,18 @@ static int fimc_is_hw_vra_shot(struct fimc_is_hw_ip *hw_ip, struct fimc_is_frame
 	 * check & update size from region */
 	lindex = frame->shot->ctl.vendor_entry.lowIndexParam;
 	hindex = frame->shot->ctl.vendor_entry.highIndexParam;
+#ifdef ENABLE_HYBRID_FD
+	if (frame->shot_ext) {
+		lib_vra->post_detection_enable[instance] = frame->shot_ext->hfd.hfd_enable;
+		ret = fimc_is_lib_vra_set_post_detect_output(lib_vra,
+					lib_vra->post_detection_enable[instance], instance);
+		if (ret) {
+			mserr_hw("lib_vra_set_post_detect_output_enable is fail (%d)",
+					instance, hw_ip, ret);
+			return ret;
+		}
+	}
+#endif
 
 #if !defined(VRA_DMA_TEST_BY_IMAGE)
 	ret = fimc_is_lib_vra_set_orientation(lib_vra,
@@ -660,6 +672,7 @@ static int fimc_is_hw_vra_set_param(struct fimc_is_hw_ip *hw_ip,
 	hw_vra  = (struct fimc_is_hw_vra *)hw_ip->priv_info;
 	lib_vra = &hw_vra->lib_vra;
 
+#ifndef ENABLE_VRA_CHANGE_SETFILE_PARSING
 	if (!test_bit(VRA_INST_APPLY_TUNE_SET, &lib_vra->inst_state[instance])) {
 		ret = fimc_is_lib_vra_apply_tune(lib_vra, NULL, instance);
 		if (ret) {
@@ -667,6 +680,7 @@ static int fimc_is_hw_vra_set_param(struct fimc_is_hw_ip *hw_ip,
 			return ret;
 		}
 	}
+#endif
 
 	msdbg_hw(2, "set_param \n", instance, hw_ip);
 	ret = fimc_is_hw_vra_update_param(hw_ip, param,
@@ -748,6 +762,122 @@ static int fimc_is_hw_vra_frame_ndone(struct fimc_is_hw_ip *hw_ip,
 	return ret;
 }
 
+#ifdef ENABLE_VRA_CHANGE_SETFILE_PARSING
+static int fimc_is_hw_vra_load_setfile(struct fimc_is_hw_ip *hw_ip, u32 instance, ulong hw_map)
+{
+	struct fimc_is_hw_vra *hw_vra = NULL;
+	struct fimc_is_hw_ip_setfile *setfile;
+	enum exynos_sensor_position sensor_position;
+	ulong addr;
+	u32 size, index;
+	int flag = 0, ret = 0;
+
+	BUG_ON(!hw_ip);
+
+	if (!test_bit_variables(hw_ip->id, &hw_map)) {
+		msdbg_hw(2, "%s: hw_map(0x%lx)\n", instance, hw_ip, __func__, hw_map);
+		return 0;
+	}
+
+	if (!test_bit(HW_INIT, &hw_ip->state)) {
+		mserr_hw("not initialized!!", instance, hw_ip);
+		return -ESRCH;
+	}
+
+	if (!unlikely(hw_ip->priv_info)) {
+		mserr_hw("priv_info is NULL", instance, hw_ip);
+		return -EINVAL;
+	}
+	hw_vra = (struct fimc_is_hw_vra *)hw_ip->priv_info;
+	sensor_position = hw_ip->hardware->sensor_position[instance];
+	setfile = &hw_ip->setfile[sensor_position];
+
+	switch (setfile->version) {
+	case SETFILE_V2:
+		flag = false;
+		break;
+	case SETFILE_V3:
+		flag = true;
+		break;
+	default:
+		mserr_hw("invalid version (%d)", instance, hw_ip,
+				 setfile->version);
+		return -EINVAL;
+	}
+
+	for (index = 0; index < setfile->using_count; index++) {
+		addr = setfile->table[index].addr;
+		size = setfile->table[index].size;
+		ret = fimc_is_lib_vra_copy_tune_set(&hw_vra->lib_vra,
+			addr, size, index, flag, instance);
+
+		set_bit(index, &hw_vra->lib_vra.tune_count);
+	}
+
+	set_bit(HW_TUNESET, &hw_ip->state);
+
+	return 0;
+}
+
+static int fimc_is_hw_vra_apply_setfile(struct fimc_is_hw_ip *hw_ip, u32 scenario,
+	u32 instance, ulong hw_map)
+{
+	struct fimc_is_hw_ip_setfile *setfile;
+	struct fimc_is_hw_vra *hw_vra;
+	struct fimc_is_lib_vra *lib_vra;
+	enum exynos_sensor_position sensor_position;
+	u32 setfile_index;
+	int ret = 0;
+
+	BUG_ON(!hw_ip);
+
+	if (!test_bit_variables(hw_ip->id, &hw_map)) {
+		msdbg_hw(2, "%s: hw_map(0x%lx)\n", instance, hw_ip, __func__, hw_map);
+		return 0;
+	}
+
+	if (!test_bit(HW_INIT, &hw_ip->state)) {
+		mserr_hw("not initialized!!", instance, hw_ip);
+		return -ESRCH;
+	}
+
+	hw_vra  = (struct fimc_is_hw_vra *)hw_ip->priv_info;
+	if (unlikely(!hw_vra)) {
+		mserr_hw("priv_info is NULL", instance, hw_ip);
+		return -EINVAL;
+	}
+
+	sensor_position = hw_ip->hardware->sensor_position[instance];
+	setfile    = &hw_ip->setfile[sensor_position];
+	lib_vra = &hw_vra->lib_vra;
+	clear_bit(VRA_INST_APPLY_TUNE_SET, &lib_vra->inst_state[instance]);
+
+	setfile_index = setfile->index[scenario];
+	if (setfile_index >= setfile->using_count) {
+		mserr_hw("setfile index is out-of-range, [%d:%d]",
+				instance, hw_ip, scenario, setfile_index);
+		return -EINVAL;
+	}
+
+	msinfo_hw("setfile (%d) scenario (%d)\n", instance, hw_ip,
+		setfile_index, scenario);
+
+	ret = fimc_is_lib_vra_apply_tune_set(&hw_vra->lib_vra, setfile_index, instance);
+	if (ret) {
+		mserr_hw("apply_tune is fail (%d)", instance, hw_ip, ret);
+		return ret;
+	}
+
+	lib_vra->max_face_num = MAX_FACE_COUNT;
+	if (sensor_position == SENSOR_POSITION_FRONT)
+		lib_vra->orientation[instance] = VRA_FRONT_ORIENTATION;
+	else
+		lib_vra->orientation[instance] = VRA_REAR_ORIENTATION;
+
+	return 0;
+}
+
+#else
 static int fimc_is_hw_vra_load_setfile(struct fimc_is_hw_ip *hw_ip, u32 instance, ulong hw_map)
 {
 	struct fimc_is_hw_vra *hw_vra = NULL;
@@ -915,6 +1045,7 @@ static int fimc_is_hw_vra_apply_setfile(struct fimc_is_hw_ip *hw_ip, u32 scenari
 
 	return 0;
 }
+#endif
 
 static int fimc_is_hw_vra_delete_setfile(struct fimc_is_hw_ip *hw_ip, u32 instance,
 		ulong hw_map)

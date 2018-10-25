@@ -1462,8 +1462,10 @@ static int fimc_is_sensor_probe(struct platform_device *pdev)
 	clear_bit(FIMC_IS_SUBDEV_START, &device->ssvc2.state);
 	clear_bit(FIMC_IS_SUBDEV_START, &device->ssvc3.state);
 
+#ifdef ENABLE_DTP
 	/* Setup dtp_timer check at probe */
 	setup_timer(&device->dtp_timer, fimc_is_sensor_dtp, (unsigned long)device);
+#endif
 
 	/* internal subdev probe if declared at DT */
 	if (test_bit(SUBDEV_SSVC1_INTERNAL_USE, &device->pdata->internal_state))

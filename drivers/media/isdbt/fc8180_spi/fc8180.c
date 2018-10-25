@@ -228,14 +228,19 @@ void isdbt_hw_init(void)
 			break;
 	}
 
-	pr_err("%s\n", __func__);
+	pr_err("%s mode:%d\n", __func__, driver_mode);
 
-
+	gpio_direction_output(isdbt_pdata->gpio_en, 0);
+	msleep(30);
 	gpio_direction_output(isdbt_pdata->gpio_en, 1);
 	pr_err("%s, gpio_en =%d\n", __func__, gpio_get_value(isdbt_pdata->gpio_en));
 
-	mdelay(30);
+	msleep(30);
 
+#ifdef BBM_SPI_IF
+	bbm_com_byte_write(hInit, BBM_DM_DATA, 0x00); /*stable spi*/
+#endif
+	msleep(30);
 	driver_mode = ISDBT_POWERON;
 
 }
@@ -251,8 +256,8 @@ void isdbt_hw_deinit(void)
 #endif
 	driver_mode = ISDBT_POWEROFF;
 	gpio_direction_output(isdbt_pdata->gpio_en, 0);
-	mdelay(5);
 	isdbt_regulator_onoff(ISDBT_LDO_OFF);
+	msleep(20);
 }
 
 int data_callback(ulong hDevice, u8 *data, int len)
@@ -303,7 +308,10 @@ static int isdbt_thread(void *hDevice)
 		if (driver_mode == ISDBT_POWERON) {
 			driver_mode = ISDBT_DATAREAD;
 			bbm_com_isr(hInit);
-			driver_mode = ISDBT_POWERON;
+			if (driver_mode == ISDBT_DATAREAD)
+				driver_mode = ISDBT_POWERON;
+			else if (driver_mode == ISDBT_POWEROFF)
+				pr_err("isdbt is off before isr\n");
 		}
 
 		isdbt_isr_sig = 0;
@@ -425,8 +433,8 @@ int isdbt_release(struct inode *inode, struct file *filp)
 		kfree(hOpen);
 	}
 
-	if (isdbt_pdata->regulator_is_enable)
-		isdbt_regulator_onoff(ISDBT_LDO_OFF);
+	if (driver_mode != ISDBT_POWEROFF)
+		isdbt_hw_deinit();
 
 	wake_unlock(&isdbt_wlock);
 
@@ -611,9 +619,6 @@ long isdbt_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		pr_err("[FC8180] IOCTL_ISDBT_POWER_ON\n");
 
 		isdbt_hw_init();
-#ifdef BBM_SPI_IF
-		bbm_com_byte_write(hInit, BBM_DM_DATA, 0x00);
-#endif
 		res = bbm_com_i2c_init(hInit, FCI_HPI_TYPE);
 		pr_err("[FC8180] IOCTL_ISDBT_POWER_ON bbm_com_i2c_init res =%d\n", res);
 		res |= bbm_com_probe(hInit);

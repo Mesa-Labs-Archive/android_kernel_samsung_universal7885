@@ -45,30 +45,34 @@ struct sec_therm_info {
 
 #ifdef CONFIG_OF
 enum sec_thermistor_type {
-	TYPE_SEC_THREM_AP,	/* Close to AP */
-	TYPE_SEC_THREM_PA,	/* Close to PA */
-	TYPE_SEC_THREM_CAM_FLASH,	/* Close to CAM_FLASH */
-	TYPE_SEC_THREM_WIFI,	/* Close to WIFI */
+	TYPE_SEC_THERM_AP,	/* Close to AP */
+	TYPE_SEC_THERM_PA,	/* Close to PA */
+	TYPE_SEC_THERM_CAM_FLASH,	/* Close to CAM_FLASH */
+	TYPE_SEC_THERM_WIFI,	/* Close to WIFI */
+	TYPE_SEC_THERM_BLANKET,	/* Blanket thermistor for Tablets */
 	NR_TYPE_SEC_TERM
 };
 
 static const struct platform_device_id sec_thermistor_id[] = {
-	{ "sec-ap-thermistor", TYPE_SEC_THREM_AP },
-	{ "sec-pa-thermistor", TYPE_SEC_THREM_PA },
-	{ "sec-cf-thermistor", TYPE_SEC_THREM_CAM_FLASH },
-	{ "sec-wf-thermistor", TYPE_SEC_THREM_WIFI },
+	{ "sec-ap-thermistor", TYPE_SEC_THERM_AP },
+	{ "sec-pa-thermistor", TYPE_SEC_THERM_PA },
+	{ "sec-cf-thermistor", TYPE_SEC_THERM_CAM_FLASH },
+	{ "sec-wf-thermistor", TYPE_SEC_THERM_WIFI },
+	{ "sec-bk-thermistor", TYPE_SEC_THERM_BLANKET },
 	{ },
 };
 
 static const struct of_device_id sec_therm_match[] = {
 	{ .compatible = "samsung,sec-ap-thermistor",
-		.data = &sec_thermistor_id[TYPE_SEC_THREM_AP] },
+		.data = &sec_thermistor_id[TYPE_SEC_THERM_AP] },
 	{ .compatible = "samsung,sec-pa-thermistor",
-		.data = &sec_thermistor_id[TYPE_SEC_THREM_PA] },
+		.data = &sec_thermistor_id[TYPE_SEC_THERM_PA] },
 	{ .compatible = "samsung,sec-cf-thermistor",
-		.data = &sec_thermistor_id[TYPE_SEC_THREM_CAM_FLASH] },
+		.data = &sec_thermistor_id[TYPE_SEC_THERM_CAM_FLASH] },
 	{ .compatible = "samsung,sec-wf-thermistor",
-		.data = &sec_thermistor_id[TYPE_SEC_THREM_WIFI] },
+		.data = &sec_thermistor_id[TYPE_SEC_THERM_WIFI] },
+	{ .compatible = "samsung,sec-bk-thermistor",
+		.data = &sec_thermistor_id[TYPE_SEC_THERM_BLANKET] },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, sec_therm_match);
@@ -321,10 +325,11 @@ static int sec_therm_probe(struct platform_device *pdev)
 	}
 
 	switch (pdev_id->driver_data) {
-	case TYPE_SEC_THREM_AP:
-	case TYPE_SEC_THREM_PA:
-	case TYPE_SEC_THREM_CAM_FLASH:
-	case TYPE_SEC_THREM_WIFI:
+	case TYPE_SEC_THERM_AP:
+	case TYPE_SEC_THERM_PA:
+	case TYPE_SEC_THERM_CAM_FLASH:
+	case TYPE_SEC_THERM_WIFI:
+	case TYPE_SEC_THERM_BLANKET:
 		/* Allow only a single device instance for each device type */
 		if (sec_therm_single_inst[pdev_id->driver_data])
 			return -EPERM;
@@ -357,7 +362,7 @@ static int sec_therm_probe(struct platform_device *pdev)
 		goto err_register_hwmon;
 	}
 
-	if (pdev_id->driver_data == TYPE_SEC_THREM_AP)
+	if (pdev_id->driver_data == TYPE_SEC_THERM_AP)
 		g_ap_therm_info = info;
 
 	dev_info(&pdev->dev, "%s successfully probed.\n", pdev_id->name);
@@ -382,7 +387,7 @@ static int sec_therm_remove(struct platform_device *pdev)
 		return 0;
 
 	pdev_id = of_id ? of_id->data : platform_get_device_id(pdev);
-	if (pdev_id->driver_data == TYPE_SEC_THREM_AP)
+	if (pdev_id->driver_data == TYPE_SEC_THERM_AP)
 		g_ap_therm_info = NULL;
 
 	hwmon_device_unregister(info->hwmon_dev);

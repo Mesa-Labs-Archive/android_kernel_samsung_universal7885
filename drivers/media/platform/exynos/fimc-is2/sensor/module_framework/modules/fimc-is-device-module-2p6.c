@@ -640,7 +640,9 @@ static int (* module_2p6_power_setpin[MAX_2P6_SETPIN_CNT])(struct device *pdev,
 int sensor_module_2p6_probe(struct platform_device *pdev)
 {
 	int ret = 0;
+#ifdef USE_AP_PDAF
 	bool use_pdaf = false;
+#endif
 	u8 exist_actuator = 0;
 	int ch;
 	struct fimc_is_core *core;
@@ -662,11 +664,13 @@ int sensor_module_2p6_probe(struct platform_device *pdev)
 
 	dev = &pdev->dev;
 
+#ifdef USE_AP_PDAF
 	if (of_property_read_bool(dev->of_node, "use_pdaf")) {
 		use_pdaf = true;
 	}
 
 	probe_info("%s use_pdaf(%d)\n", __func__, use_pdaf);
+#endif
 
 	af_np = of_find_node_by_name(dev->of_node, "af");
 	if (!af_np)
@@ -714,9 +718,12 @@ int sensor_module_2p6_probe(struct platform_device *pdev)
 	module->vcis = ARRAY_SIZE(vci_module_2p6);
 	module->vci = vci_module_2p6;
 	module->sensor_maker = "SLSI";
+#ifdef USE_AP_PDAF
 	if (use_pdaf == true) {
 		module->sensor_name = "S5K2P6SX"; /* pdaf sensor */
-	} else {
+	} else
+#endif
+	{
 		module->sensor_name = "S5K2P6"; /* default */
 	}
 	if (pdata->position == SENSOR_MODULE_2P6_REAR) {

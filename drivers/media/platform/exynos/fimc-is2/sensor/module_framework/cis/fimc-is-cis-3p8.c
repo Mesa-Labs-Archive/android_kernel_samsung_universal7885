@@ -54,6 +54,7 @@ static const u32 *sensor_3p8_setfile_sizes;
 static u32 sensor_3p8_max_setfile_num;
 static const struct sensor_pll_info **sensor_3p8_pllinfos;
 
+#ifdef USE_AP_PDAF
 /* variables of pdaf setting */
 static const u32 *sensor_3p8_pdaf_global;
 static u32 sensor_3p8_pdaf_global_size;
@@ -61,6 +62,7 @@ static const u32 **sensor_3p8_pdaf_setfiles;
 static const u32 *sensor_3p8_pdaf_setfile_sizes;
 static u32 sensor_3p8_pdaf_max_setfile_num;
 static const struct sensor_pll_info **sensor_3p8_pdaf_pllinfos;
+#endif
 
 static void sensor_3p8_cis_data_calculation(const struct sensor_pll_info *pll_info, cis_shared_data *cis_data)
 {
@@ -277,9 +279,12 @@ int sensor_3p8_cis_log_status(struct v4l2_subdev *subdev)
 	ret = fimc_is_sensor_read8(client, 0x0100, &data8);
 	if (unlikely(!ret)) printk("[SEN:DUMP] mode_select(%x)\n", data8);
 
+#ifdef USE_AP_PDAF
 	if (cis->use_pdaf == true) {
 		sensor_cis_dump_registers(subdev, sensor_3p8_pdaf_setfiles[0], sensor_3p8_pdaf_setfile_sizes[0]);
-	} else {
+	} else
+#endif
+	{
 		sensor_cis_dump_registers(subdev, sensor_3p8_setfiles[0], sensor_3p8_setfile_sizes[0]);
 	}
 
@@ -373,9 +378,12 @@ int sensor_3p8_cis_set_global_setting(struct v4l2_subdev *subdev)
 	usleep_range(3000, 3000);
 
 	/* setfile global setting is at camera entrance */
+#ifdef USE_AP_PDAF
 	if (cis->use_pdaf == true) {
 		ret = sensor_cis_set_registers(subdev, sensor_3p8_pdaf_global, sensor_3p8_pdaf_global_size);
-	} else {
+	} else
+#endif
+	{
 		ret = sensor_cis_set_registers(subdev, sensor_3p8_global, sensor_3p8_global_size);
 	}
 
@@ -402,9 +410,12 @@ int sensor_3p8_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 	BUG_ON(!cis);
 	BUG_ON(!cis->cis_data);
 
+#ifdef USE_AP_PDAF
 	if (cis->use_pdaf == true) {
 		max_setfile_num = sensor_3p8_pdaf_max_setfile_num;
-	} else {
+	} else
+#endif
+	{
 		max_setfile_num = sensor_3p8_max_setfile_num;
 	}
 
@@ -424,10 +435,13 @@ int sensor_3p8_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 		}
 	}
 
+#ifdef USE_AP_PDAF
 	if (cis->use_pdaf == true) {
 		sensor_3p8_cis_data_calculation(sensor_3p8_pdaf_pllinfos[mode], cis->cis_data);
 		ret = sensor_cis_set_registers(subdev, sensor_3p8_pdaf_setfiles[mode], sensor_3p8_pdaf_setfile_sizes[mode]);
-	} else {
+	} else
+#endif
+	{
 		sensor_3p8_cis_data_calculation(sensor_3p8_pllinfos[mode], cis->cis_data);
 		ret = sensor_cis_set_registers(subdev, sensor_3p8_setfiles[mode], sensor_3p8_setfile_sizes[mode]);
 	}
@@ -437,6 +451,7 @@ int sensor_3p8_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 		goto p_err;
 	}
 
+#ifdef USE_AP_PDAF
 	if (cis->use_pdaf == true) {
 #if defined(S5K3P8_PDAF_DISABLE)
 		/* TEMP : PDAF disable */
@@ -463,6 +478,7 @@ int sensor_3p8_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 		info("[%s] S5K3P8_BPC_DISABLE\n", __func__);
 #endif
 	}
+#endif
 
 	dbg_sensor(1, "[%s] mode changed(%d)\n", __func__, mode);
 
@@ -1710,7 +1726,9 @@ int cis_3p8_probe(struct i2c_client *client,
 	const struct i2c_device_id *id)
 {
 	int ret = 0;
+#ifdef USE_AP_PDAF
 	bool use_pdaf = false;
+#endif
 
 	struct fimc_is_core *core = NULL;
 	struct v4l2_subdev *subdev_cis = NULL;
@@ -1734,9 +1752,11 @@ int cis_3p8_probe(struct i2c_client *client,
 	dev = &client->dev;
 	dnode = dev->of_node;
 
+#ifdef USE_AP_PDAF
 	if (of_property_read_bool(dnode, "use_pdaf")) {
 		use_pdaf = true;
 	}
+#endif
 
 	ret = of_property_read_u32(dnode, "id", &sensor_id);
 	if (ret) {
@@ -1801,11 +1821,13 @@ int cis_3p8_probe(struct i2c_client *client,
 	cis->use_dgain = true;
 	cis->hdr_ctrl_by_again = false;
 
+#ifdef USE_AP_PDAF
 	if (use_pdaf == true) {
 		cis->use_pdaf = true;
 	} else {
 		cis->use_pdaf = false;
 	}
+#endif
 
 	ret = of_property_read_string(dnode, "setfile", &setfile);
 	if (ret) {
@@ -1823,6 +1845,7 @@ int cis_3p8_probe(struct i2c_client *client,
 		sensor_3p8_max_setfile_num = sizeof(sensor_3p8_setfiles_A) / sizeof(sensor_3p8_setfiles_A[0]);
 		sensor_3p8_pllinfos = sensor_3p8_pllinfos_A;
 	} else if (strcmp(setfile, "setB") == 0) {
+#ifdef USE_AP_PDAF
 		probe_info("%s setfile_B for PDAF\n", __func__);
 		sensor_3p8_pdaf_global = sensor_3p8_setfile_B_Global;
 		sensor_3p8_pdaf_global_size = sizeof(sensor_3p8_setfile_B_Global) / sizeof(sensor_3p8_setfile_B_Global[0]);
@@ -1830,6 +1853,15 @@ int cis_3p8_probe(struct i2c_client *client,
 		sensor_3p8_pdaf_setfile_sizes = sensor_3p8_setfile_B_sizes;
 		sensor_3p8_pdaf_max_setfile_num = sizeof(sensor_3p8_setfiles_B) / sizeof(sensor_3p8_setfiles_B[0]);
 		sensor_3p8_pdaf_pllinfos = sensor_3p8_pllinfos_B;
+#else
+		probe_info("%s setfile_B\n", __func__);
+		sensor_3p8_global = sensor_3p8_setfile_B_Global;
+		sensor_3p8_global_size = sizeof(sensor_3p8_setfile_B_Global) / sizeof(sensor_3p8_setfile_B_Global[0]);
+		sensor_3p8_setfiles = sensor_3p8_setfiles_B;
+		sensor_3p8_setfile_sizes = sensor_3p8_setfile_B_sizes;
+		sensor_3p8_max_setfile_num = sizeof(sensor_3p8_setfiles_B) / sizeof(sensor_3p8_setfiles_B[0]);
+		sensor_3p8_pllinfos = sensor_3p8_pllinfos_B;
+#endif
 	} else {
 		err("%s setfile index out of bound, take default (setfile_A)", __func__);
 		sensor_3p8_global = sensor_3p8_setfile_A_Global;

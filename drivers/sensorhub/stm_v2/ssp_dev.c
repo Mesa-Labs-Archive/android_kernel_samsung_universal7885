@@ -76,16 +76,19 @@ static void initialize_variable(struct ssp_data *data)
 	}
 
 	data->uSensorState = NORMAL_SENSOR_STATE_K;
-	data->uMagCntlRegData = 1;
 
 	data->is_ssp_shutdown = true;
 	data->is_time_syncing = true;
 
 	data->buf[SENSOR_TYPE_GYROSCOPE].gyro_dps = GYROSCOPE_DPS2000;
-	data->uIr_Current = DEFUALT_IR_CURRENT;
-
-	data->bGeomagneticRawEnabled = false;
+	
+#ifdef CONFIG_SENSORS_SSP_GYROSCOPE
 	data->first_gyro_cal = true;
+#endif
+#ifdef CONFIG_SENSOR_SSP_MAGNETIC
+	data->uMagCntlRegData = 1;
+	data->bGeomagneticRawEnabled = false;
+#endif
 	data->is_reset_from_kernel = false;
 	data->is_reset_started = false;
 
@@ -93,13 +96,6 @@ static void initialize_variable(struct ssp_data *data)
 
 	data->realtime_dump_file = NULL;
 	data->callstack_data = NULL;
-#if 0
-	if (sec_debug_get_debug_level() > 0) {
-		data->is_mcu_dump_mode = true;
-		ssp_info("Mcu Dump Enabled");
-	}
-#else
-#endif
 	INIT_LIST_HEAD(&data->pending_list);
 }
 
@@ -128,12 +124,16 @@ int initialize_mcu(struct ssp_data *data)
 		ssp_infof("sensor state 0x%llx", data->uSensorState);
 	}
 
+#ifdef CONFIG_SENSORS_SSP_MAGNETIC
 	ret = initialize_magnetic_sensor(data);
 	if (ret < 0) {
 		ssp_errf("initialize magnetic sensor failed");
 	}
+#endif
 
+#ifdef CONFIG_SENSORS_SSP_LIGHT
 	set_light_coef(data);
+#endif
 
 	data->curr_fw_rev = get_firmware_rev(data);
 	ssp_info("MCU Firm Rev : New = %8u", data->curr_fw_rev);
@@ -197,8 +197,6 @@ static int ssp_parse_dt(struct device *dev,
 	struct device_node *np = dev->of_node;
 	enum of_gpio_flags flags;
 	int errorno = 0;
-	u32 len, temp;
-	int i;
 
 	/* gpio pins */
 	data->mcu_int1 = of_get_named_gpio_flags(np, "ssp,mcu_int1-gpio", 0, &flags);
@@ -314,6 +312,7 @@ static int ssp_parse_dt(struct device *dev,
 	ssp_info("acc-posi[%d] mag-posi[%d]",
 	         data->accel_position,  data->mag_position);
 
+#ifdef CONFIG_SENSORS_SSP_PROXIMITY
 	/* prox thresh */
 	if (of_property_read_u32(np, "ssp,prox-hi_thresh",
 	                         &data->uProxHiThresh)) {
@@ -340,21 +339,24 @@ static int ssp_parse_dt(struct device *dev,
 
 	ssp_info("detect-hi[%u] detect-low[%u]\n",
 	         data->uProxHiThresh_detect, data->uProxLoThresh_detect);
-
+#endif
+#ifdef CONFIG_SENSORS_SSP_ACCELOMETER
 	/* acc type */
 	if (of_property_read_u32(np, "ssp-acc-type", &data->acc_type)) {
 		data->acc_type = 0;
 	}
 
 	ssp_info("acc-type = %d", data->acc_type);
-
+#endif
+#ifdef CONFIG_SENSORS_SSP_BAROMETER
 	/* pressure type */
 	if (of_property_read_u32(np, "ssp-pressure-type", &data->pressure_type)) {
 		data->pressure_type = 0;
 	}
 
 	ssp_info("pressure-type = %d", data->pressure_type);
-
+#endif
+#ifdef CONFIG_SENSORS_SSP_MAGNETIC
 	/* mag type */
 	if (of_property_read_u32(np, "ssp-mag-type", &data->mag_type)) {
 		data->mag_type = 0;
@@ -368,6 +370,8 @@ static int ssp_parse_dt(struct device *dev,
 			pr_err("no mag-array, set as 0");
 		}
 	} else {
+		u32 len, temp;
+		int i;
 		if (!of_get_property(np, "ssp-mag-array", &len)) {
 			pr_info("[SSP] No static matrix at DT for LSM303AH!(%p)\n",
 			        data->static_matrix);
@@ -389,7 +393,9 @@ static int ssp_parse_dt(struct device *dev,
 			*(data->static_matrix + i) = (int)temp;
 		}
 	}
+#endif
 
+#ifdef CONFIG_SENSORS_SSP_LIGHT
 	/* Project type, 1 is jackpot, 2 is jackpot2 */
 	if (of_property_read_u32(np, "ssp-project-type", &data->project_select)) {
 		data->project_select = 0;
@@ -404,12 +410,14 @@ static int ssp_parse_dt(struct device *dev,
 		ssp_errf("project is default");
 		memcpy(data->light_coef, default_project, sizeof(default_project));
 	}
-
+#endif
 	return errorno;
 dt_exit:
+#ifdef CONFIG_SENSORS_SSP_MAGNETIC
 	if (data->static_matrix != NULL) {
 		kfree(data->static_matrix);
 	}
+#endif
 	return errorno;
 }
 

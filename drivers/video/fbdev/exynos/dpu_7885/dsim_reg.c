@@ -1190,7 +1190,7 @@ void dsim_reg_set_config(u32 id, struct decon_lcd *lcd_info, u32 data_lane_cnt,
 	u32 num_of_transfer;
 
 	if(lcd_info->mode == DECON_VIDEO_MODE)
-		dsim_reg_enable_clocklane(id, 0);
+		dsim_reg_enable_clocklane(id, lcd_info->clklane_onoff);
 	else
 		dsim_reg_enable_noncont_clock(id, 1);
 
@@ -1240,7 +1240,6 @@ void dsim_reg_set_config(u32 id, struct decon_lcd *lcd_info, u32 data_lane_cnt,
 		dsim_reg_disable_hse(id, 0);
 		dsim_reg_set_burst_mode(id, 1);
 		dsim_reg_set_sync_inform(id, 0);
-		dsim_reg_enable_clocklane(id, 1);
 	}
 
 	if (lcd_info->dsc_enabled) {

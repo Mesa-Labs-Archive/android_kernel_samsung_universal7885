@@ -15,7 +15,6 @@
 
 #define CAMERA_SYSFS_V2
 
-#define USE_AP_PDAF                 /* Support sensor PDAF SW Solution */
 #define USE_COMMON_CAM_IO_PWR
 
 #define USE_SSRM_CAMERA_INFO /* Match with SAMSUNG_SSRM define of Camera Hal side */

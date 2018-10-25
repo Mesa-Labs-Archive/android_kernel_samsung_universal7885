@@ -32,7 +32,8 @@ choice
 	prompt "Version Configuration"
 	depends on MALI_TMIX
 	default MALI_TMIX_R3P0 if DDK_VERSION_OS = "n"
-	default MALI_TMIX_R9P0 if DDK_VERSION_OS = "o"
+	default MALI_TMIX_R9P0 if ANDROID_VERSION = "80000"
+	default MALI_TMIX_R10P0 if ANDROID_VERSION = "80100"
 	help
 	  Select the gpu support version.
 
@@ -47,6 +48,10 @@ config MALI_TMIX_R8P0
 config MALI_TMIX_R9P0
 	depends on MALI_TMIX
 	bool "mimir r9p0 driver"
+
+config MALI_TMIX_R10P0
+	depends on MALI_TMIX
+	bool "mimir r10p0 driver"
 endchoice
 
 if MALI_TMIX_R3P0

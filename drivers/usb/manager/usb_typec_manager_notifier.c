@@ -21,6 +21,9 @@
 #include <linux/time.h>
 #include <linux/ktime.h>
 #include <linux/rtc.h>
+#if defined(CONFIG_OF)
+#include <linux/of.h>
+#endif
 
 //#define MANAGER_POSTPONE_WATER_EVENT
 #define DEBUG
@@ -937,13 +940,24 @@ int manager_notifier_register(struct notifier_block *nb, notifier_fn_t notifier,
 			CCIC_NOTI_USB_STATUS_Print[m_noti.sub2]);
 		nb->notifier_call(nb, m_noti.id, &(m_noti));
 		alternate_mode_start_wait |= 0x1;
-		if(alternate_mode_start_wait == 0x11) {
-			pr_info("usb: [M] %s USB & DP driver is registered! Alternate mode Start!\n", __func__);
+#if defined(CONFIG_OF)
+		if (of_find_node_by_name(NULL,"displayport") != NULL) {
+#endif
+			if (alternate_mode_start_wait == 0x11) {
+				pr_info("usb: [M] %s USB & DP driver is registered! Alternate mode Start!\n", __func__);
+#if defined(CONFIG_CCIC_ALTERNATE_MODE)
+				set_enable_alternate_mode(ALTERNATE_MODE_READY | ALTERNATE_MODE_START);
+#endif
+			}
+#if defined(CONFIG_OF)
+		} else {	
+			pr_info("usb: [M] %s USB driver is registered! Alternate mode Start!\n", __func__);
 #if defined(CONFIG_CCIC_ALTERNATE_MODE)
 			set_enable_alternate_mode(ALTERNATE_MODE_READY | ALTERNATE_MODE_START);
 #endif
 		}
-	} else if(listener == MANAGER_NOTIFY_CCIC_DP) {
+#endif
+	} else if (listener == MANAGER_NOTIFY_CCIC_DP) {
 		m_noti.src = CCIC_NOTIFY_DEV_MANAGER;
 		m_noti.dest = CCIC_NOTIFY_DEV_DP;
 		m_noti.sub2 = 0;

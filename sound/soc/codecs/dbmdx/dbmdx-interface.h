@@ -43,6 +43,10 @@
 #define DBMD2_VA_PREBOOT_FIRMWARE_NAME		"dbmd2_va_preboot_fw.bin"
 #endif
 
+#ifndef DBMD4_VA_ASRP_PARAMS_FIRMWARE_NAME
+#define DBMD4_VA_ASRP_PARAMS_FIRMWARE_NAME	"dbmd4_va_asrp_fw.bin"
+#endif
+
 #ifndef DBMD2_VQE_FIRMWARE_NAME
 #define DBMD2_VQE_FIRMWARE_NAME			"dbmd2_vqe_fw.bin"
 #endif
@@ -87,6 +91,17 @@
 #define DBMDX_VC_OKG_NAME			"okg_amodel.bin"
 #endif
 
+#ifndef DBMDX_VE_GRAM_NAME
+#define DBMDX_VE_GRAM_NAME			"ve_grammar.bin"
+#endif
+
+#ifndef DBMDX_VE_NET_NAME
+#define DBMDX_VE_NET_NAME			"ve_net.bin"
+#endif
+
+#ifndef DBMDX_VE_AMODEL_NAME
+#define DBMDX_VE_AMODEL_NAME			"ve_amodel.bin"
+#endif
 
 #define MAX_REQ_SIZE				8192
 
@@ -106,7 +121,10 @@
 #define DBMDX_MSLEEP_BUFFERING_PAUSED		100
 #define DBMDX_MSLEEP_AFTER_MIC_ENABLED		100
 #define DBMDX_MSLEEP_IS_ALIVE			20
+#define DBMDX_MSLEEP_IF_AUDIO_BUFFER_EMPTY	90
+#define DBMDX_MSLEEP_AFTER_LOAD_ASRP		50
 
+#define DBMDX_USLEEP_AFTER_ECHO_CANCELLER	5000
 #define DBMDX_USLEEP_VQE_ALIVE			21000
 #define DBMDX_USLEEP_VQE_ALIVE_ON_FAIL		10000
 #define DBMDX_USLEEP_NO_SAMPLES			10000
@@ -133,7 +151,11 @@
 #define DBMDX_MSLEEP_SPI_VQE_SYS_CFG_CMD	60
 #define DBMDX_MSLEEP_SPI_FINISH_BOOT_1		10
 #define DBMDX_MSLEEP_SPI_FINISH_BOOT_2		10
+#ifdef DBMDX_VA_NS_SUPPORT
+#define DBMDX_MSLEEP_SPI_WAKEUP			100
+#else
 #define DBMDX_MSLEEP_SPI_WAKEUP			50
+#endif
 #define DBMDX_MSLEEP_SPI_D2_AFTER_RESET_32K	300
 #define DBMDX_MSLEEP_SPI_D2_AFTER_SBL		20
 #define DBMDX_MSLEEP_SPI_D2_BEFORE_FW_CHECKSUM	20
@@ -141,11 +163,12 @@
 #define DBMDX_MSLEEP_SPI_D4_AFTER_PLL_CHANGE	80
 #define DBMDX_MSLEEP_SPI_D2_AFTER_PLL_CHANGE	5
 
+
 #define DBMDX_USLEEP_SPI_VQE_CMD_AFTER_SEND	20000
 #define DBMDX_USLEEP_SPI_VA_CMD_AFTER_SEND	500
 #define DBMDX_USLEEP_SPI_VA_CMD_AFTER_SEND_2	500
 #define DBMDX_USLEEP_SPI_VA_CMD_AFTER_BOOT	1000
-#define DBMDX_USLEEP_SPI_AFTER_CHUNK_READ	1000
+#define DBMDX_USLEEP_SPI_AFTER_CHUNK_READ	10000
 #define DBMDX_USLEEP_SPI_AFTER_LOAD_AMODEL	10000
 #define DBMDX_USLEEP_SPI_D2_AFTER_RESET		5000
 #define DBMDX_USLEEP_SPI_D2_AFTER_SBL		10000
@@ -188,18 +211,25 @@
 #define DBMDX_BOOT_OPT_DONT_VERIFY_CRC		0x0080
 #define DBMDX_BOOT_OPT_DONT_SEND_START_BOOT	0x0100
 #define DBMDX_BOOT_OPT_VERIFY_CHIP_ID		0x0200
+#define DBMDX_BOOT_OPT_SET_GPIO_8_IN		0x0400
 
 #define DBMDX_AMODEL_DEFAULT_OPTIONS		0x0000
 #define DBMDX_AMODEL_INCLUDES_HEADERS		0x0001
 #define DBMDX_AMODEL_SVT_ENCODING		0x0002
 #define DBMDX_AMODEL_SINGLE_FILE_NO_HEADER	0x0004
+#define DBMDX_LOAD_AMODEL_FOR_VE		0x0008
+#define DBMDX_VE_SEND_DUMMY_AMODEL_4B		0x0010
+
+#define DBMDX_AMODEL_TYPE_PRIMARY		0x0001
+#define DBMDX_AMODEL_TYPE_SECONDARY		0x0002
 
 #define DBMDX_NO_MODEL_SELECTED			0x0000
 #define DBMDX_SV_MODEL_SELECTED			0x0001
 #define DBMDX_OKG_MODEL_SELECTED		0x0002
 
 #define DBMDX_LOAD_MODEL_NO_DETECTION		0x0001
-#define DBMDX_DO_NOT_RELOAD_LOAD		0x0002
+#define DBMDX_DO_NOT_RELOAD_MODEL		0x0002
+#define DBMDX_LOAD_MODEL_FROM_MEMORY		0x0004
 
 #define DBMDX_NO_EXT_DETECTION_MODE_PARAMS	0x0000
 
@@ -258,14 +288,18 @@ enum dbmdx_detection_after_buffering_mode {
 
 struct va_flags {
 	int	irq_inuse;
-	int	a_model_loaded;
+	int	a_model_downloaded_to_fw;
 	int	amodel_len;
 	enum dbmdx_sv_recognition_mode sv_recognition_mode;
 #ifdef DMBDX_OKG_AMODEL_SUPPORT
-	int	okg_a_model_loaded;
+	int	okg_a_model_downloaded_to_fw;
 	int	okg_amodel_len;
 	bool	okg_a_model_enabled;
 	enum	dbmdx_okg_recognition_mode okg_recognition_mode;
+#endif
+#ifdef DBMDX_VA_NS_SUPPORT
+	const char	*va_last_loaded_asrp_params_file_name;
+	bool	va_ns_active;
 #endif
 	int	buffering;
 	int	buffering_paused;
@@ -296,6 +330,14 @@ struct vqe_fw_info {
 	u16	patch;
 	u16	debug;
 	u16	tuning;
+};
+
+struct amodel_info {
+	char	*amodel_buf;
+	ssize_t amodel_size;
+	ssize_t	amodel_chunks_size[DBMDX_AMODEL_MAX_CHUNKS];
+	int	num_of_amodel_chunks;
+	bool	amodel_loaded;
 };
 
 enum dbmd2_xtal_id {
@@ -417,7 +459,11 @@ struct dbmdx_private {
 	void				*detection_samples_kfifo_buf;
 	unsigned int			detection_samples_kfifo_buf_size;
 	atomic_t			audio_owner;
-	char				*amodel_buf;
+	struct amodel_info		primary_amodel;
+	struct amodel_info		secondary_amodel;
+#ifdef DMBDX_OKG_AMODEL_SUPPORT
+	struct amodel_info		okg_amodel;
+#endif
 	u8				*sbl_data;
 	struct va_flags			va_flags;
 	struct vqe_flags		vqe_flags;
@@ -437,6 +483,11 @@ struct dbmdx_private {
 	bool				mic_disabling_blocked;
 	int				va_debug_mode;
 
+#ifdef DBMDX_VA_NS_SUPPORT
+	bool				va_ns_enabled;
+	int				va_ns_cfg_index;
+	bool				va_ns_pcm_streaming_enabled;
+#endif
 	int				va_cur_digital_mic_digital_gain;
 	int				va_cur_analog_mic_analog_gain;
 	int				va_cur_analog_mic_digital_gain;
@@ -475,6 +526,7 @@ struct dbmdx_private {
 	void (*reset_sequence)(struct dbmdx_private *p);
 	void (*wakeup_set)(struct dbmdx_private *p);
 	void (*wakeup_release)(struct dbmdx_private *p);
+	void (*wakeup_toggle)(struct dbmdx_private *p);
 	void (*lock)(struct dbmdx_private *p);
 	void (*unlock)(struct dbmdx_private *p);
 	int (*verify_checksum)(struct dbmdx_private *p,
@@ -554,7 +606,7 @@ struct chip_interface {
 	int (*load_amodel)(struct dbmdx_private *p,  const void *data,
 			   size_t size, int num_of_chunks, size_t *chunk_sizes,
 			   const void *checksum, size_t chksum_len,
-			   enum dbmdx_load_amodel_mode load_amodel_mode);
+			   u16 load_amodel_mode_cmd);
 	/* finish amodel loading (e.g. lower speed) */
 	int (*finish_amodel_loading)(struct dbmdx_private *p);
 	/* Get Read Chunk Size */

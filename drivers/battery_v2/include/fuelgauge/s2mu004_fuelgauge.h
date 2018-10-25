@@ -14,8 +14,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
 #ifndef __S2MU004_FUELGAUGE_H
@@ -26,6 +25,8 @@
 #endif
 
 #include "../sec_charging_common.h"
+
+extern unsigned int lpcharge;
 
 /* Slave address should be shifted to the right 1bit.
  * R/W bit should NOT be included.
@@ -79,7 +80,8 @@ struct sec_fg_info {
 
 #if !defined(CONFIG_BATTERY_AGE_FORECAST)
 		/* copy from platform data /
-		 * DTS or update by shell script */
+		 * DTS or update by shell script
+		 */
 		int battery_table1[88]; // evt1
 		int battery_table2[22]; // evt1
 		int battery_table3[88]; // evt2
@@ -109,6 +111,16 @@ struct fg_age_data_info {
 	struct fg_age_data_info
 #endif
 
+#if defined(CONFIG_FUELGAUGE_ASOC_FROM_CYCLES)
+struct sec_cycles_to_asoc {
+	unsigned int cycle;
+	unsigned int asoc;
+};
+
+#define sec_cycles_to_asoc_t \
+	struct sec_cycles_to_asoc
+#endif
+
 typedef struct s2mu004_fuelgauge_platform_data {
 	int capacity_max;
 	int capacity_max_margin;
@@ -124,6 +136,11 @@ typedef struct s2mu004_fuelgauge_platform_data {
 	char *fuelgauge_name;
 
 	bool repeated_fuelalert;
+
+#if defined(CONFIG_FUELGAUGE_ASOC_FROM_CYCLES)
+	int fixed_asoc_levels;
+	sec_cycles_to_asoc_t *cycles_to_asoc;
+#endif
 } s2mu004_fuelgauge_platform_data_t;
 
 struct s2mu004_fuelgauge_data {
@@ -140,13 +157,13 @@ struct s2mu004_fuelgauge_data {
 		int mode;
 		int revision;
 
-		/* HW-dedicated fuel guage info structure
-		 * used in individual fuel gauge file only
+		/* HW-dedicated fuelgauge info structure
+		 * used in individual fuelgauge file only
 		 * (ex. dummy_fuelgauge.c)
 		 */
 		struct sec_fg_info      info;
 #if defined(CONFIG_BATTERY_AGE_FORECAST)
-		fg_age_data_info_t*	age_data_info;
+		fg_age_data_info_t *age_data_info;
 		int fg_num_age_step;
 		int fg_age_step;
 		int age_reset_status;

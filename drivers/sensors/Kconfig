@@ -99,12 +99,30 @@ config SENSORS_STK3013
 	help
 	  This option enables proximity sensor using STK3013 driver.
 
+config SENSORS_CM36658
+	depends on I2C
+	tristate "CM36658 driver"
+	default n
+	help
+	  This option enables proximity & light sensor using CM36658 driver.
+
 config SENSORS_CM36686
 	depends on I2C
 	tristate "CM36686 driver"
 	default n
 	help
 	  This option enables proximity & light sensors using CM36686 driver.
+
+config SENSORS_CM3323
+	depends on I2C
+	tristate "CM3323 driver"
+	default n
+	help
+	  Say Y here if you use cm3323.
+	  This option enables RGB sensors using
+	  Capella cm3323 device driver.
+
+	  Say N here if you do not use cm3323.
 
 config SENSORS_CM36672P
 	tristate "CM36672P driver"
@@ -141,3 +159,74 @@ config SENSORS_A96T3X6
 	  Above A96T3X6 device driver for grip.
 
 	  Say N here if you do not use A96T3X6 for grip.
+
+config SENSORS_A96T3X6_VIEW2
+	depends on I2C
+	tristate "A96T3X6 touchkey"
+	default n
+	help
+	  Say Y here if you use A96T3X6 for grip.
+	  This option enables grip sensors using
+	  Above A96T3X6 device driver for grip.
+
+	  Say N here if you do not use A96T3X6 for grip.
+
+config SENSORS_A96T3X6_WIFI
+	depends on I2C
+	tristate "A96T3X6 driver for grip"
+	default n
+	help
+	  Say Y here if you use A96T3X6 for grip.
+	  This option enables grip sensors using
+	  Above A96T3X6 device driver for grip.
+	  Say N here if you do not use A96T3X6 for grip.
+
+config SENSORS_A96T3X6_WIFI_VIEW2
+	depends on I2C
+	tristate "A96T3X6 driver for grip"
+	default n
+	help
+	  Say Y here if you use A96T3X6 for grip.
+	  This option enables grip sensors using
+	  Above A96T3X6 device driver for grip.
+	  Say N here if you do not use A96T3X6 for grip.
+
+config SENSORS_A96T3X6_SUB
+	depends on I2C
+	tristate "A96T3X6 driver for grip"
+	default n
+	help
+	  Say Y here if you use A96T3X6 for grip.
+	  This option enables grip sensors using
+	  Above A96T3X6 device driver for grip.
+
+config SENSORS_A96T3X6_SUB_VIEW2
+	depends on I2C
+	tristate "A96T3X6 driver for grip"
+	default n
+	help
+	  Say Y here if you use A96T3X6 for grip.
+	  This option enables grip sensors using
+	  Above A96T3X6 device driver for grip.
+
+config SENSORS_TC3XXK
+	depends on I2C
+	tristate "TC3XXK driver for grip Sensor"
+	default n
+	help
+	  Say Y here if you use TC3XXK IC for grip Sensor.
+	  This option enables grip sensors using
+	  Coreriver TC3XXK device driver for grip Sensor.
+	  
+	  Say N here if you do not use TC3XXK for grip.
+
+config SENSORS_TC3XXK_A7Y18LTE
+	depends on I2C
+	tristate "TC3XXK driver for grip Sensor"
+	default n
+	help
+	  Say Y here if you use TC3XXK IC for grip Sensor.
+	  This option enables grip sensors using
+	  Coreriver TC3XXK device driver for grip Sensor.
+
+	  Say N here if you do not use TC3XXK for grip Sensor.

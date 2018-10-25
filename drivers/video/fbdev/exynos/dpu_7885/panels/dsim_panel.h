@@ -19,7 +19,9 @@ extern struct dsim_lcd_driver *mipi_lcd_driver;
 extern struct dsim_lcd_driver s6e3fa0_mipi_lcd_driver;
 #elif IS_ENABLED(CONFIG_EXYNOS_DECON_LCD_S6E3FA7)
 extern struct dsim_lcd_driver s6e3fa7_mipi_lcd_driver;
-#elif IS_ENABLED(CONFIG_EXYNOS_DECON_LCD_S6E3FA7_A7Y18) || IS_ENABLED(CONFIG_EXYNOS_DECON_LCD_S6E3FA7_A5Y18)
+#elif IS_ENABLED(CONFIG_EXYNOS_DECON_LCD_S6E3FA7_JACKPOT2)
+extern struct dsim_lcd_driver s6e3fa7_mipi_lcd_driver;
+#elif IS_ENABLED(CONFIG_EXYNOS_DECON_LCD_S6E3FA7_JACKPOT)
 extern struct dsim_lcd_driver s6e3fa7_mipi_lcd_driver;
 #elif IS_ENABLED(CONFIG_EXYNOS_DECON_LCD_TD4100_J3TOPE)
 extern struct dsim_lcd_driver td4100_mipi_lcd_driver;
@@ -31,6 +33,8 @@ extern struct dsim_lcd_driver ea8061s_mipi_lcd_driver;
 extern struct dsim_lcd_driver s6e8aa5_mipi_lcd_driver;
 #elif IS_ENABLED(CONFIG_EXYNOS_DECON_LCD_S6E8AA5_FEEL2)
 extern struct dsim_lcd_driver s6e8aa5_mipi_lcd_driver;
+#elif IS_ENABLED(CONFIG_EXYNOS_DECON_LCD_SN65DSI86_GVIEW2)
+extern struct dsim_lcd_driver sn65dsi86_hx8876_mipi_lcd_driver;
 #else
 extern struct dsim_lcd_driver s6e3fa3_mipi_lcd_driver;
 #endif

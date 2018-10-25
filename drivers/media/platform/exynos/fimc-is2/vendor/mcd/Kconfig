@@ -136,12 +136,24 @@ config CAMERA_JACKPOT_JPN
         default n
         help
           This camera is jackpotjpn project.
+config CAMERA_GVIEW2
+        bool "This camera is gview2 project"
+        depends on VENDER_MCD
+        default n
+        help
+          This camera is gview2 project.
 config CAMERA_A6E
         bool "This camera is a6e project"
         depends on VENDER_MCD
         default n
         help
           This camera is a6e project.
+config CAMERA_A7Y18
+        bool "This camera is a7y18 project"
+        depends on VENDER_MCD
+        default n
+        help
+          This camera is a7y18 project.
 config CAMERA_OTPROM_SUPPORT_FRONT
         bool "This camera is otp front project"
         depends on VENDER_MCD

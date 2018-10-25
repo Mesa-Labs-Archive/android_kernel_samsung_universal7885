@@ -28,7 +28,8 @@ static struct dbmdx_private *dbmdx_p;
 static atomic_t cdev_opened = ATOMIC_INIT(0);
 
 /* Access to the audio buffer is controlled through "audio_owner". Either the
- * character device or the ALSA-capture device can be opened. */
+ * character device or the ALSA-capture device can be opened.
+ */
 static int dbmdx_record_open(struct inode *inode, struct file *file)
 {
 	file->private_data = dbmdx_p;

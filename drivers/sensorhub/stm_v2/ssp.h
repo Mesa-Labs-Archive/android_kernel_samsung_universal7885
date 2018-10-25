@@ -264,7 +264,6 @@ struct ssp_data {
 	struct calibraion_data accelcal;
 	struct calibraion_data gyrocal;
 	struct device *mcu_device;
-	struct device *irled_device;
 	struct device *mobeam_device;
 	struct delayed_work work_firmware;
 	struct delayed_work work_refresh;
@@ -272,8 +271,6 @@ struct ssp_data {
 #ifdef SENSOR_TYPE_SCONTEXT
 	struct miscdevice scontext_device;
 #endif
-
-	struct hw_offset_data magoffset;
 
 	bool is_ssp_shutdown;
 	bool is_accel_alert;
@@ -286,19 +283,6 @@ struct ssp_data {
 	bool is_reset_from_sysfs;
 	bool is_reset_started;
 	int reset_type;
-
-	unsigned int uProxCanc;
-	unsigned int uCrosstalk;
-	unsigned int uProxCalResult;
-	unsigned int uProxHiThresh;
-	unsigned int uProxLoThresh;
-	unsigned int uProxHiThresh_detect;
-	unsigned int uProxLoThresh_detect;
-	unsigned int uProxHiThresh_default;
-	unsigned int uProxLoThresh_default;
-	unsigned int uIr_Current;
-	unsigned char uFuseRomData[3];
-	unsigned char uMagCntlRegData;
 
 	char *pchLibraryBuf;
 	char chLcdLdi[2];
@@ -329,9 +313,6 @@ struct ssp_data {
 	int accel_position;
 	int mag_position;
 	int fw_dl_state;
-	unsigned char pdc_matrix[PDC_SIZE];
-	s16 *static_matrix;
-	bool bGeomagneticRawEnabled;
 	struct mutex comm_mutex;
 	struct mutex pending_mutex;
 	struct mutex enable_mutex;
@@ -351,18 +332,6 @@ struct ssp_data {
 	int total_dump_size;
 	unsigned int cnt_dump;
 	bool is_ongoing_dump;
-
-	int acc_type;
-	int pressure_type;
-	int mag_type;
-	int first_gyro_cal;
-	int project_select;
-	int light_coef[7];
-	int light_log_cnt;
-#if defined(CONFIG_SENSORS_SSP_PROXIMITY_AUTO_CAL_TMD3725)
-	int prox_trim;
-#endif
-
 	bool debug_enable;
 	char sensor_state[BIG_DATA_SENSOR_TYPE_MAX + 1];
 	char *sensor_dump[SENSOR_TYPE_MAX];
@@ -371,12 +340,51 @@ struct ssp_data {
 	char register_value[5];
 #endif
 
+
+#ifdef CONFIG_SENSORS_SSP_ACCELOMETER
 	struct  accelometer_sensor_operations *accel_ops;
+	int acc_type;
+#endif
+#ifdef CONFIG_SENSORS_SSP_GYROSCOPE
 	struct  gyroscope_sensor_operations *gyro_ops;
+	int first_gyro_cal;
+#endif
+#ifdef CONFIG_SENSORS_SSP_MAGNETIC
 	struct  magnetic_sensor_operations *magnetic_ops;
+	unsigned char pdc_matrix[PDC_SIZE];
+	s16 *static_matrix;
+	bool bGeomagneticRawEnabled;
+	int mag_type;
+	unsigned char uFuseRomData[3];
+	unsigned char uMagCntlRegData;
+	struct hw_offset_data magoffset;
+#endif
+#ifdef CONFIG_SENSORS_SSP_PROXIMITY
 	struct  proximity_sensor_operations *proximity_ops;
+	unsigned int uProxCanc;
+	unsigned int uCrosstalk;
+	unsigned int uProxCalResult;
+	unsigned int uProxHiThresh;
+	unsigned int uProxLoThresh;
+	unsigned int uProxHiThresh_detect;
+	unsigned int uProxLoThresh_detect;
+	unsigned int uProxHiThresh_default;
+	unsigned int uProxLoThresh_default;
+#if defined(CONFIG_SENSORS_SSP_PROXIMITY_AUTO_CAL_TMD3725)
+	int prox_trim;
+#endif
+#endif
+#ifdef CONFIG_SENSORS_SSP_LIGHT
 	struct  light_sensor_operations *light_ops;
+	int light_coef[7];
+	int light_log_cnt;
+	int project_select;
+#endif
+#ifdef CONFIG_SENSORS_SSP_BAROMETER
 	struct  barometer_sensor_operations *barometer_ops;
+	int pressure_type;
+
+#endif
 };
 
 u64 get_current_timestamp(void);

@@ -423,7 +423,8 @@ static ssize_t read_vendor_show(struct device *dev,
 	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
 	unsigned char buffer[10] = { 0 };
 
-	snprintf(buffer, 5, ts->plat_data->firmware_name + 8);
+	if (ts->plat_data->firmware_name != NULL)
+		snprintf(buffer, 5, ts->plat_data->firmware_name + 8);
 
 	return snprintf(buf, SEC_CMD_BUF_SIZE, "LSI_%s", buffer);
 }

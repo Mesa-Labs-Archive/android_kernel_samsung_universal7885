@@ -2,7 +2,7 @@
  * sec_battery.h
  * Samsung Mobile Battery Header
  *
- * Copyright (C) 2017 Samsung Electronics
+ * Copyright (C) 2018 Samsung Electronics
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -11,7 +11,7 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
@@ -78,10 +78,10 @@
 #define SIOP_EVENT_NONE 	0x0000
 #define SIOP_EVENT_WPC_CALL 	0x0001
 
-#if defined(CONFIG_SEC_FACTORY)             // SEC_FACTORY
+#if defined(CONFIG_SEC_FACTORY)			/* SEC_FACTORY */
 #define STORE_MODE_CHARGING_MAX 80
 #define STORE_MODE_CHARGING_MIN 70
-#else                                       // !SEC_FACTORY, STORE MODE
+#else						/* !SEC_FACTORY, STORE MODE */
 #define STORE_MODE_CHARGING_MAX 70
 #define STORE_MODE_CHARGING_MIN 60
 #define STORE_MODE_CHARGING_MAX_VZW 35
@@ -94,10 +94,10 @@
 #define DEFAULT_HEALTH_CHECK_COUNT	5
 #define TEMP_HIGHLIMIT_DEFAULT	2000
 
-#define SIOP_INPUT_LIMIT_CURRENT                1200
-#define SIOP_CHARGING_LIMIT_CURRENT             1000
-#define SIOP_WIRELESS_INPUT_LIMIT_CURRENT       530
-#define SIOP_WIRELESS_CHARGING_LIMIT_CURRENT    780
+#define SIOP_INPUT_LIMIT_CURRENT		1200
+#define SIOP_CHARGING_LIMIT_CURRENT		1000
+#define SIOP_WIRELESS_INPUT_LIMIT_CURRENT	530
+#define SIOP_WIRELESS_CHARGING_LIMIT_CURRENT	780
 #define SIOP_HV_WIRELESS_INPUT_LIMIT_CURRENT	700
 #define SIOP_HV_WIRELESS_CHARGING_LIMIT_CURRENT	600
 #define SIOP_STORE_HV_WIRELESS_CHARGING_LIMIT_CURRENT	450
@@ -150,6 +150,24 @@ struct adc_sample_info {
 	int index;
 };
 
+#if defined(CONFIG_FG_FULLCAP_FROM_BATTERY)
+enum capacity_measure_state {
+	CAPACITY_MEASURE_NONE = 0,
+	CAPACITY_MEASURE_OFF,
+	CAPACITY_MEASURING,
+	CAPACITY_MEASURE_UPDATING,
+	CAPACITY_MEASURE_UPDATED,
+};
+
+struct capacity_measure_info {
+	enum capacity_measure_state status;
+	int capacity_rep; /* mA * seconds */
+	int capacity_full; /* mA * seconds */
+	int design_cap; /* mA * seconds */
+	int start_soc;
+};
+#endif
+
 struct sec_battery_info {
 	struct device *dev;
 	sec_battery_platform_data_t *pdata;
@@ -201,7 +219,7 @@ struct sec_battery_info {
 	int voltage_avg;		/* average voltage (mV) */
 	int voltage_ocv;		/* open circuit voltage (mV) */
 	int current_now;		/* current (mA) */
-	int inbat_adc;                  /* inbat adc */
+	int inbat_adc;			/* inbat adc */
 	int current_avg;		/* average current (mA) */
 	int current_max;		/* input current limit (mA) */
 	int current_adc;
@@ -282,7 +300,7 @@ struct sec_battery_info {
 
 	int temp_adc;
 	int temp_ambient_adc;
-	int usb_temp_adc;	
+	int usb_temp_adc;
 	int chg_temp_adc;
 	int wpc_temp_adc;
 	int coil_temp_adc;
@@ -431,6 +449,10 @@ struct sec_battery_info {
 	int fg_reset;
 
 	bool block_water_event;
+
+#if defined(CONFIG_FG_FULLCAP_FROM_BATTERY)
+	struct capacity_measure_info capacity_info;
+#endif
 };
 
 ssize_t sec_bat_show_attrs(struct device *dev,
@@ -482,7 +504,7 @@ enum {
 	BATT_TEMP_AVER,
 	BATT_TEMP_ADC_AVER,
 	USB_TEMP,
-	USB_TEMP_ADC,	
+	USB_TEMP_ADC,
 	CHG_TEMP,
 	CHG_TEMP_ADC,
 	SLAVE_CHG_TEMP,

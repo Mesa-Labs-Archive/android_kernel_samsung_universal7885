@@ -290,6 +290,8 @@ static int fimc_is_get_sensor_data(struct device *dev, char *maker, char *name, 
 		sensor_id = specific->rear_sensor_id;
 	} else if(position == SENSOR_POSITION_REAR2) {
 		sensor_id = specific->rear_second_sensor_id;
+	} else if(position == SENSOR_POSITION_REAR3) {
+		sensor_id = specific->rear_3rd_sensor_id;
 	} else if(position == SENSOR_POSITION_FRONT) {
 		sensor_id = specific->front_sensor_id;
 	} else if(position == SENSOR_POSITION_FRONT2) {
@@ -2301,6 +2303,21 @@ static ssize_t camera_rear2_tilt_show(struct device *dev,
 }
 #endif
 
+#ifdef CAMERA_REAR3
+static ssize_t camera_rear3_sensorid_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct fimc_is_core *core = NULL;
+	struct fimc_is_vender_specific *specific;
+
+	core = (struct fimc_is_core *)dev_get_drvdata(fimc_is_dev);
+	specific = core->vender.private_data;
+	dev_info(dev, "%s: E", __func__);
+
+	return sprintf(buf, "%d\n", specific->rear_3rd_sensor_id);
+}
+#endif
+
 static ssize_t camera_rear_sensor_standby(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
@@ -2853,6 +2870,9 @@ static DEVICE_ATTR(rear_dualcal, S_IRUGO, camera_rear_dualcal_show, NULL);
 static DEVICE_ATTR(rear_dualcal_size, S_IRUGO, camera_rear_dualcal_size_show, NULL);
 static DEVICE_ATTR(rear2_tilt, S_IRUGO, camera_rear2_tilt_show, NULL);
 #endif
+#ifdef CAMERA_REAR3
+static DEVICE_ATTR(rear3_sensorid, S_IRUGO, camera_rear3_sensorid_show, NULL);
+#endif
 static DEVICE_ATTR(rear_sensor_standby, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH,
 		camera_rear_sensor_standby_show, camera_rear_sensor_standby);
 #ifdef CAMERA_SYSFS_V2
@@ -3118,6 +3138,12 @@ int fimc_is_create_sysfs(struct fimc_is_core *core)
 					dev_attr_rear2_sensorid.attr.name);
 		}
 #endif
+#ifdef CAMERA_REAR3
+		if (device_create_file(camera_rear_dev, &dev_attr_rear3_sensorid) < 0) {
+			printk(KERN_ERR "failed to create rear device file, %s\n",
+					dev_attr_rear3_sensorid.attr.name);
+		}
+#endif
 #ifdef CAMERA_MODULE_DUALIZE
 		if (device_create_file(camera_rear_dev, &dev_attr_from_write) < 0) {
 			printk(KERN_ERR "failed to create rear device file, %s\n",
@@ -3144,7 +3170,7 @@ int fimc_is_create_sysfs(struct fimc_is_core *core)
 			printk(KERN_ERR "failed to create rear device file, %s\n",
 				dev_attr_rear_checkfw_factory.attr.name);
 		}
-		#ifdef CAMERA_REAR2
+#ifdef CAMERA_REAR2
 		if (device_create_file(camera_rear_dev, &dev_attr_rear2_camfw) < 0) {
 			printk(KERN_ERR "failed to create rear device file, %s\n",
 				dev_attr_rear2_camfw.attr.name);
@@ -3399,6 +3425,9 @@ int fimc_is_destroy_sysfs(struct fimc_is_core *core)
 #ifdef USE_CAMERA_HW_BIG_DATA
 		device_remove_file(camera_rear_dev, &dev_attr_rear2_hwparam);
 #endif
+#endif
+#ifdef CAMERA_REAR3
+		device_remove_file(camera_rear_dev, &dev_attr_rear3_sensorid);
 #endif
 		device_remove_file(camera_rear_dev, &dev_attr_rear_sensor_standby);
 #ifdef CONFIG_COMPANION_USE

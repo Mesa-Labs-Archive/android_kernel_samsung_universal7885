@@ -56,6 +56,7 @@ struct api_vra_tune_data {
 	vra_uint32 tracking_smoothness;
 	vra_uint32 selfie_working_point;
 	vra_uint32 sensor_position;
+	vra_uint32 use_post_detection_output;
 };
 
 enum api_vra_ctrl_task_set_event {	/* deprecated event id */
@@ -381,7 +382,12 @@ enum api_vra_yaw_type {
 	VRA_YAW_FRONT = 0,
 	/* for right profile => Yaw Angle = 90. 270 stands for left profile */
 	VRA_YAW_RIGHT_PROFILE = 1,
+#ifdef VRA_OLD_POSES
 	VRA_YAW_ALL = 2
+#else
+	VRA_YAW_RIGHT_SEMI_PROFILE = 2, /*!< for right semi profile => Yaw Angle = 45. 315 stands for left semi profile */
+	VRA_YAW_All = 3
+#endif
 };
 
 /* brief The Image orientation */
@@ -486,8 +492,8 @@ enum api_vra_hw_err_bit_type {
 #define VRA_MASK_ERR_RESULTS_LOST	\
 	(VRA_HW_ERR_RES_VDMA_OVERFLOW_BIT | VRA_HW_ERR_RES_VDMA_MAX_RES_BIT)
 
-/* Each bit in mask stands for 45 degrees */
-#define VRA_DIS_ROT_UNIT	45
+#ifdef VRA_OLD_POSES
+#define VRA_DIS_ROT_UNIT	45  /* Each bit in mask stands for 45 degrees */
 #define VRA_DIS_ROT_0_BIT	(1 << 0)
 #define VRA_DIS_ROT_45_BIT	(1 << 1)
 #define VRA_DIS_ROT_90_BIT	(1 << 2)
@@ -496,6 +502,21 @@ enum api_vra_hw_err_bit_type {
 #define VRA_DIS_ROT_225_BIT	(1 << 5)
 #define VRA_DIS_ROT_270_BIT	(1 << 6)
 #define VRA_DIS_ROT_315_BIT	(1 << 7)
+#else
+#define VRA_DIS_ROT_UNIT	30  /* Each bit in mask stands for 30 degrees */
+#define VRA_DIS_ROT_0_BIT	(1 << 0)
+#define VRA_DIS_ROT_30_BIT	(1 << 1)
+#define VRA_DIS_ROT_60_BIT	(1 << 2)
+#define VRA_DIS_ROT_90_BIT	(1 << 3)
+#define VRA_DIS_ROT_120_BIT	(1 << 4)
+#define VRA_DIS_ROT_150_BIT	(1 << 5)
+#define VRA_DIS_ROT_180_BIT	(1 << 6)
+#define VRA_DIS_ROT_210_BIT	(1 << 7)
+#define VRA_DIS_ROT_240_BIT	(1 << 8)
+#define VRA_DIS_ROT_270_BIT	(1 << 9)
+#define VRA_DIS_ROT_300_BIT	(1 << 10)
+#define VRA_DIS_ROT_330_BIT	(1 << 11)
+#endif
 
 struct api_vra_sizes {
 	unsigned short width;
@@ -624,6 +645,32 @@ struct api_vra_out_face {
 	struct api_vra_facial_str	facial;
 };
 
+/* for Hybrid FD */
+struct api_vra_pdt_rect {
+	res_cord_type	left;
+	res_cord_type	top;
+	unsigned short	size;
+};
+
+struct api_vra_pdt_face_extra {
+	unsigned char	is_rot: 1;	/* assuming VRA_ROT_ALL == 2 */
+#ifdef VRA_OLD_POSES
+	unsigned char	is_yaw: 1;	/* assuming VRA_YAW_ALL == 2 */
+#endif
+	unsigned char	rot: 2;
+	unsigned char	mirror_x: 1;	/* Required for facial features + set ROI commands */
+	unsigned char	hw_rot_and_mirror: 3;	/* Required for facial features + set ROI commands */
+#ifndef VRA_OLD_POSES
+	enum api_vra_yaw_type     yaw_type;
+#endif
+};
+
+struct api_vra_pdt_out_face {
+	struct api_vra_pdt_rect			rect;
+	res_score_type					score;
+	struct api_vra_pdt_face_extra	extra;
+};
+
 /* brief Header of output list */
 struct api_vra_out_list_info {
 	/* The unique frame index of the results that are reported */
@@ -685,11 +732,47 @@ typedef void (*on_frw_abort_hybrid_pr_ptr)(void);
  *		(its length is NumAllFaces)
  * param OutListInfoPtr - Pointer to output list header
  */
-typedef void (*on_sen_output_ready_ptr)(vra_uint32 sensor_handle,
+#ifdef ENABLE_VRA_LIBRARY_IMPROVE
+typedef void (*on_sen_final_output_ready_ptr)(vra_uint32 sensor_handle,
 		unsigned int num_all_faces,
 		const struct api_vra_out_face *faces_ptr,
 		const struct api_vra_out_list_info *out_list_info_ptr);
 
+/*! \brief The function that is called when output results of current frame are ready
+ * - without FF results, without smoothing with previous frame results and not weighted
+ *  with Hybrid results.
+ *  Notice that for ROI tracking this function is called after the ROI process
+ *  and no callback is called on "full frame" process.
+ *
+ * \param SesnorHandle - The current Sensor Handle that (set on initialization)
+ * \param NumAllFaces - Total number of faces found
+ * \param FacesPtr - Pointer to list of faces information (its length is NumAllFaces)
+ * \param OutListInfoPtr - Pointer to output list header
+ */
+typedef void (*on_sen_crnt_fr_output_ready_ptr) (vra_uint32 sensor_handle,
+		unsigned int num_all_faces,
+		const struct api_vra_face_base_str *faces_ptr,
+		const struct api_vra_out_list_info *out_list_info_ptr);
+
+/*
+ * The function that is called when output results of current frame are ready.
+ * Notice that for ROI tracking this function is called after the ROI process
+ * and no callback is called on "full frame" process.
+ * \param SesnorHandle - The current Sensor Handle that (set on initialization)
+ * \param NumAllFaces - Total number of faces found
+ * \param FacesPtr - Pointer to list of faces information (its length is NumAllFaces)
+ * \param OutListInfoPtr - Pointer to output list header
+ */
+typedef void (*on_sen_post_detect_ready_ptr) (vra_uint32 sensor_handle,
+		unsigned int num_pdt_faces,
+		const struct api_vra_pdt_out_face *faces_ptr,
+		const struct api_vra_out_list_info *out_list_info_ptr);
+#else
+typedef void (*on_sen_output_ready_ptr)(vra_uint32 sensor_handle,
+		unsigned int num_all_faces,
+		const struct api_vra_out_face *faces_ptr,
+		const struct api_vra_out_list_info *out_list_info_ptr);
+#endif
 /*
  * The function that is called when the entire frame input is finished.
  * In case of DRAM input the caller may now free the area
@@ -734,13 +817,20 @@ typedef void (*on_sen_stat_collected_ptr)(vra_uint32 sensor_handle,
 		unsigned int stat_num_of_longs,
 		unsigned int stat_type);
 
+
 /* Framework callbacks */
 struct vra_call_backs_str {
 	on_frw_abort_ptr		frw_abort_func_ptr;
 	on_frw_hw_err_ptr		frw_hw_err_func_ptr;
 	on_frw_invoke_hybrid_pr_ptr	frw_invoke_hybrid_pr_ptr;
 	on_frw_abort_hybrid_pr_ptr	frw_abort_hybrid_pr_ptr;
+#ifdef ENABLE_VRA_LIBRARY_IMPROVE
+	on_sen_final_output_ready_ptr	sen_final_output_ready_ptr; /* HFD off(legacy VRA only) */
+	on_sen_crnt_fr_output_ready_ptr	sen_crnt_fr_output_ready_ptr; /* unfilterd data for FDAF */
+	on_sen_post_detect_ready_ptr	sen_post_detect_ready_ptr; /* HFD on */
+#else
 	on_sen_output_ready_ptr		sen_out_ready_func_ptr;
+#endif
 	on_sen_end_input_proc_ptr	sen_end_input_proc_ptr;
 	on_sen_error_ptr		sen_error_ptr;
 	on_sen_stat_collected_ptr	sen_stat_collected_ptr;

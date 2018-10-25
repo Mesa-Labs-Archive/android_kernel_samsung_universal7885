@@ -48,16 +48,22 @@ static void enable_sensor(struct ssp_data *data,
 		ssp_infof("ADD %s , type %d DELAY %lld ns", data->info[type].name, type, delay);
 
 		if (type == SENSOR_TYPE_PROXIMITY) {
+#ifdef CONFIG_SENSORS_SSP_PROXIMITY
 			set_proximity_threshold(data);
 			ssp_infof("send threshold hi %d, low %d \n", data->uProxHiThresh,
 			          data->uProxLoThresh);
+#endif
 #ifdef SENSOR_TYPE_LIGHT_CCT
 		} else if (type == SENSOR_TYPE_LIGHT || type == SENSOR_TYPE_LIGHT_CCT) {
+#ifdef CONFIG_SENSORS_SSP_LIGHT
 			data->light_log_cnt = 0;
+#endif
 		}
 #else
 		} else if (type == SENSOR_TYPE_LIGHT) {
+#ifdef CONFIG_SENSORS_SSP_LIGHT
 			data->light_log_cnt = 0;
+#endif
 		}
 #endif
 
@@ -192,7 +198,6 @@ static ssize_t set_sensors_enable(struct device *dev,
                                   struct device_attribute *attr, const char *buf, size_t size)
 {
 	int64_t dTemp;
-	int ret = 0;
 	uint64_t new_enable = 0, type = 0;
 	struct ssp_data *data = dev_get_drvdata(dev);
 
@@ -233,15 +238,22 @@ static ssize_t set_sensors_enable(struct device *dev,
 				if (data->aiCheckStatus[type]
 				    == INITIALIZATION_STATE) {
 					if (type == SENSOR_TYPE_ACCELEROMETER) {
+#ifdef CONFIG_SENSORS_SSP_ACCELOMETER
+						int ret = 0;
 						accel_open_calibration(data);
 						ret = set_accel_cal(data);
 						if (ret < 0) {
 							ssp_errf("set_accel_cal failed %d", ret);
 						}
+#endif
 					} else if (type == SENSOR_TYPE_PRESSURE) {
+#ifdef CONFIG_SENSORS_SSP_BAROMETER
 						pressure_open_calibration(data);
+#endif
 					} else if (type == SENSOR_TYPE_PROXIMITY) {
+#ifdef CONFIG_SENSORS_SSP_PROXIMITY
 						set_proximity_threshold(data);
+#endif
 					}
 				}
 				data->aiCheckStatus[type] = ADD_SENSOR_STATE;
@@ -799,21 +811,29 @@ int initialize_sysfs(struct ssp_data *data)
 	if (misc_register(&data->batch_io_device)) {
 		goto err_batch_io_dev;
 	}
-
-	initialize_accel_factorytest(data);
-	initialize_gyro_factorytest(data);
-	initialize_prox_factorytest(data);
-	initialize_light_factorytest(data);
-	initialize_barometer_factorytest(data);
-	initialize_magnetic_factorytest(data);
+	
 	initialize_mcu_factorytest(data);
-#ifdef CONFIG_SENSORS_SSP_TMD4903
-	initialize_irled_factorytest(data);
+#ifdef CONFIG_SENSORS_SSP_ACCELOMETER
+	initialize_accel_factorytest(data);
+#endif
+#ifdef CONFIG_SENSORS_SSP_GYROSCOPE
+	initialize_gyro_factorytest(data);
+#endif
+#ifdef CONFIG_SENSORS_SSP_PROXIMITY
+	initialize_prox_factorytest(data);
+#endif
+#ifdef CONFIG_SENSORS_SSP_LIGHT
+	initialize_light_factorytest(data);
+#endif
+#ifdef CONFIG_SENSORS_SSP_BAROMETER
+	initialize_barometer_factorytest(data);
+#endif
+#ifdef CONFIG_SENSORS_SSP_MAGNETIC
+	initialize_magnetic_factorytest(data);
 #endif
 #ifdef CONFIG_SENSORS_SSP_MOBEAM
 	initialize_mobeam(data);
 #endif
-
 	return SUCCESS;
 err_batch_io_dev:
 	ssp_err("error init sysfs");
@@ -824,20 +844,27 @@ void remove_sysfs(struct ssp_data *data)
 {
 	ssp_batch_fops.unlocked_ioctl = NULL;
 	misc_deregister(&data->batch_io_device);
-	remove_accel_factorytest(data);
-	remove_gyro_factorytest(data);
-	remove_prox_factorytest(data);
-	remove_light_factorytest(data);
-	remove_barometer_factorytest(data);
-	remove_magnetic_factorytest(data);
-
 	remove_mcu_factorytest(data);
-#ifdef CONFIG_SENSORS_SSP_TMD4903
-	remove_irled_factorytest(data);
+#ifdef CONFIG_SENSORS_SSP_ACCELOMETER
+	remove_accel_factorytest(data);
+#endif
+#ifdef CONFIG_SENSORS_SSP_GYROSCOPE
+	remove_gyro_factorytest(data);
+#endif
+#ifdef CONFIG_SENSORS_SSP_PROXIMITY
+	remove_prox_factorytest(data);
+#endif
+#ifdef CONFIG_SENSORS_SSP_LIGHT
+	remove_light_factorytest(data);
+#endif
+#ifdef CONFIG_SENSORS_SSP_BAROMETER
+	remove_barometer_factorytest(data);
+#endif
+#ifdef CONFIG_SENSORS_SSP_MAGNETIC
+	remove_magnetic_factorytest(data);
 #endif
 #ifdef CONFIG_SENSORS_SSP_MOBEAM
 	remove_mobeam(data);
 #endif
-
 	destroy_sensor_class();
 }

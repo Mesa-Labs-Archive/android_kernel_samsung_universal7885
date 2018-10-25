@@ -62,6 +62,7 @@
 
 /* platform specific definitions */
 /* ex) #define __ANDROID__ */
+#define __ANDROID__
 
 /* platform specific pre-processing */
 #define CONN_GADGET_SHORTNAME "android_ssusbcon"

@@ -52,10 +52,6 @@
 #include <linux/usb/manager/usb_typec_manager_notifier.h>
 #endif
 
-#if defined(CONFIG_MUIC_HV)
-#include "muic_hv.h"
-#endif
-
 #define MUIC_CCIC_NOTI_ATTACH (1)
 #define MUIC_CCIC_NOTI_DETACH (-1)
 #define MUIC_CCIC_NOTI_UNDEFINED (0)
@@ -118,9 +114,6 @@ static void _muic_manager_switch_usb_path(struct muic_interface_t *muic_if, int 
 
 static int muic_manager_switch_path(struct muic_interface_t *muic_if, int path)
 {
-#if defined(CONFIG_MUIC_HV)
-	hv_clear_hvcontrol(muic_if->phv);
-#endif
 	switch (path) {
 	case MUIC_PATH_OPEN:
 		muic_if->set_com_to_open_with_vbus(muic_if->muic_data);
@@ -209,9 +202,6 @@ void muic_manager_handle_ccic_detach(struct muic_interface_t *muic_if)
 
 	pr_info("%s\n", __func__);
 
-#if defined(CONFIG_MUIC_HV)
-	hv_do_detach(muic_if->phv);
-#endif
 	if (ccic->ccic_evt_rprd) {
 		/* FIXME : pvendor
 		* if (pvendor && pvendor->enable_chgdet)
@@ -240,9 +230,6 @@ void muic_manager_handle_ccic_detach(struct muic_interface_t *muic_if)
 
 	muic_if->legacy_dev = 0;
 	muic_if->attached_dev = 0;
-#if defined(CONFIG_MUIC_HV)
-	muic_if->phv->attached_dev = 0;
-#endif
 	muic_if->is_dcdtmr_intr = false;
 }
 
@@ -406,6 +393,7 @@ static int muic_manager_handle_ccic_attach(struct muic_interface_t *muic_if, voi
 			if (muic_manager_get_vbus(muic_if)) {
 				ccic->attached_dev = ATTACHED_DEV_USB_MUIC;
 				muic_if->set_cable_state(muic_if->muic_data, ccic->attached_dev);
+				muic_manager_switch_path(muic_if, MUIC_PATH_USB_AP);
 				MUIC_SEND_NOTI_ATTACH(ccic->attached_dev);
 			}
 			return 0;

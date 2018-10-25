@@ -121,10 +121,6 @@ static int muic_handle_notification(struct notifier_block *nb,
 		name = "Gamepad Attach";
 		break;
 	case ATTACHED_DEV_JIG_UART_ON_MUIC:
-#if defined(CONFIG_SEC_FACTORY)
-		type = MUIC_DOCK_DESKDOCK;
-		name = "Desk Dock Attach";
-#endif
 	case ATTACHED_DEV_JIG_UART_OFF_MUIC:
 	case ATTACHED_DEV_JIG_UART_OFF_VB_MUIC:
 	case ATTACHED_DEV_JIG_USB_ON_MUIC:

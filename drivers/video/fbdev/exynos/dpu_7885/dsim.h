@@ -241,6 +241,7 @@ struct dsim_lcd_driver {
 	int (*displayon)(struct dsim_device *dsim);
 	int (*resume)(struct dsim_device *dsim);
 	int (*resume_early)(struct dsim_device *dsim);
+	int (*after_reset)(struct dsim_device *dsim);
 	int (*dump)(struct dsim_device *dsim);
 #if defined(CONFIG_EXYNOS_SUPPORT_DOZE)
 	int (*enteralpm)(struct dsim_device *dsim);

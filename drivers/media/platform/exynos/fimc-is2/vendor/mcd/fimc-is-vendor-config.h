@@ -13,7 +13,9 @@
 #ifndef FIMC_IS_VENDOR_CONFIG_H
 #define FIMC_IS_VENDOR_CONFIG_H
 
-#if defined(CONFIG_CAMERA_JACKPOT)
+#if defined(CONFIG_CAMERA_GVIEW2)
+#include "fimc-is-vendor-config_gview2.h"
+#elif defined(CONFIG_CAMERA_JACKPOT)
 #include "fimc-is-vendor-config_jackpot.h"
 #elif defined(CONFIG_CAMERA_JACKPOT_JPN)
 #include "fimc-is-vendor-config_jackpot_jpn.h"
@@ -25,6 +27,8 @@
 #include "fimc-is-vendor-config_j7duo.h"
 #elif defined(CONFIG_CAMERA_A6E)
 #include "fimc-is-vendor-config_a6e.h"
+#elif defined(CONFIG_CAMERA_A7Y18)
+#include "fimc-is-vendor-config_a7y18.h"
 #else
 #include "fimc-is-vendor-config_jackpot.h" /* Default */
 #endif

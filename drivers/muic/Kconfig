@@ -30,7 +30,7 @@ config MUIC_NOTIFIER
 
 config MUIC_MANAGER
 	bool "MUIC Manager supports CCIC chip interface"
-	depends on USE_MUIC && MFD_S2MU004
+	depends on USE_MUIC
 	default n
 	help
 	  If you say yes here you will get support manager for the CCIC chip.
@@ -51,7 +51,7 @@ config MUIC_HV_12V
 
 config MUIC_SUPPORT_CCIC
 	bool "MUIC supports CCIC chip interface"
-	depends on USE_MUIC && MFD_S2MU004
+	depends on USE_MUIC
 	default n
 	help
 	  If you say yes here you will get support for the CCIC chip.
@@ -77,6 +77,14 @@ config HV_MUIC_VOLTAGE_CTRL
 	help
 	  If you say yes here you will get support for
 	  the AFC voltage control functionality.
+
+config MUIC_S2MU004_AFC_DISABLE
+	bool "Using AFC disable functionality"
+	depends on MUIC_S2MU004
+	default n
+	help
+	  If you say yes here you will get support for
+	  the AFC disable control functionality.
 
 config MUIC_S2MU005
 	bool "Using S2MU005 MUIC"
@@ -131,3 +139,40 @@ config MUIC_INCOMPATIBLE_VZW
 	help
 		If you say yes here you will get support for
 		for the Verizon incomatible type cable.
+
+config MUIC_S2MU005_SUPPORT_HMT
+	bool "Using HMT"
+	depends on USE_MUIC
+	default n
+	help
+		If you say yes here you will get support for
+		for the HMT accessory.
+
+config MUIC_UNIVERSAL
+	bool "UNIVERSAL MUIC"
+	depends on USE_MUIC
+	default n
+	help
+	  If you say yes here you will get support for various MUIC chips.
+
+config MUIC_UNIVERSAL_MAX77865
+	bool "MAX77865 MUIC"
+	depends on MUIC_UNIVERSAL
+	default n
+	help
+	  If you say yes here you will get support for the MAX77865 MUIC chip.
+
+config MUIC_HV_MAX77865
+	bool "MUIC_HV_MAX77865"
+	depends on MUIC_UNIVERSAL_MAX77865
+	default n
+	help
+	  If you say yes here you will get support for the AFC.
+
+config MUIC_TEST_FUNC
+	bool "MUIC supports several function's in TEST"
+	depends on SEC_DEBUG && !SAMSUNG_PRODUCT_SHIP
+	default n
+	help
+	  If you say yes here you will get support for the TEST function's.
+

@@ -566,6 +566,8 @@ static int dsim_reset_panel(struct dsim_device *dsim)
 
 	run_list(dsim->dev, __func__);
 
+	call_panel_ops(dsim, after_reset, dsim);
+
 	return 0;
 }
 
@@ -1182,6 +1184,8 @@ static void dsim_parse_lcd_info(struct dsim_device *dsim)
 			&dsim->lcd_info.vt_compensation);
 		dsim_info("vt_compensation(%d)\n", dsim->lcd_info.vt_compensation);
 
+		of_property_read_u32(node, "clklane_onoff", &dsim->lcd_info.clklane_onoff);
+		dsim_info("clklane onoff(%d)\n", dsim->lcd_info.clklane_onoff);
 	}
 
 }

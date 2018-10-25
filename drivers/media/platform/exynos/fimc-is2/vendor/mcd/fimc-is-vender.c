@@ -49,6 +49,7 @@ extern bool force_caldata_dump;
 
 static u32  rear_sensor_id;
 static u32  rear_second_sensor_id;
+static u32  rear_3rd_sensor_id;
 static u32  front_sensor_id;
 static u32  front_second_sensor_id;
 static bool check_sensor_vendor;
@@ -269,7 +270,7 @@ void fimc_is_vender_csi_err_handler(struct fimc_is_device_csi *csi)
 
 int fimc_is_vender_probe(struct fimc_is_vender *vender)
 {
-	int ret = 0;
+	int i, ret = 0;
 	struct fimc_is_core *core;
 	struct fimc_is_vender_specific *specific;
 
@@ -311,6 +312,7 @@ int fimc_is_vender_probe(struct fimc_is_vender *vender)
 	specific->front_sensor_id = front_sensor_id;
 	specific->rear_second_sensor_id = rear_second_sensor_id;
 	specific->front_second_sensor_id = front_second_sensor_id;
+	specific->rear_3rd_sensor_id = rear_3rd_sensor_id;
 	specific->check_sensor_vendor = check_sensor_vendor;
 	specific->use_ois = use_ois;
 	specific->use_ois_hsi2c = use_ois_hsi2c;
@@ -318,8 +320,6 @@ int fimc_is_vender_probe(struct fimc_is_vender *vender)
 	specific->use_module_check = use_module_check;
 	specific->skip_cal_loading = skip_cal_loading;
 	specific->f_rom_power = f_rom_power;
-	specific->eeprom_client0 = NULL;
-	specific->eeprom_client1 = NULL;
 	specific->suspend_resume_disable = false;
 	specific->need_cold_reset = false;
 #ifdef CONFIG_SENSOR_RETENTION_USE
@@ -328,6 +328,10 @@ int fimc_is_vender_probe(struct fimc_is_vender *vender)
 #ifdef CONFIG_SECURE_CAMERA_USE
 	specific->secure_sensor_id = secure_sensor_id;
 #endif
+	for (i = 0; i < SENSOR_POSITION_END; i++) {
+		specific->eeprom_client[i] = NULL;
+	}
+
 	vender->private_data = specific;
 
 #ifdef CAMERA_PARALLEL_RETENTION_SEQUENCE
@@ -392,6 +396,11 @@ int fimc_is_vender_dt(struct device_node *np)
 	ret = of_property_read_u32(np, "front_second_sensor_id", &front_second_sensor_id);
 	if (ret) {
 		probe_err("front_second_sensor_id read is fail(%d)", ret);
+	}
+
+	ret = of_property_read_u32(np, "rear_3rd_sensor_id", &rear_3rd_sensor_id);
+	if (ret) {
+		probe_err("rear_3rd_sensor_id read is fail(%d)", ret);
 	}
 
 #ifdef CONFIG_SECURE_CAMERA_USE
@@ -917,6 +926,7 @@ static int fimc_is_ischain_loadcalb_eeprom(struct fimc_is_core *core,
 	} else
 #endif
 	{
+#if defined(CONFIG_CAMERA_EEPROM_SUPPORT_REAR) || defined(CONFIG_CAMERA_OTPROM_SUPPORT_REAR)
 		start_addr = CAL_OFFSET0;
 		cal_size = FIMC_IS_MAX_CAL_SIZE;
 		fimc_is_sec_get_sysfs_finfo(&finfo);
@@ -925,6 +935,7 @@ static int fimc_is_ischain_loadcalb_eeprom(struct fimc_is_core *core,
 		cal_ptr = (char *)(core->resourcemgr.minfo.kvaddr + start_addr);
 #else
 		cal_ptr = (char *)(core->resourcemgr.minfo.kvaddr_rear_cal);
+#endif
 #endif
 	}
 
@@ -947,11 +958,13 @@ static int fimc_is_ischain_loadcalb_eeprom(struct fimc_is_core *core,
 			cal_buf[OTP_HEADER_CAL_MAP_VER_START_ADDR_FRONT+3]);
 #endif
 	} else {
+#if defined(CONFIG_CAMERA_EEPROM_SUPPORT_REAR) || defined(CONFIG_CAMERA_OTPROM_SUPPORT_REAR)
 		info("CAL DATA : MAP ver : %c%c%c%c\n",
 			cal_buf[EEP_I2C_HEADER_CAL_MAP_VER_START_ADDR],
 			cal_buf[EEP_I2C_HEADER_CAL_MAP_VER_START_ADDR + 1],
 			cal_buf[EEP_I2C_HEADER_CAL_MAP_VER_START_ADDR + 2],
 			cal_buf[EEP_I2C_HEADER_CAL_MAP_VER_START_ADDR + 3]);
+#endif
 	}
 
 	if (position == SENSOR_POSITION_FRONT2) {
@@ -1032,7 +1045,7 @@ static int fimc_is_ischain_loadcalb_eeprom(struct fimc_is_core *core,
 }
 #endif
 
-#if !defined(CONFIG_CAMERA_EEPROM_SUPPORT_REAR)
+#if 0 //not used for mid-tier !defined(CONFIG_CAMERA_EEPROM_SUPPORT_REAR)
 static int fimc_is_ischain_loadcalb(struct fimc_is_core *core,
 	struct fimc_is_module_enum *active_sensor, int position)
 {
@@ -1061,6 +1074,7 @@ static int fimc_is_ischain_loadcalb(struct fimc_is_core *core,
 		cal_ptr = (char *)(core->resourcemgr.minfo.kvaddr_front_cal);
 #endif
 	} else {
+#if defined(CONFIG_CAMERA_OTPROM_SUPPORT_REAR)
 		start_addr = CAL_OFFSET0;
 		cal_size = FIMC_IS_MAX_CAL_SIZE;
 		fimc_is_sec_get_sysfs_finfo(&sysfs_finfo);
@@ -1069,6 +1083,7 @@ static int fimc_is_ischain_loadcalb(struct fimc_is_core *core,
 		cal_ptr = (char *)(core->resourcemgr.minfo.kvaddr + start_addr);
 #else
 		cal_ptr = (char *)(core->resourcemgr.minfo.kvaddr_rear_cal);
+#endif
 #endif
 	}
 
@@ -1096,6 +1111,7 @@ static int fimc_is_ischain_loadcalb(struct fimc_is_core *core,
 			info("Camera : the dumped Cal. data was applied successfully.\n");
 #endif
 		} else {
+#if defined(CONFIG_CAMERA_EEPROM_SUPPORT_FRONT)
 			if (crc32_header_check_front  == true) {
 				err("Camera : CRC32 error but only header section is no problem.");
 				memcpy((void *)(cal_ptr),
@@ -1109,6 +1125,7 @@ static int fimc_is_ischain_loadcalb(struct fimc_is_core *core,
 				memset((void *)(cal_ptr), 0xFF, cal_size);
 				ret = -EIO;
 			}
+#endif
 		}
 	} else {
 		if (crc32_check == true) {
@@ -1124,6 +1141,7 @@ static int fimc_is_ischain_loadcalb(struct fimc_is_core *core,
 			info("Camera : the dumped Cal. data was applied successfully.\n");
 #endif
 		} else {
+#if defined(CONFIG_CAMERA_EEPROM_SUPPORT_FRONT)
 			if (crc32_header_check == true) {
 				err("Camera : CRC32 error but only header section is no problem.");
 				memcpy((void *)(cal_ptr),
@@ -1137,6 +1155,7 @@ static int fimc_is_ischain_loadcalb(struct fimc_is_core *core,
 				memset((void *)(cal_ptr), 0xFF, cal_size);
 				ret = -EIO;
 			}
+#endif
 		}
 	}
 
@@ -1190,7 +1209,9 @@ int fimc_is_vender_cal_load(struct fimc_is_vender *vender,
 #if defined(CONFIG_CAMERA_EEPROM_SUPPORT_REAR)
 		ret = fimc_is_ischain_loadcalb_eeprom(core, NULL, SENSOR_POSITION_REAR);
 #else
+#if 0 //not used for mid-tier
 		ret = fimc_is_ischain_loadcalb(core, NULL, SENSOR_POSITION_REAR);
+#endif
 #endif
 		if (ret) {
 			err("loadcalb fail, load default caldata\n");

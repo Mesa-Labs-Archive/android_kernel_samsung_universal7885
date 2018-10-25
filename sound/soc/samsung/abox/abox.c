@@ -39,6 +39,8 @@
 #include <misc/exynos_ima.h>
 #include "../../../../drivers/iommu/exynos-iommu.h"
 #include "../../../../drivers/media/radio/s610/radio-s610.h"
+#include "../../../../drivers/soc/samsung/cal-if/exynos7885/cmucal-node.h"
+#include <soc/samsung/cal-if.h>
 
 #include "abox_util.h"
 #include "abox_dbg.h"
@@ -181,6 +183,9 @@ void *abox_addr_to_kernel_addr(struct abox_data *data, unsigned int addr)
 		if (IS_ENABLED(CONFIG_SHM_IPC)) {
 			result = phys_to_virt(shm_get_phys_base() + shm_get_cp_size()) +
 					(addr - IOVA_VSS_FIRMWARE);
+		} else {
+			dev_err(&data->pdev->dev, "%s: Invalid base and size\n", __func__);
+			result = data->dump_base + (addr - IOVA_DUMP_BUFFER);
 		}
 	} else
 		result = data->dump_base + (addr - IOVA_DUMP_BUFFER);
@@ -203,6 +208,9 @@ static phys_addr_t abox_addr_to_phys_addr(struct abox_data *data,
 		if (IS_ENABLED(CONFIG_SHM_IPC)) {
 			result = shm_get_phys_base() + shm_get_cp_size() +
 					(addr - IOVA_VSS_FIRMWARE);
+		} else {
+			dev_err(&data->pdev->dev, "%s: Invalid base and size\n", __func__);
+			result = data->dump_base_phys + (addr - IOVA_DUMP_BUFFER);
 		}
 	} else
 		result = data->dump_base_phys + (addr - IOVA_DUMP_BUFFER);
@@ -676,7 +684,7 @@ static int abox_uaif_hw_params(struct snd_pcm_substream *substream,
 	struct abox_data *data = platform_get_drvdata(to_platform_device(dev));
 	struct snd_soc_codec *codec = dai->codec;
 	enum abox_dai id = dai->id;
-	unsigned int ctrl1;
+	unsigned int ctrl1, ctrl0;
 	unsigned int channels, rate, width;
 	unsigned long audif_rate;
 	unsigned long target_pll;
@@ -687,6 +695,7 @@ static int abox_uaif_hw_params(struct snd_pcm_substream *substream,
 			'C' : 'P');
 
 	ctrl1 = snd_soc_read(codec, ABOX_UAIF_CTRL1(id));
+	ctrl0 = snd_soc_read(codec, ABOX_UAIF_CTRL0(id));
 
 	channels = params_channels(hw_params);
 	rate = params_rate(hw_params);
@@ -708,19 +717,38 @@ static int abox_uaif_hw_params(struct snd_pcm_substream *substream,
 		}
 	}
 
-	audif_rate = AUDIF_RATE_HZ;
-	audif_rate = abox_register_audif_rate(data, id, audif_rate);
-	result = clk_set_rate(data->clk_audif, audif_rate);
-	if (IS_ERR_VALUE(result)) {
-		dev_err(dev, "Failed to set audif clock: %d\n", result);
-		return result;
-	}
-	dev_info(dev, "audif clock: %lu\n", clk_get_rate(data->clk_audif));
+	if (ctrl0 & (1 << ABOX_MODE_L)) {
+		audif_rate = AUDIF_RATE_HZ;
+		audif_rate = abox_register_audif_rate(data, id, audif_rate);
+		result = clk_set_rate(data->clk_audif, audif_rate);
+		if (IS_ERR_VALUE(result)) {
+			dev_err(dev, "Failed to set audif clock: %d\n", result);
+			return result;
+		}
+		dev_info(dev, "audif clock: %lu\n", clk_get_rate(data->clk_audif));
 
-	result = clk_set_rate(data->clk_bclk[id], rate * channels * width);
-	if (IS_ERR_VALUE(result)) {
-		dev_err(dev, "bclk set error=%d\n", result);
-		return result;
+		result = clk_set_rate(data->clk_bclk[id], rate * channels * width);
+		if (IS_ERR_VALUE(result)) {
+			dev_err(dev, "bclk set error=%d\n", result);
+			return result;
+		}
+	} else {
+		dev_info(dev, "%s:ABOX UAIF Slave Mode\n", __func__);
+		switch (id) {
+		case ABOX_UAIF0:
+			cal_clk_setrate(MUX_CLK_AUD_UAIF0, 100 * 1000000);
+			break;
+		case ABOX_UAIF2:
+			cal_clk_setrate(MUX_CLK_AUD_UAIF2, 100 * 1000000);
+			break;
+		case ABOX_UAIF3:
+			cal_clk_setrate(MUX_CLK_AUD_UAIF3, 100 * 1000000);
+			break;
+		default:
+			dev_info(dev, "The UAIF clock tree does not exist\n");
+			break;
+		}
+		dev_info(dev, "Change the UAIF BCLK parent from AUDPLL to PAD\n");
 	}
 
 	dev_info(dev, "rate=%u, width=%d, channel=%u, bclk=%lu\n",
@@ -3418,7 +3446,6 @@ int abox_hw_params_fixup_helper(struct snd_soc_pcm_runtime *rtd,
 			SET_MIXER_FORMAT : SET_INMUX0_FORMAT;
 
 	list_for_each_entry(w, &widget_list, work_list) {
-		dev_dbg(dev, "%s", w->name);
 
 		if (!abox_find_nrf(w->name, stream, &rate, &format))
 			continue;
@@ -4093,7 +4120,6 @@ int abox_try_to_asrc_off(struct device *dev, struct abox_data *data,
 	}
 
 	list_for_each_entry(w, &widget_list, work_list) {
-		dev_dbg(dev, "%s", w->name);
 
 		if (abox_find_nrf(w->name, stream, &rate, &format)) {
 			srate = abox_get_out_rate(data, rate);
@@ -4923,6 +4949,9 @@ static void abox_reload_extra_firmware(struct abox_data *data, const char *name)
 				base = phys_to_virt(shm_get_phys_base() +
 						shm_get_cp_size());
 				size = shm_get_vss_size();
+			} else {
+				dev_err(dev, "%s: Invalid base and size\n", __func__);
+				return;
 			}
 			break;
 		default:

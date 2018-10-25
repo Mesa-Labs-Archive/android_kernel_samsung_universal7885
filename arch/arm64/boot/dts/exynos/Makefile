@@ -1,3 +1,17 @@
+dtb-$(CONFIG_MACH_EXYNOS7884_A6ELTE_USA) := \
+	exynos7884-a6elte_usa_00.dtb \
+	exynos7884-a6elte_usa_03.dtb
+
+dtb-$(CONFIG_MACH_EXYNOS7885_JACKPOT2LTE_EUR_OPEN) := \
+	exynos7885-jackpot2lte_eur_open_00.dtb \
+	exynos7885-jackpot2lte_eur_open_01.dtb \
+	exynos7885-jackpot2lte_eur_open_02.dtb \
+	exynos7885-jackpot2lte_eur_open_03.dtb \
+	exynos7885-jackpot2lte_eur_open_04.dtb \
+	exynos7885-jackpot2lte_eur_open_05.dtb \
+	exynos7885-jackpot2lte_eur_open_06.dtb \
+	exynos7885-jackpot2lte_eur_open_07.dtb
+
 dtb-$(CONFIG_MACH_EXYNOS7885_JACKPOTLTE_CAN_OPEN) := \
 	exynos7885-jackpotlte_can_open_00.dtb \
 	exynos7885-jackpotlte_can_open_01.dtb \
@@ -30,16 +44,6 @@ dtb-$(CONFIG_MACH_EXYNOS7885_JACKPOTLTE_KOR) := \
 	exynos7885-jackpotlte_kor_05.dtb \
 	exynos7885-jackpotlte_kor_06.dtb \
 	exynos7885-jackpotlte_kor_07.dtb
-
-dtb-$(CONFIG_MACH_EXYNOS7885_JACKPOT2LTE_EUR_OPEN) := \
-	exynos7885-jackpot2lte_eur_open_00.dtb \
-	exynos7885-jackpot2lte_eur_open_01.dtb \
-	exynos7885-jackpot2lte_eur_open_02.dtb \
-	exynos7885-jackpot2lte_eur_open_03.dtb \
-	exynos7885-jackpot2lte_eur_open_04.dtb \
-	exynos7885-jackpot2lte_eur_open_05.dtb \
-	exynos7885-jackpot2lte_eur_open_06.dtb \
-	exynos7885-jackpot2lte_eur_open_07.dtb
 
 
 always		:= $(dtb-y)

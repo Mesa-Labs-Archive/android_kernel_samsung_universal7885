@@ -53,6 +53,44 @@ EXPORT_SYMBOL_GPL(create_function_device);
 #ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
 void set_usb_enumeration_state(int state);
 void set_usb_enable_state(void);
+#else
+static int usb_enum_state;
+static int usb210_count;
+static int usb310_count;
+void set_usb_enumeration_state(int state)
+{
+	if(usb_enum_state != state) {
+		usb_enum_state = state;
+		if(usb_enum_state == 0x310)
+			usb310_count++;
+		else if(usb_enum_state == 0x210)
+			usb210_count++;
+	}
+}
+
+int microusb_get_usb210_count(void)
+{
+	int ret;
+	ret = usb210_count;
+	usb210_count = 0;
+	return ret;
+}
+EXPORT_SYMBOL(microusb_get_usb210_count);
+
+int microusb_get_usb310_count(void)
+{
+	int ret;
+	ret = usb310_count;
+	usb310_count = 0;
+	return ret;
+}
+EXPORT_SYMBOL(microusb_get_usb310_count);
+
+bool get_usb_enumeration_state(void)
+{
+	return usb_enum_state? 1: 0;
+}
+EXPORT_SYMBOL(get_usb_enumeration_state);
 #endif
 
 #define CHIPID_SIZE	(16)
@@ -1550,13 +1588,11 @@ static void android_work(struct work_struct *data)
 #ifdef CONFIG_USB_NOTIFY_PROC_LOG
 		store_usblog_notify(NOTIFY_USBSTATE, (void *)connected[0], NULL);
 #endif
-#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
 		if (cdev->desc.bcdUSB == 0x310) {
 			set_usb_enumeration_state(0x310); // Super-Speed
 		} else {
 			set_usb_enumeration_state(0x210); // High-Speed
 		}
-#endif
 	}
 
 	if (status[1]) {
@@ -1576,6 +1612,9 @@ static void android_work(struct work_struct *data)
 		uevent_sent = true;
 #ifdef CONFIG_USB_NOTIFY_PROC_LOG
 		store_usblog_notify(NOTIFY_USBSTATE, (void *)disconnected[0], NULL);
+#endif
+#ifndef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
+		usb_enum_state = 0;
 #endif
 	}
 
