@@ -1740,6 +1740,10 @@ pause:
 					  pause,
 					  start_time);
 
+		/* Do not sleep if the backing device is removed */
+		if (unlikely(!bdi->dev))
+			return;
+
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0))
 		bdi->last_thresh = thresh;
 		bdi->last_nr_dirty = dirty;
